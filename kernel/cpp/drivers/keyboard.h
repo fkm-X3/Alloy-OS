@@ -1,7 +1,7 @@
 #ifndef ALLOY_KEYBOARD_H
 #define ALLOY_KEYBOARD_H
 
-#include "../boot/types.h"
+#include "boot/types.h"
 
 // Keyboard special keys
 #define KEY_ESCAPE 0x01

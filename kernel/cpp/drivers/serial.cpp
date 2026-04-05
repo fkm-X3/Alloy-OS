@@ -1,4 +1,4 @@
-#include "../boot/types.h"
+#include "boot/types.h"
 
 // Serial port addresses
 #define SERIAL_COM1 0x3F8

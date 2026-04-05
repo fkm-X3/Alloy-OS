@@ -1,4 +1,4 @@
-#include "../boot/types.h"
+#include "boot/types.h"
 
 // GDT Entry structure
 struct gdt_entry {

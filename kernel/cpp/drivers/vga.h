@@ -1,7 +1,7 @@
 #ifndef ALLOY_VGA_H
 #define ALLOY_VGA_H
 
-#include "../boot/types.h"
+#include "boot/types.h"
 
 // VGA text mode dimensions
 #define VGA_WIDTH 80

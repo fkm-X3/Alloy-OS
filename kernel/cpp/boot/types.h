@@ -12,10 +12,10 @@ typedef signed short int16_t;
 typedef signed int int32_t;
 typedef signed long long int64_t;
 
-typedef uint64_t size_t;
-typedef int64_t ssize_t;
-typedef uint64_t uintptr_t;
-typedef int64_t intptr_t;
+typedef uint32_t size_t;
+typedef int32_t ssize_t;
+typedef uint32_t uintptr_t;
+typedef int32_t intptr_t;
 
 // Boolean
 typedef uint8_t bool;

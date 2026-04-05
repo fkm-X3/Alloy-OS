@@ -1,7 +1,7 @@
 #ifndef ALLOY_MULTIBOOT2_H
 #define ALLOY_MULTIBOOT2_H
 
-#include <stdint.h>
+#include "types.h"
 
 // Multiboot2 magic value passed in EAX
 #define MULTIBOOT2_BOOTLOADER_MAGIC 0x36d76289

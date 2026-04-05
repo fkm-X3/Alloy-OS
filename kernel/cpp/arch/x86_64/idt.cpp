@@ -1,4 +1,4 @@
-#include "../boot/types.h"
+#include "boot/types.h"
 
 // IDT Entry structure
 struct idt_entry {

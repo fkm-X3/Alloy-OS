@@ -17,6 +17,9 @@ extern "C" void vga_putchar(char c);
 extern "C" void keyboard_init();
 extern "C" char keyboard_get_char();
 
+// Rust kernel entry point
+extern "C" void rust_main();
+
 // Kernel entry point called from boot.asm
 extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     // Initialize serial port for early debugging
@@ -105,6 +108,12 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_set_color(10, 0);
     vga_println("Kernel initialization complete!");
     vga_set_color(7, 0);
+    serial_print("C++ kernel initialization complete\n");
+    
+    // Hand off to Rust kernel
+    serial_print("Transferring control to Rust kernel...\n");
+    rust_main();
+    
     vga_println("");
     vga_println("Alloy OS is running.");
     vga_println("");
@@ -112,7 +121,6 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_println("Type something on the keyboard:");
     vga_set_color(7, 0);
     
-    serial_print("Kernel initialization complete\n");
     serial_print("Alloy OS is running!\n");
     
     // Simple keyboard echo loop

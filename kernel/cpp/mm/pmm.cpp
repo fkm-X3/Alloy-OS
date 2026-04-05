@@ -212,3 +212,12 @@ int32_t PhysicalMemoryManager::find_free_frame() {
     
     return -1; // No free frames
 }
+
+// C FFI wrappers for Rust
+extern "C" void* pmm_alloc_frame() {
+    return g_pmm.alloc_frame();
+}
+
+extern "C" void pmm_free_frame(void* addr) {
+    g_pmm.free_frame(addr);
+}

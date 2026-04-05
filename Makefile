@@ -2,12 +2,14 @@
 
 # Architecture
 ARCH ?= x86_64
+TARGET ?= i686-alloy
 
 # Cross-compiler toolchain
 AS = nasm
 CC = i686-elf-gcc
 CXX = i686-elf-g++
 LD = i686-elf-ld
+RUSTC = rustc
 
 # Flags
 ASFLAGS = -f elf32
@@ -19,9 +21,11 @@ LDFLAGS = -m elf_i386 -T kernel/linker.ld
 BUILD_DIR = build
 BOOT_DIR = boot
 KERNEL_CPP_DIR = kernel/cpp
+KERNEL_RUST_DIR = kernel/rust
 ARCH_DIR = $(KERNEL_CPP_DIR)/arch/$(ARCH)
 DRIVERS_DIR = $(KERNEL_CPP_DIR)/drivers
 MM_DIR = $(KERNEL_CPP_DIR)/mm
+RUST_FFI_DIR = $(KERNEL_CPP_DIR)/rust
 
 # Source files
 ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
@@ -42,6 +46,7 @@ CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
 CPP_OBJECTS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
+RUST_LIB = $(BUILD_DIR)/kernel/rust/liballoy_kernel_rust.a
 OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
 
 # Output
@@ -55,11 +60,19 @@ all: $(KERNEL_ELF)
 iso: $(KERNEL_ISO)
 
 # Link kernel
-$(KERNEL_ELF): $(OBJECTS)
+$(KERNEL_ELF): $(OBJECTS) $(RUST_LIB)
 	@echo "Linking kernel..."
 	@mkdir -p $(dir $@)
-	$(LD) $(LDFLAGS) -o $@ $(OBJECTS)
+	$(LD) $(LDFLAGS) -o $@ $(OBJECTS) $(RUST_LIB)
 	@echo "Kernel built successfully: $@"
+
+# Build Rust library
+$(RUST_LIB): $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
+	@echo "Building Rust kernel library..."
+	@mkdir -p $(BUILD_DIR)/kernel/rust
+	cd $(KERNEL_RUST_DIR) && cargo +nightly build --release --target i686-alloy.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
+	@cp $(KERNEL_RUST_DIR)/target/i686-alloy/release/liballoy_kernel_rust.a $(RUST_LIB)
+	@echo "Rust library built: $(RUST_LIB)"
 
 # Assemble .asm files
 $(BUILD_DIR)/%.o: %.asm
@@ -93,6 +106,7 @@ debug: $(KERNEL_ISO)
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
+	cd $(KERNEL_RUST_DIR) && cargo clean
 
 # Print variables for debugging
 print-%:

@@ -105,3 +105,20 @@ void VirtualMemoryManager::unmap(void* virt_addr) {
 uint32_t VirtualMemoryManager::get_allocated_pages() const {
     return allocated_pages;
 }
+
+// C FFI wrappers for Rust
+extern "C" void* vmm_alloc_region(uint32_t size, uint32_t flags) {
+    return g_vmm.alloc_region(size, flags);
+}
+
+extern "C" void vmm_free_region(void* addr, uint32_t size) {
+    g_vmm.free_region(addr, size);
+}
+
+extern "C" bool vmm_map(void* virt_addr, void* phys_addr, uint32_t flags) {
+    return g_vmm.map(virt_addr, phys_addr, flags);
+}
+
+extern "C" void vmm_unmap(void* virt_addr) {
+    g_vmm.unmap(virt_addr);
+}

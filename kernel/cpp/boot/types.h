@@ -17,11 +17,6 @@ typedef int32_t ssize_t;
 typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 
-// Boolean
-typedef uint8_t bool;
-#define true 1
-#define false 0
-
 // NULL pointer
 #define NULL ((void*)0)
 

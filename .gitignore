@@ -76,3 +76,6 @@ dkms.conf
 Testing/
 .cache/
 #.idea/
+
+# --- Msc ---
+.github/

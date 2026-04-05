@@ -1,0 +1,79 @@
+# --- General / Shared Compilations ---
+# Object files and Libraries
+*.o
+*.obj
+*.slo
+*.lo
+*.ko
+*.elf
+*.lib
+*.a
+*.la
+*.lai
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# Executables and Linker Output
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.ilk
+*.map
+*.exp
+
+# Debugging and Information
+*.pdb
+*.dSYM/
+*.su
+*.idb
+*.dwo
+*.d
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# --- Rust Specific ---
+debug/
+target/
+**/*.rs.bk
+**/mutants.out*/
+
+# --- C / C++ Specific ---
+# Build Directories
+build/
+Build/
+build-*/
+vcpkg_installed/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+install_manifest.txt 
+compile_commands.json
+
+# Fortran & Kernel
+*.mod*
+*.smod
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# --- Temporary & Tools ---
+*.tmp 
+*.log 
+*.bak 
+*.swp 
+Testing/
+.cache/
+#.idea/

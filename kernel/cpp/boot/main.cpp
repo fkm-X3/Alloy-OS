@@ -1,5 +1,8 @@
 #include "multiboot2.h"
 #include "types.h"
+#include "../mm/pmm.h"
+#include "../mm/paging.h"
+#include "../mm/vmm.h"
 
 // Forward declarations
 extern "C" void init_gdt();
@@ -69,6 +72,34 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_println(" OK");
     vga_set_color(7, 0);
     serial_print("Keyboard initialized\n");
+    
+    // Initialize physical memory manager
+    serial_print("Initializing physical memory manager...\n");
+    vga_print("[ ] Initializing memory manager...");
+    g_pmm.init(multiboot_addr);
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("Physical memory manager initialized\n");
+    
+    // Initialize paging
+    serial_print("Initializing paging...\n");
+    vga_print("[ ] Initializing paging...");
+    g_paging.init();
+    g_paging.enable();
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("Paging enabled\n");
+    
+    // Initialize virtual memory manager
+    serial_print("Initializing virtual memory manager...\n");
+    vga_print("[ ] Initializing VMM...");
+    g_vmm.init();
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("Virtual memory manager initialized\n");
     
     vga_println("");
     vga_set_color(10, 0);

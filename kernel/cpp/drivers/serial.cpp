@@ -57,11 +57,8 @@ extern "C" void serial_print(const char* str) {
     }
 }
 
-// Write a string with hex value
-extern "C" void serial_print_hex(const char* prefix, uint32_t value) {
-    serial_print(prefix);
-    serial_print("0x");
-    
+// Write a hex value only (no prefix or newline)
+extern "C" void serial_print_hex(uint32_t value) {
     char hex_chars[] = "0123456789ABCDEF";
     char buffer[9];
     buffer[8] = '\0';
@@ -72,5 +69,12 @@ extern "C" void serial_print_hex(const char* prefix, uint32_t value) {
     }
     
     serial_print(buffer);
+}
+
+// Write a string with hex value
+extern "C" void serial_print_hex_with_prefix(const char* prefix, uint32_t value) {
+    serial_print(prefix);
+    serial_print("0x");
+    serial_print_hex(value);
     serial_print("\n");
 }

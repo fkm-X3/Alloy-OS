@@ -21,6 +21,7 @@ BOOT_DIR = boot
 KERNEL_CPP_DIR = kernel/cpp
 ARCH_DIR = $(KERNEL_CPP_DIR)/arch/$(ARCH)
 DRIVERS_DIR = $(KERNEL_CPP_DIR)/drivers
+MM_DIR = $(KERNEL_CPP_DIR)/mm
 
 # Source files
 ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
@@ -33,7 +34,10 @@ CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(ARCH_DIR)/idt.cpp \
               $(DRIVERS_DIR)/serial.cpp \
               $(DRIVERS_DIR)/vga.cpp \
-              $(DRIVERS_DIR)/keyboard.cpp
+              $(DRIVERS_DIR)/keyboard.cpp \
+              $(MM_DIR)/pmm.cpp \
+              $(MM_DIR)/paging.cpp \
+              $(MM_DIR)/vmm.cpp
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))

@@ -7,6 +7,8 @@ SECTIONS
     /* Kernel starts at 1MB physical address */
     . = 1M;
     
+    _kernel_start = .;
+    
     /* Multiboot header must be in first 8KB */
     .boot :
     {
@@ -42,5 +44,5 @@ SECTIONS
     }
     
     /* End of kernel */
-    kernel_end = .;
+    _kernel_end = .;
 }

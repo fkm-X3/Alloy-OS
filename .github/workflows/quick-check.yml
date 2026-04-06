@@ -1,0 +1,56 @@
+name: Quick Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install basic tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nasm cppcheck
+    
+    - name: Check assembly syntax
+      run: |
+        echo "Checking assembly files..."
+        for asm_file in $(find . -name "*.asm"); do
+          echo "Checking $asm_file"
+          nasm -f elf32 -o /dev/null "$asm_file" || exit 1
+        done
+        echo "All assembly files are valid!"
+    
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src, clippy
+    
+    - name: Rust format check
+      run: |
+        cd kernel/rust
+        cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
+    
+    - name: Rust clippy
+      run: |
+        cd kernel/rust
+        cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
+    
+    - name: Check for common issues
+      run: |
+        echo "Checking for common issues..."
+        
+        # Check for TODO/FIXME comments
+        echo "=== TODOs and FIXMEs ==="
+        grep -rn "TODO\|FIXME" kernel/ || echo "None found"
+        
+        # Check for potential null pointer issues
+        echo "=== Checking for null pointer patterns ==="
+        grep -rn "nullptr\|NULL" kernel/cpp/ || echo "None found"
+        
+        echo "Quick check complete!"

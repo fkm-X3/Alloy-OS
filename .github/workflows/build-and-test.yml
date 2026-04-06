@@ -1,0 +1,188 @@
+name: Build and Test Kernel
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          nasm \
+          grub-pc-bin \
+          grub-common \
+          xorriso \
+          qemu-system-x86 \
+          mtools \
+          wget \
+          tar \
+          bison \
+          flex \
+          libgmp3-dev \
+          libmpc-dev \
+          libmpfr-dev \
+          texinfo
+    
+    - name: Cache cross-compiler
+      id: cache-cross-compiler
+      uses: actions/cache@v3
+      with:
+        path: ~/.local/i686-elf
+        key: i686-elf-gcc-${{ runner.os }}-v1
+    
+    - name: Build cross-compiler
+      if: steps.cache-cross-compiler.outputs.cache-hit != 'true'
+      run: |
+        echo "Building i686-elf cross-compiler..."
+        chmod +x build-toolchain.sh
+        ./build-toolchain.sh
+    
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+    
+    - name: Cache Rust dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          kernel/rust/target/
+        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+        restore-keys: |
+          rust-${{ runner.os }}-
+    
+    - name: Verify toolchain installation
+      run: |
+        echo "Checking cross-compiler..."
+        ls -la ~/.local/i686-elf/bin/ || echo "Cross-compiler not found"
+        ~/.local/i686-elf/bin/i686-elf-gcc --version || echo "GCC not working"
+        
+        echo "Checking NASM..."
+        nasm --version
+        
+        echo "Checking Rust..."
+        rustc --version
+        cargo --version
+    
+    - name: Clean build
+      run: make clean
+    
+    - name: Build kernel
+      run: make
+    
+    - name: Build ISO
+      run: make iso
+    
+    - name: Verify build artifacts
+      run: |
+        echo "Checking build artifacts..."
+        ls -lh build/
+        
+        if [ ! -f "build/alloy.elf" ]; then
+          echo "ERROR: Kernel ELF not found!"
+          exit 1
+        fi
+        
+        if [ ! -f "build/alloy.iso" ]; then
+          echo "ERROR: Kernel ISO not found!"
+          exit 1
+        fi
+        
+        echo "Build artifacts verified!"
+        file build/alloy.elf
+        file build/alloy.iso
+    
+    - name: Test boot in QEMU
+      timeout-minutes: 2
+      run: |
+        echo "Testing kernel boot..."
+        
+        # Run QEMU with timeout and capture output
+        timeout 30s qemu-system-i386 \
+          -cdrom build/alloy.iso \
+          -serial file:serial.log \
+          -display none \
+          -no-reboot \
+          -no-shutdown \
+          -D qemu.log || true
+        
+        echo "=== QEMU Log ==="
+        cat qemu.log || echo "No QEMU log found"
+        
+        echo "=== Serial Log ==="
+        cat serial.log || echo "No serial log found"
+    
+    - name: Verify boot success
+      run: |
+        echo "Verifying kernel boot..."
+        
+        if [ ! -f "serial.log" ]; then
+          echo "ERROR: No serial output found!"
+          exit 1
+        fi
+        
+        # Check for key boot messages
+        if grep -q "Alloy" serial.log; then
+          echo "✓ Kernel name found"
+        else
+          echo "✗ Kernel name not found"
+          exit 1
+        fi
+        
+        if grep -q "GDT\|IDT\|PMM\|VMM" serial.log; then
+          echo "✓ Initialization messages found"
+        else
+          echo "✗ Initialization messages not found"
+          exit 1
+        fi
+        
+        # Check for Rust entry
+        if grep -q "rust_main\|Rust" serial.log; then
+          echo "✓ Rust layer initialized"
+        else
+          echo "⚠ Rust layer not detected (may be normal)"
+        fi
+        
+        echo "Boot verification passed!"
+    
+    - name: Upload build artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-build
+        path: |
+          build/alloy.elf
+          build/alloy.iso
+          serial.log
+          qemu.log
+        retention-days: 7
+    
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: failure-logs
+        path: |
+          serial.log
+          qemu.log
+          build/
+        retention-days: 14

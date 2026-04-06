@@ -78,7 +78,7 @@ Testing/
 #.idea/
 
 # --- Msc ---
-.github/
 docs/
 terminal.txt
 image.png
+readme.txt

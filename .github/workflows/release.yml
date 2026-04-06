@@ -1,0 +1,108 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          nasm \
+          grub-pc-bin \
+          grub-common \
+          xorriso \
+          mtools \
+          wget \
+          tar \
+          bison \
+          flex \
+          libgmp3-dev \
+          libmpc-dev \
+          libmpfr-dev \
+          texinfo
+    
+    - name: Cache cross-compiler
+      id: cache-cross-compiler
+      uses: actions/cache@v3
+      with:
+        path: ~/.local/i686-elf
+        key: i686-elf-gcc-${{ runner.os }}-v1
+    
+    - name: Build cross-compiler
+      if: steps.cache-cross-compiler.outputs.cache-hit != 'true'
+      run: |
+        chmod +x build-toolchain.sh
+        ./build-toolchain.sh
+    
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+    
+    - name: Build release
+      run: |
+        make clean
+        make iso
+    
+    - name: Generate build info
+      run: |
+        echo "Build Date: $(date)" > build/BUILD_INFO.txt
+        echo "Commit: ${{ github.sha }}" >> build/BUILD_INFO.txt
+        echo "Tag: ${{ github.ref_name }}" >> build/BUILD_INFO.txt
+        cat build/BUILD_INFO.txt
+    
+    - name: Create release archive
+      run: |
+        cd build
+        tar -czf alloy-os-${{ github.ref_name }}.tar.gz alloy.iso alloy.elf BUILD_INFO.txt
+        sha256sum alloy-os-${{ github.ref_name }}.tar.gz > alloy-os-${{ github.ref_name }}.tar.gz.sha256
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: alloy-os-release
+        path: |
+          build/alloy.iso
+          build/alloy.elf
+          build/alloy-os-*.tar.gz
+          build/alloy-os-*.tar.gz.sha256
+          build/BUILD_INFO.txt
+        retention-days: 90
+    
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          build/alloy.iso
+          build/alloy-os-*.tar.gz
+          build/alloy-os-*.tar.gz.sha256
+          build/BUILD_INFO.txt
+        body: |
+          # Alloy OS ${{ github.ref_name }}
+          
+          ## Downloads
+          - `alloy.iso` - Bootable ISO image
+          - `alloy-os-${{ github.ref_name }}.tar.gz` - Complete release package
+          
+          ## Checksums
+          See `alloy-os-${{ github.ref_name }}.tar.gz.sha256` for SHA256 checksum
+          
+          ## Running
+          ```bash
+          qemu-system-i386 -cdrom alloy.iso -serial stdio
+          ```
+        draft: false
+        prerelease: false

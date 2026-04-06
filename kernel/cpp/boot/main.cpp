@@ -112,24 +112,16 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     
     // Hand off to Rust kernel
     serial_print("Transferring control to Rust kernel...\n");
-    rust_main();
-    
     vga_println("");
-    vga_println("Alloy OS is running.");
-    vga_println("");
-    vga_set_color(14, 0); // Yellow
-    vga_println("Type something on the keyboard:");
+    vga_set_color(11, 0); // Cyan
+    vga_println("Transferring control to Rust kernel...");
     vga_set_color(7, 0);
     
-    serial_print("Alloy OS is running!\n");
+    rust_main(); // This never returns - terminal takes over
     
-    // Simple keyboard echo loop
+    // Should never reach here
+    serial_print("ERROR: Returned from Rust kernel!\n");
     while(1) {
-        char c = keyboard_get_char();
-        vga_putchar(c);
-        serial_print("Key pressed: ");
-        char buf[2] = {c, '\0'};
-        serial_print(buf);
-        serial_print("\n");
+        asm volatile("hlt");
     }
 }

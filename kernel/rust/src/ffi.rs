@@ -21,6 +21,10 @@ extern "C" {
     // Physical memory management
     pub fn pmm_alloc_frame() -> *mut c_void;
     pub fn pmm_free_frame(addr: *mut c_void);
+    
+    // Keyboard functions
+    pub fn keyboard_has_data() -> bool;
+    pub fn keyboard_get_char() -> u8;
 }
 
 // Safe wrappers
@@ -72,6 +76,20 @@ pub fn set_vga_color(fg: u8, bg: u8) {
 pub fn put_char(c: char) {
     unsafe {
         vga_putchar(c as u8);
+    }
+}
+
+/// Check if keyboard has data
+pub fn keyboard_has_key() -> bool {
+    unsafe {
+        keyboard_has_data()
+    }
+}
+
+/// Get character from keyboard
+pub fn keyboard_read() -> u8 {
+    unsafe {
+        keyboard_get_char()
     }
 }
 

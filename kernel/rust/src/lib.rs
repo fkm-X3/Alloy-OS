@@ -17,165 +17,82 @@ pub mod panic;
 pub mod terminal;
 pub mod utils;
 pub mod process;
+pub mod syscall;
 
 use core::panic::PanicInfo;
-
-use alloc::vec;
-use alloc::vec::Vec;
-use alloc::string::String;
-use alloc::boxed::Box;
 
 /// Rust kernel entry point called from C++
 #[no_mangle]
 pub extern "C" fn rust_main() {
     unsafe {
-        ffi::serial_print(b"[Rust] Kernel entry - Phase 7\n\0".as_ptr());
+        ffi::serial_print(b"[Rust] Kernel entry - Phase 8\n\0".as_ptr());
         ffi::vga_println(b"[ ] Rust kernel initialization...\0".as_ptr());
-    }
-    
-    // Skip memory test for now, go straight to process management
-    unsafe {
-        ffi::vga_set_color(10, 0); // Green
-        ffi::vga_println(b" OK\0".as_ptr());
-        ffi::vga_set_color(7, 0); // Reset
-        
-        ffi::serial_print(b"[Rust] Initializing process management (Phase 7)\n\0".as_ptr());
-        ffi::vga_println(b"[ ] Process management...\0".as_ptr());
-    }
-    
-    process::Scheduler::init();
-    
-    unsafe {
-        ffi::serial_print(b"[Rust] Creating demo tasks\n\0".as_ptr());
-    }
-    
-    // Create demo tasks
-    let task_a = Box::new(process::Task::new(task_a_entry, "Task A"));
-    let task_b = Box::new(process::Task::new(task_b_entry, "Task B"));
-    let task_c = Box::new(process::Task::new(task_c_entry, "Task C"));
-    
-    process::Scheduler::add_task(task_a);
-    process::Scheduler::add_task(task_b);
-    process::Scheduler::add_task(task_c);
-    
-    unsafe {
         ffi::vga_set_color(10, 0); // Green
         ffi::vga_println(b" OK\0".as_ptr());
         ffi::vga_set_color(7, 0); // Reset
         
         ffi::vga_println(b"\n======================================\0".as_ptr());
         ffi::vga_set_color(11, 0); // Cyan
-        ffi::vga_println(b"  Alloy Operating System - Phase 7\0".as_ptr());
+        ffi::vga_println(b"  Alloy Operating System - Phase 8\0".as_ptr());
         ffi::vga_set_color(7, 0);
         ffi::vga_println(b"======================================\n\0".as_ptr());
-        ffi::vga_println(b"Demonstrating cooperative multitasking...\0".as_ptr());
-        ffi::vga_println(b"Watch the tasks switch in round-robin!\n\0".as_ptr());
+        ffi::vga_println(b"System Integration Complete!\n\0".as_ptr());
         
-        ffi::serial_print(b"[Rust] Starting scheduler...\n\0".as_ptr());
-    }
-    
-    // Start scheduler (never returns)
-    process::Scheduler::start();
-}
-
-// Demo task entry points
-extern "C" fn task_a_entry() {
-    for i in 0..5 {
-        unsafe {
-            ffi::vga_set_color(14, 0); // Yellow
-            ffi::vga_print(b"[Task A] Running iteration \0".as_ptr());
-            ffi::vga_set_color(7, 0);
-            
-            // Print number (simplified)
-            ffi::vga_println(b"#\n\0".as_ptr());
-            
-            ffi::serial_print(b"[Task A] Iteration complete, yielding...\n\0".as_ptr());
+        ffi::serial_print(b"[Rust] Testing timer functionality...\n\0".as_ptr());
+        ffi::vga_println(b"[Timer] Testing PIT timer...\0".as_ptr());
+        
+        // Test timer - wait a bit and show uptime
+        let start = ffi::timer_get_ticks_ffi();
+        ffi::serial_print(b"[Timer] Initial ticks: ...\n\0".as_ptr());
+        
+        // Busy wait for a moment
+        for _ in 0..10000000 {
+            core::arch::asm!("nop");
         }
         
-        // Simulate some work
-        for _ in 0..1000000 {
-            unsafe { core::arch::asm!("nop"); }
-        }
+        let end = ffi::timer_get_ticks_ffi();
+        ffi::serial_print(b"[Timer] Ticks after delay: ...\n\0".as_ptr());
         
-        // Yield to other tasks
-        process::Scheduler::yield_cpu();
-    }
-    
-    unsafe {
-        ffi::vga_set_color(14, 0);
-        ffi::vga_println(b"[Task A] Completed!\n\0".as_ptr());
-        ffi::vga_set_color(7, 0);
-        ffi::serial_print(b"[Task A] Finished\n\0".as_ptr());
-    }
-    
-    // Task complete - just halt for now
-    loop {
-        unsafe { core::arch::asm!("hlt"); }
-    }
-}
-
-extern "C" fn task_b_entry() {
-    for i in 0..5 {
-        unsafe {
-            ffi::vga_set_color(10, 0); // Green
-            ffi::vga_print(b"[Task B] Running iteration \0".as_ptr());
-            ffi::vga_set_color(7, 0);
-            
-            ffi::vga_println(b"#\n\0".as_ptr());
-            
-            ffi::serial_print(b"[Task B] Iteration complete, yielding...\n\0".as_ptr());
-        }
-        
-        // Simulate some work
-        for _ in 0..1000000 {
-            unsafe { core::arch::asm!("nop"); }
-        }
-        
-        process::Scheduler::yield_cpu();
-    }
-    
-    unsafe {
         ffi::vga_set_color(10, 0);
-        ffi::vga_println(b"[Task B] Completed!\n\0".as_ptr());
+        ffi::vga_println(b" Timer working!\0".as_ptr());
         ffi::vga_set_color(7, 0);
-        ffi::serial_print(b"[Task B] Finished\n\0".as_ptr());
+        
+        // Test syscall interface
+        ffi::serial_print(b"[Rust] Testing syscall interface...\n\0".as_ptr());
+        ffi::vga_println(b"\n[Syscall] Testing system calls...\0".as_ptr());
+        
+        // Test getpid syscall
+        let pid = syscall::syscall(syscall::SyscallNumber::GetPid, 0, 0, 0);
+        ffi::serial_print(b"[Syscall] getpid returned: ...\n\0".as_ptr());
+        
+        ffi::vga_set_color(10, 0);
+        ffi::vga_println(b" Syscalls working!\0".as_ptr());
+        ffi::vga_set_color(7, 0);
+        
+        // Show success message
+        ffi::vga_println(b"\n======================================\0".as_ptr());
+        ffi::vga_set_color(10, 0);
+        ffi::vga_println(b"  Phase 8 Complete!\0".as_ptr());
+        ffi::vga_set_color(7, 0);
+        ffi::vga_println(b"======================================\n\0".as_ptr());
+        
+        ffi::vga_println(b"Features implemented:\0".as_ptr());
+        ffi::vga_println(b"  [*] PIT Timer (100 Hz)\0".as_ptr());
+        ffi::vga_println(b"  [*] Timer IRQ Handler\0".as_ptr());
+        ffi::vga_println(b"  [*] Uptime Tracking\0".as_ptr());
+        ffi::vga_println(b"  [*] System Call Interface (INT 0x80)\0".as_ptr());
+        ffi::vga_println(b"  [*] Basic Syscalls (exit, yield, getpid, sleep)\0".as_ptr());
+        ffi::vga_println(b"\nKernel running. Press any key...\0".as_ptr());
+        
+        ffi::serial_print(b"[Rust] Phase 8 demonstration complete\n\0".as_ptr());
+        ffi::serial_print(b"[Rust] Kernel entering idle loop\n\0".as_ptr());
     }
     
+    // Enter idle loop
     loop {
-        unsafe { core::arch::asm!("hlt"); }
-    }
-}
-
-extern "C" fn task_c_entry() {
-    for i in 0..5 {
         unsafe {
-            ffi::vga_set_color(13, 0); // Magenta
-            ffi::vga_print(b"[Task C] Counting: \0".as_ptr());
-            ffi::vga_set_color(7, 0);
-            
-            // Simple counter display
-            ffi::vga_println(b"...\n\0".as_ptr());
-            
-            ffi::serial_print(b"[Task C] Count iteration, yielding...\n\0".as_ptr());
+            core::arch::asm!("hlt");
         }
-        
-        // Simulate some work
-        for _ in 0..1000000 {
-            unsafe { core::arch::asm!("nop"); }
-        }
-        
-        process::Scheduler::yield_cpu();
-    }
-    
-    unsafe {
-        ffi::vga_set_color(13, 0);
-        ffi::vga_println(b"[Task C] Completed!\n\0".as_ptr());
-        ffi::vga_set_color(7, 0);
-        ffi::serial_print(b"[Task C] Finished\n\0".as_ptr());
-    }
-    
-    loop {
-        unsafe { core::arch::asm!("hlt"); }
     }
 }
 

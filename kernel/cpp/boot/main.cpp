@@ -16,6 +16,7 @@ extern "C" void vga_set_color(uint8_t fg, uint8_t bg);
 extern "C" void vga_putchar(char c);
 extern "C" void keyboard_init();
 extern "C" char keyboard_get_char();
+extern "C" void timer_init_ffi(uint32_t frequency);
 
 // Rust kernel entry point
 extern "C" void rust_main();
@@ -75,6 +76,15 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_println(" OK");
     vga_set_color(7, 0);
     serial_print("Keyboard initialized\n");
+    
+    // Initialize PIT timer
+    serial_print("Initializing timer...\n");
+    vga_print("[ ] Initializing timer (100 Hz)...");
+    timer_init_ffi(100); // 100 Hz = 10ms tick
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("Timer initialized\n");
     
     // Initialize physical memory manager
     serial_print("Initializing physical memory manager...\n");

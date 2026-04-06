@@ -33,15 +33,18 @@ ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
               $(BOOT_DIR)/boot.asm \
               $(ARCH_DIR)/gdt_flush.asm \
               $(ARCH_DIR)/idt_stubs.asm \
-              $(ARCH_DIR)/context_switch.asm
+              $(ARCH_DIR)/context_switch.asm \
+              $(ARCH_DIR)/syscall_entry.asm
 
 CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(KERNEL_CPP_DIR)/arch/cpu.cpp \
+              $(KERNEL_CPP_DIR)/arch/syscall.cpp \
               $(ARCH_DIR)/gdt.cpp \
               $(ARCH_DIR)/idt.cpp \
               $(DRIVERS_DIR)/serial.cpp \
               $(DRIVERS_DIR)/vga.cpp \
               $(DRIVERS_DIR)/keyboard.cpp \
+              $(DRIVERS_DIR)/timer.cpp \
               $(MM_DIR)/pmm.cpp \
               $(MM_DIR)/paging.cpp \
               $(MM_DIR)/vmm.cpp

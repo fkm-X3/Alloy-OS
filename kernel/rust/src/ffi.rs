@@ -45,6 +45,11 @@ extern "C" {
     
     // Context switching (from context_switch.asm)
     pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
+    
+    // Timer functions (from timer.cpp)
+    pub fn timer_init_ffi(frequency: u32);
+    pub fn timer_get_ticks_ffi() -> u64;
+    pub fn timer_get_uptime_ms_ffi() -> u64;
 }
 
 // Safe wrappers

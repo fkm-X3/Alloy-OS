@@ -74,6 +74,9 @@ extern "C" void irq13();
 extern "C" void irq14();
 extern "C" void irq15();
 
+// Syscall entry point (defined in syscall_entry.asm)
+extern "C" void syscall_entry();
+
 // Set an IDT entry
 static void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) {
     idt[num].base_low = base & 0xFFFF;
@@ -196,6 +199,11 @@ extern "C" void init_idt() {
     idt_set_gate(46, (uint32_t)irq14, 0x08, 0x8E);
     idt_set_gate(47, (uint32_t)irq15, 0x08, 0x8E);
     
+    // Set up syscall handler (INT 0x80)
+    // flags = 0xEE (present, ring 3 accessible, 32-bit interrupt gate)
+    // This allows user-mode processes to invoke syscalls
+    idt_set_gate(0x80, (uint32_t)syscall_entry, 0x08, 0xEE);
+    
     // Load the IDT
     idt_flush((uint32_t)&idtp);
     
@@ -254,23 +262,9 @@ extern "C" void exception_handler(uint32_t int_no, uint32_t err_code) {
 
 // IRQ handler - routes to specific handlers
 extern "C" void keyboard_handler();
-
-// Global system tick counter for uptime tracking
-static volatile uint64_t system_ticks = 0;
-static const uint32_t TIMER_FREQUENCY = 100; // 100 Hz = 10ms per tick
-
-// Timer handler (IRQ0)
-static void timer_handler() {
-    system_ticks++;
-}
+extern "C" void timer_handler(); // From timer.cpp
 
 extern "C" void irq_handler(uint32_t irq_no) {
-    // Send EOI (End of Interrupt) to PIC
-    if (irq_no >= 8) {
-        outb(PIC2_COMMAND, 0x20); // Send to slave
-    }
-    outb(PIC1_COMMAND, 0x20); // Send to master
-    
     // Route to specific handler
     switch (irq_no) {
         case 0: // Timer (PIT)
@@ -283,9 +277,17 @@ extern "C" void irq_handler(uint32_t irq_no) {
             // Unhandled IRQ
             break;
     }
+    
+    // Send EOI (End of Interrupt) to PIC
+    // Note: Timer handler already sends EOI, but doing it twice is safe
+    if (irq_no >= 8) {
+        outb(PIC2_COMMAND, 0x20); // Send to slave
+    }
+    outb(PIC1_COMMAND, 0x20); // Send to master
 }
 
-// Get system uptime in milliseconds
+// Compatibility wrapper for old system uptime function
+extern "C" uint64_t timer_get_uptime_ms();
 extern "C" uint64_t get_system_uptime_ms() {
-    return (system_ticks * 1000) / TIMER_FREQUENCY;
+    return timer_get_uptime_ms();
 }

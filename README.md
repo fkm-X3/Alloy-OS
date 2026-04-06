@@ -2,7 +2,7 @@
 An os built in c/c++ and rust
 
 ## fucking information
-```
+```bash
 # use linux because ts don't compile on windows
 make iso
 

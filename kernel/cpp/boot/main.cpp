@@ -43,9 +43,9 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     
     // Display boot banner
     vga_set_color(11, 0); // Light cyan
-    vga_println("==============================");
-    vga_println("    Alloy Operating System    ");
-    vga_println("==============================");
+    vga_println("===============================");
+    vga_println("    Alloy Kernel Bootloader    ");
+    vga_println("===============================");
     vga_set_color(7, 0); // Light grey
     vga_println("");
     

@@ -122,13 +122,19 @@ impl SlabCache {
     
     /// Create a new slab
     unsafe fn create_slab(&mut self) -> *mut SlabHeader {
+        use crate::ffi;
+        ffi::serial_print(b"[Slab] Creating new slab, calling vmm_alloc_region...\n\0".as_ptr());
+        
         // Allocate memory for slab (1 page = 4KB)
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
         let ptr = ffi::vmm_alloc_region(4096, flags) as *mut u8;
         
         if ptr.is_null() {
+            ffi::serial_print(b"[Slab] ERROR: vmm_alloc_region returned NULL!\n\0".as_ptr());
             return null_mut();
         }
+        
+        ffi::serial_print(b"[Slab] vmm_alloc_region succeeded, initializing slab...\n\0".as_ptr());
         
         let header = ptr as *mut SlabHeader;
         (*header).size_class = self.size;
@@ -153,6 +159,7 @@ impl SlabCache {
         }
         
         (*header).free_list = data_start as *mut FreeNode;
+        ffi::serial_print(b"[Slab] Slab initialization complete\n\0".as_ptr());
         header
     }
     
@@ -250,14 +257,23 @@ impl SlabAllocator {
     
     /// Allocate from appropriate slab cache
     pub unsafe fn alloc(&mut self, size: usize) -> *mut u8 {
+        use crate::ffi;
+        ffi::serial_print(b"[Slab] Allocating object of size: \0".as_ptr());
+        
         // Find appropriate size class
         for cache in &mut self.caches {
             if size <= cache.size {
-                return cache.alloc();
+                ffi::serial_print(b"using cache\n\0".as_ptr());
+                let result = cache.alloc();
+                if result.is_null() {
+                    ffi::serial_print(b"[Slab] Cache alloc failed!\n\0".as_ptr());
+                }
+                return result;
             }
         }
         
         // Size too large for slab allocator
+        ffi::serial_print(b"[Slab] Size too large for slab allocator\n\0".as_ptr());
         null_mut()
     }
     

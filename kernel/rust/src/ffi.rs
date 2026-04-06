@@ -22,9 +22,9 @@ extern "C" {
     pub fn pmm_alloc_frame() -> *mut c_void;
     pub fn pmm_free_frame(addr: *mut c_void);
     
-    // Keyboard functions
+    // Keyboard functions - matches C++ signatures
     pub fn keyboard_has_data() -> bool;
-    pub fn keyboard_get_char() -> u8;
+    pub fn keyboard_get_char() -> i8;  // C char is signed
 }
 
 // Safe wrappers
@@ -86,10 +86,15 @@ pub fn keyboard_has_key() -> bool {
     }
 }
 
-/// Get character from keyboard
+/// Get character from keyboard (returns as u8, converted from signed char)
 pub fn keyboard_read() -> u8 {
     unsafe {
-        keyboard_get_char()
+        let c = keyboard_get_char();
+        if c < 0 {
+            0  // Invalid/special key
+        } else {
+            c as u8
+        }
     }
 }
 

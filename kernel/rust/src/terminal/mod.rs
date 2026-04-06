@@ -13,31 +13,56 @@ use command::CommandRegistry;
 
 pub struct Terminal {
     buffer: LineBuffer,
-    commands: CommandRegistry,
+    commands: Option<CommandRegistry>,  // Make optional for lazy init
+    commands_initialized: bool,
 }
 
 impl Terminal {
     pub fn new() -> Self {
-        let mut terminal = Terminal {
+        unsafe {
+            crate::ffi::serial_print(b"[Terminal] Initializing...\n\0".as_ptr());
+        }
+        
+        // Don't create CommandRegistry yet - defer until first use
+        let terminal = Terminal {
             buffer: LineBuffer::new(),
-            commands: CommandRegistry::new(),
+            commands: None,
+            commands_initialized: false,
         };
         
-        // Register built-in commands
-        terminal.register_builtin_commands();
+        unsafe {
+            crate::ffi::serial_print(b"[Terminal] Initialization complete (lazy commands)\n\0".as_ptr());
+        }
         
         terminal
     }
     
-    fn register_builtin_commands(&mut self) {
+    fn ensure_commands_initialized(&mut self) {
+        if !self.commands_initialized {
+            unsafe {
+                crate::ffi::serial_print(b"[Terminal] Initializing command registry...\n\0".as_ptr());
+            }
+            
+            let mut registry = CommandRegistry::new();
+            self.register_builtin_commands(&mut registry);
+            self.commands = Some(registry);
+            self.commands_initialized = true;
+            
+            unsafe {
+                crate::ffi::serial_print(b"[Terminal] Command registry initialized\n\0".as_ptr());
+            }
+        }
+    }
+    
+    fn register_builtin_commands(&self, registry: &mut CommandRegistry) {
         use alloc::boxed::Box;
         use command::*;
         
-        self.commands.register(Box::new(HelpCommand));
-        self.commands.register(Box::new(ClearCommand));
-        self.commands.register(Box::new(EchoCommand));
-        self.commands.register(Box::new(VersionCommand));
-        self.commands.register(Box::new(MeminfoCommand));
+        registry.register(Box::new(HelpCommand));
+        registry.register(Box::new(ClearCommand));
+        registry.register(Box::new(EchoCommand));
+        registry.register(Box::new(VersionCommand));
+        registry.register(Box::new(MeminfoCommand));
     }
     
     pub fn show_prompt(&self) {
@@ -82,6 +107,9 @@ impl Terminal {
             return;
         }
         
+        // Ensure commands are initialized before executing
+        self.ensure_commands_initialized();
+        
         // Parse command and arguments
         let parts: alloc::vec::Vec<&str> = cmd_line.trim().split_whitespace().collect();
         if parts.is_empty() {
@@ -92,21 +120,44 @@ impl Terminal {
         let args = &parts[1..];
         
         // Execute command
-        self.commands.execute(cmd_name, args);
+        if let Some(ref commands) = self.commands {
+            commands.execute(cmd_name, args);
+        }
     }
     
     pub fn run(&mut self) {
+        unsafe {
+            crate::ffi::serial_print(b"[Terminal] Displaying banner...\n\0".as_ptr());
+        }
+        
         colors::print_banner();
         
         unsafe {
             ffi::vga_println(b"\n\0".as_ptr());
+            crate::ffi::serial_print(b"[Terminal] Banner displayed\n\0".as_ptr());
         }
         
         self.show_prompt();
         
+        unsafe {
+            crate::ffi::serial_print(b"[Terminal] Entering main loop...\n\0".as_ptr());
+        }
+        
         // Main terminal loop
+        let mut loop_count = 0u32;
         loop {
+            // Log every 1000 iterations to show we're alive
+            loop_count = loop_count.wrapping_add(1);
+            if loop_count % 10000 == 0 {
+                unsafe {
+                    crate::ffi::serial_print(b"[Terminal] Loop iteration checkpoint\n\0".as_ptr());
+                }
+            }
+            
             if ffi::keyboard_has_key() {
+                unsafe {
+                    crate::ffi::serial_print(b"[Terminal] Key detected\n\0".as_ptr());
+                }
                 let key = ffi::keyboard_read();
                 if key != 0 {
                     if self.handle_input(key as char) {

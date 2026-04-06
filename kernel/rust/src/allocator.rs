@@ -35,14 +35,34 @@ pub struct AllocatorVMM;
 
 unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // Debug logging for allocations
+        use crate::ffi;
+        ffi::serial_print(b"[Allocator] Alloc request: size=\0".as_ptr());
+        
         lock();
         
         let result = if SLAB_ALLOCATOR.can_allocate(layout.size()) {
             // Use slab allocator for small objects
-            SLAB_ALLOCATOR.alloc(layout.size())
+            ffi::serial_print(b"slab\0".as_ptr());
+            let ptr = SLAB_ALLOCATOR.alloc(layout.size());
+            ffi::serial_print(b" -> \0".as_ptr());
+            if ptr.is_null() {
+                ffi::serial_print(b"NULL\n\0".as_ptr());
+            } else {
+                ffi::serial_print(b"OK\n\0".as_ptr());
+            }
+            ptr
         } else {
             // Use heap allocator for larger objects
-            HEAP_ALLOCATOR.alloc(layout)
+            ffi::serial_print(b"heap\0".as_ptr());
+            let ptr = HEAP_ALLOCATOR.alloc(layout);
+            ffi::serial_print(b" -> \0".as_ptr());
+            if ptr.is_null() {
+                ffi::serial_print(b"NULL\n\0".as_ptr());
+            } else {
+                ffi::serial_print(b"OK\n\0".as_ptr());
+            }
+            ptr
         };
         
         unlock();
@@ -50,6 +70,9 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        use crate::ffi;
+        ffi::serial_print(b"[Allocator] Dealloc request\n\0".as_ptr());
+        
         lock();
         
         if SLAB_ALLOCATOR.can_allocate(layout.size()) {

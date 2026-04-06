@@ -68,6 +68,9 @@ impl HeapAllocator {
     
     /// Allocate a block from the heap
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        use crate::ffi;
+        ffi::serial_print(b"[Heap] Allocating block...\n\0".as_ptr());
+        
         let size = layout.size().max(MIN_BLOCK_SIZE);
         let _align = layout.align().max(HEAP_ALIGN);
         
@@ -76,6 +79,7 @@ impl HeapAllocator {
         
         // Try to find a suitable free block
         if let Some(block) = self.find_free_block(total_size) {
+            ffi::serial_print(b"[Heap] Found free block\n\0".as_ptr());
             self.total_allocated += total_size;
             return block;
         }
@@ -84,12 +88,16 @@ impl HeapAllocator {
         let pages_needed = (total_size + 4095) / 4096;
         let alloc_size = pages_needed * 4096;
         
+        ffi::serial_print(b"[Heap] Allocating from VMM...\n\0".as_ptr());
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
         let ptr = ffi::vmm_alloc_region(alloc_size as u32, flags) as *mut u8;
         
         if ptr.is_null() {
+            ffi::serial_print(b"[Heap] ERROR: VMM allocation failed!\n\0".as_ptr());
             return null_mut();
         }
+        
+        ffi::serial_print(b"[Heap] VMM allocation succeeded\n\0".as_ptr());
         
         // Create header
         let header = ptr as *mut BlockHeader;
@@ -106,6 +114,7 @@ impl HeapAllocator {
         }
         
         self.total_allocated += total_size;
+        ffi::serial_print(b"[Heap] Allocation complete\n\0".as_ptr());
         (*header).data_ptr()
     }
     

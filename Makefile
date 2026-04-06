@@ -101,6 +101,9 @@ $(KERNEL_ISO): $(KERNEL_ELF)
 run: $(KERNEL_ISO)
 	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -no-reboot -no-shutdown -D qemu.log
 
+output: $(KERNEL_ISO)
+	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial --display none -no-reboot -no-shutdown -D qemu.log
+
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)
 	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -s -S
@@ -109,6 +112,15 @@ debug: $(KERNEL_ISO)
 clean:
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
+
+# Im lazy
+fuck:
+	@echo "Doing all dat for you."
+	rm -rf $(BUILD_DIR)
+	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
+	@echo "Cleaned your shitass code, compiling the iso."
+	make iso
+	@echo "Run 'make run' to test the kernel, bozo really though id do everything for you."
 
 # Print variables for debugging
 print-%:

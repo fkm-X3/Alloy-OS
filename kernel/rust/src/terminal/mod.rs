@@ -19,38 +19,20 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new() -> Self {
-        unsafe {
-            crate::ffi::serial_print(b"[Terminal] Initializing...\n\0".as_ptr());
-        }
-        
         // Don't create CommandRegistry yet - defer until first use
-        let terminal = Terminal {
+        Terminal {
             buffer: LineBuffer::new(),
             commands: None,
             commands_initialized: false,
-        };
-        
-        unsafe {
-            crate::ffi::serial_print(b"[Terminal] Initialization complete (lazy commands)\n\0".as_ptr());
         }
-        
-        terminal
     }
     
     fn ensure_commands_initialized(&mut self) {
         if !self.commands_initialized {
-            unsafe {
-                crate::ffi::serial_print(b"[Terminal] Initializing command registry...\n\0".as_ptr());
-            }
-            
             let mut registry = CommandRegistry::new();
             self.register_builtin_commands(&mut registry);
             self.commands = Some(registry);
             self.commands_initialized = true;
-            
-            unsafe {
-                crate::ffi::serial_print(b"[Terminal] Command registry initialized\n\0".as_ptr());
-            }
         }
     }
     
@@ -128,38 +110,17 @@ impl Terminal {
     }
     
     pub fn run(&mut self) {
-        unsafe {
-            crate::ffi::serial_print(b"[Terminal] Displaying banner...\n\0".as_ptr());
-        }
-        
         colors::print_banner();
         
         unsafe {
             ffi::vga_println(b"\n\0".as_ptr());
-            crate::ffi::serial_print(b"[Terminal] Banner displayed\n\0".as_ptr());
         }
         
         self.show_prompt();
         
-        unsafe {
-            crate::ffi::serial_print(b"[Terminal] Entering main loop...\n\0".as_ptr());
-        }
-        
         // Main terminal loop
-        let mut loop_count = 0u32;
         loop {
-            // Log every 1000 iterations to show we're alive
-            loop_count = loop_count.wrapping_add(1);
-            if loop_count % 10000 == 0 {
-                unsafe {
-                    crate::ffi::serial_print(b"[Terminal] Loop iteration checkpoint\n\0".as_ptr());
-                }
-            }
-            
             if ffi::keyboard_has_key() {
-                unsafe {
-                    crate::ffi::serial_print(b"[Terminal] Key detected\n\0".as_ptr());
-                }
                 let key = ffi::keyboard_read();
                 if key != 0 {
                     if self.handle_input(key as char) {

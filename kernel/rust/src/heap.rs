@@ -33,8 +33,24 @@ impl BlockHeader {
         }
     }
     
+    /// Check if header is valid (not corrupted)
     fn is_valid(&self) -> bool {
-        self.magic == MAGIC
+        // Check magic number
+        if self.magic != MAGIC {
+            return false;
+        }
+        
+        // Check size is reasonable (not zero, not huge)
+        if self.size == 0 || self.size > 1024 * 1024 * 1024 {
+            return false;
+        }
+        
+        // Check size is properly aligned
+        if self.size % MIN_BLOCK_SIZE != 0 {
+            return false;
+        }
+        
+        true
     }
     
     fn data_ptr(&self) -> *mut u8 {
@@ -58,6 +74,8 @@ pub struct HeapAllocator {
 }
 
 impl HeapAllocator {
+    /// Create a new heap allocator with empty free list and zero counters
+    /// This is safe because all pointers start as null and counters as zero
     pub const fn new() -> Self {
         HeapAllocator {
             free_list: null_mut(),
@@ -68,9 +86,6 @@ impl HeapAllocator {
     
     /// Allocate a block from the heap
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        use crate::ffi;
-        ffi::serial_print(b"[Heap] Allocating block...\n\0".as_ptr());
-        
         let size = layout.size().max(MIN_BLOCK_SIZE);
         let _align = layout.align().max(HEAP_ALIGN);
         
@@ -79,7 +94,6 @@ impl HeapAllocator {
         
         // Try to find a suitable free block
         if let Some(block) = self.find_free_block(total_size) {
-            ffi::serial_print(b"[Heap] Found free block\n\0".as_ptr());
             self.total_allocated += total_size;
             return block;
         }
@@ -88,7 +102,6 @@ impl HeapAllocator {
         let pages_needed = (total_size + 4095) / 4096;
         let alloc_size = pages_needed * 4096;
         
-        ffi::serial_print(b"[Heap] Allocating from VMM...\n\0".as_ptr());
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
         let ptr = ffi::vmm_alloc_region(alloc_size as u32, flags) as *mut u8;
         
@@ -96,8 +109,6 @@ impl HeapAllocator {
             ffi::serial_print(b"[Heap] ERROR: VMM allocation failed!\n\0".as_ptr());
             return null_mut();
         }
-        
-        ffi::serial_print(b"[Heap] VMM allocation succeeded\n\0".as_ptr());
         
         // Create header
         let header = ptr as *mut BlockHeader;
@@ -114,7 +125,6 @@ impl HeapAllocator {
         }
         
         self.total_allocated += total_size;
-        ffi::serial_print(b"[Heap] Allocation complete\n\0".as_ptr());
         (*header).data_ptr()
     }
     
@@ -126,10 +136,16 @@ impl HeapAllocator {
         
         let header = BlockHeader::from_data_ptr(ptr);
         
-        // Validate header
+        // Validate header before proceeding
         if !(*header).is_valid() {
-            // Corruption detected - panic
-            panic!("Heap corruption detected at {:p}", ptr);
+            // Detailed corruption reporting
+            use crate::ffi;
+            ffi::serial_print(b"[Heap] CRITICAL: Heap corruption detected!\n\0".as_ptr());
+            ffi::serial_print(b"  Pointer: \0".as_ptr());
+            ffi::serial_print(b"  Expected magic: 0xDEADBEEF\n\0".as_ptr());
+            ffi::serial_print(b"  Actual magic: \0".as_ptr());
+            
+            panic!("Heap corruption at {:p}", ptr);
         }
         
         let size = (*header).size + core::mem::size_of::<BlockHeader>();

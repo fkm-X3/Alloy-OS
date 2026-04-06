@@ -6,6 +6,10 @@ edition = "2021"
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+default = []
+debug-alloc = []  # Enable verbose allocation logging
+
 [dependencies]
 
 [profile.dev]

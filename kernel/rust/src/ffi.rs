@@ -81,6 +81,27 @@ pub fn vga_println_str(s: &str) {
     }
 }
 
+/// Safely print C-string to serial (with null check)
+pub unsafe fn serial_print_safe(s: *const u8) {
+    if !s.is_null() {
+        serial_print(s);
+    }
+}
+
+/// Safely print C-string to VGA (with null check)
+pub unsafe fn vga_print_safe(s: *const u8) {
+    if !s.is_null() {
+        vga_print(s);
+    }
+}
+
+/// Safely print C-string line to VGA (with null check)
+pub unsafe fn vga_println_safe(s: *const u8) {
+    if !s.is_null() {
+        vga_println(s);
+    }
+}
+
 /// Set VGA color
 pub fn set_vga_color(fg: u8, bg: u8) {
     unsafe {

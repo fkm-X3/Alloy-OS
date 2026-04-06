@@ -38,6 +38,8 @@ struct SlabCache {
 }
 
 impl SlabCache {
+    /// Create a new slab cache for a specific size class
+    /// All slabs lists are null, counters are zero - ready for first allocation
     const fn new(size: usize) -> Self {
         SlabCache {
             size,
@@ -235,40 +237,38 @@ pub struct SlabAllocator {
 }
 
 impl SlabAllocator {
+    /// Create a new slab allocator with all caches initialized to empty state
+    /// All pointers are null, all counters are zero
     pub const fn new() -> Self {
         SlabAllocator {
             caches: [
-                SlabCache::new(SLAB_SIZES[0]),
-                SlabCache::new(SLAB_SIZES[1]),
-                SlabCache::new(SLAB_SIZES[2]),
-                SlabCache::new(SLAB_SIZES[3]),
-                SlabCache::new(SLAB_SIZES[4]),
-                SlabCache::new(SLAB_SIZES[5]),
-                SlabCache::new(SLAB_SIZES[6]),
-                SlabCache::new(SLAB_SIZES[7]),
+                SlabCache::new(SLAB_SIZES[0]),  // 8 bytes
+                SlabCache::new(SLAB_SIZES[1]),  // 16 bytes
+                SlabCache::new(SLAB_SIZES[2]),  // 32 bytes
+                SlabCache::new(SLAB_SIZES[3]),  // 64 bytes
+                SlabCache::new(SLAB_SIZES[4]),  // 128 bytes
+                SlabCache::new(SLAB_SIZES[5]),  // 256 bytes
+                SlabCache::new(SLAB_SIZES[6]),  // 512 bytes
+                SlabCache::new(SLAB_SIZES[7]),  // 1024 bytes
             ],
         }
     }
     
     /// Allocate from appropriate slab cache
     pub unsafe fn alloc(&mut self, size: usize) -> *mut u8 {
-        use crate::ffi;
-        ffi::serial_print(b"[Slab] Allocating object of size: \0".as_ptr());
-        
         // Find appropriate size class
         for cache in &mut self.caches {
             if size <= cache.size {
-                ffi::serial_print(b"using cache\n\0".as_ptr());
                 let result = cache.alloc();
                 if result.is_null() {
-                    ffi::serial_print(b"[Slab] Cache alloc failed!\n\0".as_ptr());
+                    use crate::ffi;
+                    ffi::serial_print(b"[Slab] ERROR: Cache allocation failed!\n\0".as_ptr());
                 }
                 return result;
             }
         }
         
         // Size too large for slab allocator
-        ffi::serial_print(b"[Slab] Size too large for slab allocator\n\0".as_ptr());
         null_mut()
     }
     

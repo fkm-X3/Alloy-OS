@@ -63,6 +63,8 @@ impl Terminal {
         registry.register(Box::new(EchoCommand));
         registry.register(Box::new(VersionCommand));
         registry.register(Box::new(MeminfoCommand));
+        registry.register(Box::new(CpuInfoCommand));
+        registry.register(Box::new(UptimeCommand));
     }
     
     pub fn show_prompt(&self) {

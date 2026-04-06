@@ -24,6 +24,9 @@ public:
     
     // Get statistics
     uint32_t get_allocated_pages() const;
+    uint32_t get_heap_start() const;
+    uint32_t get_heap_size() const;
+    uint32_t get_next_virt_addr() const;
     
 private:
     uint32_t next_virt_addr;  // Next available virtual address for allocation

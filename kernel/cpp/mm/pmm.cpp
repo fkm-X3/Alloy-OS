@@ -221,3 +221,19 @@ extern "C" void* pmm_alloc_frame() {
 extern "C" void pmm_free_frame(void* addr) {
     g_pmm.free_frame(addr);
 }
+
+extern "C" uint32_t pmm_get_total_frames() {
+    return g_pmm.get_total_frames();
+}
+
+extern "C" uint32_t pmm_get_used_frames() {
+    return g_pmm.get_used_frames();
+}
+
+extern "C" uint64_t pmm_get_total_memory() {
+    return g_pmm.get_total_memory();
+}
+
+extern "C" uint64_t pmm_get_available_memory() {
+    return g_pmm.get_available_memory();
+}

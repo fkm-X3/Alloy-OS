@@ -14,6 +14,7 @@ pub mod slab;
 pub mod ffi;
 pub mod panic;
 pub mod terminal;
+pub mod utils;
 
 use core::panic::PanicInfo;
 

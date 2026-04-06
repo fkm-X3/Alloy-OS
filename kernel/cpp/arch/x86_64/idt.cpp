@@ -255,6 +255,15 @@ extern "C" void exception_handler(uint32_t int_no, uint32_t err_code) {
 // IRQ handler - routes to specific handlers
 extern "C" void keyboard_handler();
 
+// Global system tick counter for uptime tracking
+static volatile uint64_t system_ticks = 0;
+static const uint32_t TIMER_FREQUENCY = 100; // 100 Hz = 10ms per tick
+
+// Timer handler (IRQ0)
+static void timer_handler() {
+    system_ticks++;
+}
+
 extern "C" void irq_handler(uint32_t irq_no) {
     // Send EOI (End of Interrupt) to PIC
     if (irq_no >= 8) {
@@ -264,6 +273,9 @@ extern "C" void irq_handler(uint32_t irq_no) {
     
     // Route to specific handler
     switch (irq_no) {
+        case 0: // Timer (PIT)
+            timer_handler();
+            break;
         case 1: // Keyboard
             keyboard_handler();
             break;
@@ -271,4 +283,9 @@ extern "C" void irq_handler(uint32_t irq_no) {
             // Unhandled IRQ
             break;
     }
+}
+
+// Get system uptime in milliseconds
+extern "C" uint64_t get_system_uptime_ms() {
+    return (system_ticks * 1000) / TIMER_FREQUENCY;
 }

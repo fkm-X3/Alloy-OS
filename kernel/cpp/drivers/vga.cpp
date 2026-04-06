@@ -27,7 +27,8 @@ static inline uint8_t inb(uint16_t port) {
 
 // Create a VGA entry (character + color)
 static inline uint16_t vga_entry(char c, uint8_t color) {
-    return (uint16_t)c | ((uint16_t)color << 8);
+    // Cast to uint8_t first to prevent sign extension of high-bit characters (Code Page 437)
+    return (uint16_t)(uint8_t)c | ((uint16_t)color << 8);
 }
 
 // Update hardware cursor position

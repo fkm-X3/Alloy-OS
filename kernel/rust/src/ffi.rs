@@ -17,14 +17,30 @@ extern "C" {
     pub fn vmm_free_region(addr: *mut c_void, size: u32);
     pub fn vmm_map(virt_addr: *mut c_void, phys_addr: *mut c_void, flags: u32) -> bool;
     pub fn vmm_unmap(virt_addr: *mut c_void);
+    pub fn vmm_get_allocated_pages() -> u32;
+    pub fn vmm_get_heap_start() -> u32;
+    pub fn vmm_get_heap_size() -> u32;
+    pub fn vmm_get_next_virt_addr() -> u32;
     
     // Physical memory management
     pub fn pmm_alloc_frame() -> *mut c_void;
     pub fn pmm_free_frame(addr: *mut c_void);
+    pub fn pmm_get_total_frames() -> u32;
+    pub fn pmm_get_used_frames() -> u32;
+    pub fn pmm_get_total_memory() -> u64;
+    pub fn pmm_get_available_memory() -> u64;
     
     // Keyboard functions - matches C++ signatures
     pub fn keyboard_has_data() -> bool;
     pub fn keyboard_get_char() -> i8;  // C char is signed
+    
+    // CPU information functions
+    pub fn cpu_get_vendor_ffi(vendor: *mut u8);
+    pub fn cpu_get_features_ffi() -> u32;
+    pub fn cpu_get_model_info_ffi(family: *mut u32, model: *mut u32, stepping: *mut u32);
+    
+    // System uptime
+    pub fn get_system_uptime_ms() -> u64;
 }
 
 // Safe wrappers

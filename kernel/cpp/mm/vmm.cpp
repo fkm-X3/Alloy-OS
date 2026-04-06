@@ -106,6 +106,18 @@ uint32_t VirtualMemoryManager::get_allocated_pages() const {
     return allocated_pages;
 }
 
+uint32_t VirtualMemoryManager::get_heap_start() const {
+    return KERNEL_HEAP_START;
+}
+
+uint32_t VirtualMemoryManager::get_heap_size() const {
+    return next_virt_addr - KERNEL_HEAP_START;
+}
+
+uint32_t VirtualMemoryManager::get_next_virt_addr() const {
+    return next_virt_addr;
+}
+
 // C FFI wrappers for Rust
 extern "C" void* vmm_alloc_region(uint32_t size, uint32_t flags) {
     return g_vmm.alloc_region(size, flags);
@@ -121,4 +133,20 @@ extern "C" bool vmm_map(void* virt_addr, void* phys_addr, uint32_t flags) {
 
 extern "C" void vmm_unmap(void* virt_addr) {
     g_vmm.unmap(virt_addr);
+}
+
+extern "C" uint32_t vmm_get_allocated_pages() {
+    return g_vmm.get_allocated_pages();
+}
+
+extern "C" uint32_t vmm_get_heap_start() {
+    return g_vmm.get_heap_start();
+}
+
+extern "C" uint32_t vmm_get_heap_size() {
+    return g_vmm.get_heap_size();
+}
+
+extern "C" uint32_t vmm_get_next_virt_addr() {
+    return g_vmm.get_next_virt_addr();
 }

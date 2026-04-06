@@ -266,8 +266,8 @@ impl Command for MeminfoCommand {
         crate::ffi::vga_println_str("Rust Allocators:");
         
         // Slab allocator
-        let slab_alloc_str = format::u32_to_decimal(slab_stats.total_allocated as u32);
-        let slab_freed_str = format::u32_to_decimal(slab_stats.total_freed as u32);
+        let slab_alloc_str = format::u32_to_decimal(slab_stats.0 as u32);
+        let slab_freed_str = format::u32_to_decimal(slab_stats.1 as u32);
         
         crate::ffi::vga_print_str("  Slab allocated:   ");
         unsafe {
@@ -280,8 +280,8 @@ impl Command for MeminfoCommand {
         }
         
         // Heap allocator
-        let heap_alloc_str = format::u32_to_decimal(heap_stats.total_allocated as u32);
-        let heap_freed_str = format::u32_to_decimal(heap_stats.total_freed as u32);
+        let heap_alloc_str = format::u32_to_decimal(heap_stats.0 as u32);
+        let heap_freed_str = format::u32_to_decimal(heap_stats.1 as u32);
         
         crate::ffi::vga_print_str("  Heap allocated:   ");
         unsafe {

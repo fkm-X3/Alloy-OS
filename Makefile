@@ -6,10 +6,11 @@ TARGET ?= i686-alloy
 
 # Cross-compiler toolchain
 AS = nasm
-CC = i686-elf-gcc
-CXX = i686-elf-g++
-LD = i686-elf-ld
+CC = $(HOME)/.local/i686-elf/bin/i686-elf-gcc
+CXX = $(HOME)/.local/i686-elf/bin/i686-elf-g++
+LD = $(HOME)/.local/i686-elf/bin/i686-elf-ld
 RUSTC = rustc
+CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
 ASFLAGS = -f elf32
@@ -34,6 +35,7 @@ ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
               $(ARCH_DIR)/idt_stubs.asm
 
 CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
+              $(KERNEL_CPP_DIR)/arch/cpu.cpp \
               $(ARCH_DIR)/gdt.cpp \
               $(ARCH_DIR)/idt.cpp \
               $(DRIVERS_DIR)/serial.cpp \
@@ -70,7 +72,7 @@ $(KERNEL_ELF): $(OBJECTS) $(RUST_LIB)
 $(RUST_LIB): $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
 	@echo "Building Rust kernel library..."
 	@mkdir -p $(BUILD_DIR)/kernel/rust
-	cd $(KERNEL_RUST_DIR) && cargo +nightly build --release --target i686-alloy.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
+	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target i686-alloy.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
 	@cp $(KERNEL_RUST_DIR)/target/i686-alloy/release/liballoy_kernel_rust.a $(RUST_LIB)
 	@echo "Rust library built: $(RUST_LIB)"
 
@@ -106,7 +108,7 @@ debug: $(KERNEL_ISO)
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
-	cd $(KERNEL_RUST_DIR) && cargo clean
+	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
 
 # Print variables for debugging
 print-%:

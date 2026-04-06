@@ -4,6 +4,72 @@
 
 use core::sync::atomic::{AtomicBool, Ordering, fence};
 use core::cell::UnsafeCell;
+use core::ops::{Deref, DerefMut};
+
+/// Simple spinlock (without interrupt handling)
+/// Use this for data that's only accessed with interrupts already disabled
+pub struct SpinLock<T> {
+    locked: AtomicBool,
+    data: UnsafeCell<T>,
+}
+
+impl<T> SpinLock<T> {
+    /// Create a new spinlock
+    pub const fn new(data: T) -> Self {
+        SpinLock {
+            locked: AtomicBool::new(false),
+            data: UnsafeCell::new(data),
+        }
+    }
+    
+    /// Acquire lock
+    pub fn lock(&self) -> SpinLockGuard<T> {
+        // Acquire spinlock
+        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            core::hint::spin_loop();
+        }
+        
+        // Memory barrier
+        fence(Ordering::Acquire);
+        
+        SpinLockGuard {
+            lock: self,
+        }
+    }
+}
+
+/// Guard for simple spinlock
+pub struct SpinLockGuard<'a, T> {
+    lock: &'a SpinLock<T>,
+}
+
+impl<'a, T> Deref for SpinLockGuard<'a, T> {
+    type Target = T;
+    
+    fn deref(&self) -> &T {
+        unsafe { &*self.lock.data.get() }
+    }
+}
+
+impl<'a, T> DerefMut for SpinLockGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.lock.data.get() }
+    }
+}
+
+impl<'a, T> Drop for SpinLockGuard<'a, T> {
+    fn drop(&mut self) {
+        // Memory barrier before releasing
+        fence(Ordering::Release);
+        
+        // Release lock
+        self.lock.locked.store(false, Ordering::Release);
+    }
+}
+
+// Safety: SpinLock can be shared between threads
+unsafe impl<T> Sync for SpinLock<T> where T: Send {}
+unsafe impl<T> Send for SpinLock<T> where T: Send {}
 
 /// Interrupt-safe spinlock that disables IRQs while held
 /// 

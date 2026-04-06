@@ -3,6 +3,7 @@
 /// This module provides safe Rust wrappers around C++ functions
 
 use core::ffi::c_void;
+use crate::process::CpuContext;
 
 // External C++ functions
 extern "C" {
@@ -41,6 +42,9 @@ extern "C" {
     
     // System uptime
     pub fn get_system_uptime_ms() -> u64;
+    
+    // Context switching (from context_switch.asm)
+    pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
 }
 
 // Safe wrappers

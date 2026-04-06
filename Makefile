@@ -32,7 +32,8 @@ RUST_FFI_DIR = $(KERNEL_CPP_DIR)/rust
 ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
               $(BOOT_DIR)/boot.asm \
               $(ARCH_DIR)/gdt_flush.asm \
-              $(ARCH_DIR)/idt_stubs.asm
+              $(ARCH_DIR)/idt_stubs.asm \
+              $(ARCH_DIR)/context_switch.asm
 
 CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(KERNEL_CPP_DIR)/arch/cpu.cpp \
@@ -102,7 +103,7 @@ run: $(KERNEL_ISO)
 	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -no-reboot -no-shutdown -D qemu.log
 
 output: $(KERNEL_ISO)
-	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial --display none -no-reboot -no-shutdown -D qemu.log
+	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -display none -no-reboot -no-shutdown -D qemu.log
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)

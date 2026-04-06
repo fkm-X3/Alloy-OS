@@ -97,7 +97,7 @@ $(KERNEL_ISO): $(KERNEL_ELF)
 
 # Run in QEMU
 run: $(KERNEL_ISO)
-	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -d int -no-reboot -no-shutdown
+	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -no-reboot -no-shutdown -D qemu.log
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)

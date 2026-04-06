@@ -69,34 +69,22 @@ pub fn print_prompt(prompt: &str) {
 /// Print banner with colors
 pub fn print_banner() {
     unsafe {
-        // Clear screen first
-        ffi::vga_set_color(COLOR_BLACK, COLOR_BLACK);
-        for _ in 0..25 {
-            ffi::vga_println(b"\0".as_ptr());
-        }
-        
-        // Print banner
+        // Print ASCII art banner in cyan using Code Page 437 box drawing characters
         ffi::vga_set_color(COLOR_LIGHT_CYAN, COLOR_BLACK);
-        ffi::vga_println(b"======================================\0".as_ptr());
-        ffi::vga_print(b"      \0".as_ptr());
-        ffi::vga_set_color(COLOR_WHITE, COLOR_BLACK);
-        ffi::vga_print(b"Alloy Operating System\0".as_ptr());
-        ffi::vga_set_color(COLOR_LIGHT_CYAN, COLOR_BLACK);
-        ffi::vga_println(b"\0".as_ptr());
-        ffi::vga_println(b"======================================\0".as_ptr());
-        
-        ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
-        ffi::vga_println(b"\0".as_ptr());
-        ffi::vga_print(b"Version: \0".as_ptr());
-        ffi::vga_set_color(COLOR_YELLOW, COLOR_BLACK);
-        ffi::vga_println(b"0.6.0-dev (Phase 6)\0".as_ptr());
-        
-        ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
-        ffi::vga_print(b"Type \0".as_ptr());
-        ffi::vga_set_color(COLOR_LIGHT_GREEN, COLOR_BLACK);
-        ffi::vga_print(b"'help'\0".as_ptr());
-        ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
-        ffi::vga_println(b" for available commands.\0".as_ptr());
+        ffi::vga_println(b" \0".as_ptr());
+        // Line 1: ███╗   ██╗██╗     ██╗      ██████╗ ██╗   ██╗    ██╗  ██╗███████╗██████╗ ███╗   ██╗ █████╗ ██╗
+        ffi::vga_println(b" \xDB\xDB\xDB\xB9   \xDB\xDB\xB9\xDB\xDB\xB9     \xDB\xDB\xB9      \xDB\xDB\xDB\xDB\xDB\xDB\xB9 \xDB\xDB\xB9   \xDB\xDB\xB9    \xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xB9 \xDB\xDB\xDB\xB9   \xDB\xDB\xB9 \xDB\xDB\xDB\xDB\xDB\xB9 \xDB\xDB\xB9     \0".as_ptr());
+        // Line 2: ██╔══██╗██║     ██║     ██╔═══██╗╚██╗ ██╔╝    ██║ ██╔╝██╔════╝██╔══██╗████╗  ██║██╔══██╗██║
+        ffi::vga_println(b"\xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xB9     \xDB\xDB\xB9     \xDB\xDB\xB2\x94\x94\x94\xDB\xDB\xB9\xBA\xDB\xB9 \xDB\xDB\xB2\x94\xB8    \xDB\xDB\xB9 \xDB\xDB\xB2\x94\xB8\xDB\xDB\xB2\x94\x94\x94\x94\x94\x94\xB8\xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xB9     \0".as_ptr());
+        // Line 3: ███████║██║     ██║     ██║   ██║ ╚████╔╝     █████╔╝ █████╗  ██████╔╝██╔██╗ ██║███████║██║
+        ffi::vga_println(b"\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xB9     \xDB\xDB\xB9     \xDB\xDB\xB9   \xDB\xDB\xB9 \xBA\xDB\xDB\xDB\xDB\xB2\x94\xB8     \xDB\xDB\xDB\xDB\xDB\xB2\x94\xB8 \xDB\xDB\xDB\xDB\xDB\xB9  \xDB\xDB\xDB\xDB\xDB\xDB\xB2\x94\xB8\xDB\xDB\xB2\x94\xDB\xDB\xB9 \xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xB9     \0".as_ptr());
+        // Line 4: ██╔══██║██║     ██║     ██║   ██║  ╚██╔╝      ██╔═██╗ ██╔══╝  ██╔══██╗██║╚██╗██║██╔══██║██║
+        ffi::vga_println(b"\xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xB9     \xDB\xDB\xB9     \xDB\xDB\xB9   \xDB\xDB\xB9  \xBA\xDB\xDB\xB2\x94\xB8      \xDB\xDB\xB2\x94\x94\xDB\xDB\xB9 \xDB\xDB\xB2\x94\x94\xB8  \xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xB9\xBA\xDB\xDB\xB9\xDB\xDB\xB9\xDB\xDB\xB2\x94\x94\xDB\xDB\xB9\xDB\xDB\xB9     \0".as_ptr());
+        // Line 5: ██║  ██║███████╗███████╗╚██████╔╝   ██║       ██║  ██╗███████╗██║  ██║██║ ╚████║██║  ██║███████╗
+        ffi::vga_println(b"\xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xBA\xDB\xDB\xDB\xDB\xDB\xDB\xB2\x94\xB8   \xDB\xDB\xB9       \xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xB9 \xBA\xDB\xDB\xDB\xDB\xB9\xDB\xDB\xB9  \xDB\xDB\xB9\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xB9\0".as_ptr());
+        // Line 6: ╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
+        ffi::vga_println(b"\xBA\x94\x94\xB8  \xBA\x94\x94\xB8\xBA\x94\x94\x94\x94\x94\x94\x94\x94\xB8\xBA\x94\x94\x94\x94\x94\x94\x94\x94\xB8 \xBA\x94\x94\x94\x94\x94\x94\x94\xB8    \xBA\x94\x94\xB8       \xBA\x94\x94\xB8  \xBA\x94\x94\xB8\xBA\x94\x94\x94\x94\x94\x94\x94\x94\xB8\xBA\x94\x94\xB8  \xBA\x94\x94\xB8\xBA\x94\x94\xB8  \xBA\x94\x94\x94\x94\x94\xB8\xBA\x94\x94\xB8  \xBA\x94\x94\xB8\xBA\x94\x94\x94\x94\x94\x94\x94\x94\xB8\0".as_ptr());
+        ffi::vga_println(b" \0".as_ptr());
         
         ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
     }

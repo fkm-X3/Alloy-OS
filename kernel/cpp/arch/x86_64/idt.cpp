@@ -203,10 +203,50 @@ extern "C" void init_idt() {
     asm volatile("sti");
 }
 
+// Exception names for debugging
+static const char* exception_messages[] = {
+    "Division By Zero",
+    "Debug",
+    "Non Maskable Interrupt",
+    "Breakpoint",
+    "Into Detected Overflow",
+    "Out of Bounds",
+    "Invalid Opcode",
+    "No Coprocessor",
+    "Double Fault",
+    "Coprocessor Segment Overrun",
+    "Bad TSS",
+    "Segment Not Present",
+    "Stack Fault",
+    "General Protection Fault",
+    "Page Fault",
+    "Unknown Interrupt",
+    "Coprocessor Fault",
+    "Alignment Check",
+    "Machine Check"
+};
+
+extern "C" void serial_print(const char* str);
+extern "C" void serial_print_hex(uint32_t value);
+
 // Common exception handler
 extern "C" void exception_handler(uint32_t int_no, uint32_t err_code) {
-    // For now, just halt on any exception
-    // In the future, we'll handle these properly
+    // Print exception info to serial
+    serial_print("\n!!! EXCEPTION: ");
+    if (int_no < 19) {
+        serial_print(exception_messages[int_no]);
+    } else {
+        serial_print("Unknown Exception");
+    }
+    serial_print(" (");
+    serial_print_hex(int_no);
+    serial_print(")\n");
+    serial_print("Error Code: ");
+    serial_print_hex(err_code);
+    serial_print("\n");
+    
+    // Halt system
+    serial_print("System halted.\n");
     while(1) {
         asm volatile("cli; hlt");
     }

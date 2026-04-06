@@ -13,7 +13,7 @@ struct gdt_entry {
 // GDT Pointer structure
 struct gdt_ptr {
     uint16_t limit;
-    uint64_t base;
+    uint32_t base;  // 32-bit address in protected mode
 } __attribute__((packed));
 
 // GDT with 5 entries: null, kernel code, kernel data, user code, user data
@@ -21,10 +21,10 @@ struct gdt_entry gdt[5];
 struct gdt_ptr gdtp;
 
 // External assembly function to load GDT
-extern "C" void gdt_flush(uint64_t gdt_ptr);
+extern "C" void gdt_flush(uint32_t gdt_ptr);
 
 // Set a GDT entry
-static void gdt_set_gate(int num, uint64_t base, uint64_t limit, uint8_t access, uint8_t gran) {
+static void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran) {
     gdt[num].base_low = (base & 0xFFFF);
     gdt[num].base_middle = (base >> 16) & 0xFF;
     gdt[num].base_high = (base >> 24) & 0xFF;
@@ -36,7 +36,7 @@ static void gdt_set_gate(int num, uint64_t base, uint64_t limit, uint8_t access,
 
 extern "C" void init_gdt() {
     gdtp.limit = (sizeof(struct gdt_entry) * 5) - 1;
-    gdtp.base = (uint64_t)&gdt;
+    gdtp.base = (uint32_t)&gdt;
     
     // NULL descriptor
     gdt_set_gate(0, 0, 0, 0, 0);
@@ -62,5 +62,5 @@ extern "C" void init_gdt() {
     gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
     
     // Load the GDT
-    gdt_flush((uint64_t)&gdtp);
+    gdt_flush((uint32_t)&gdtp);
 }

@@ -41,7 +41,7 @@ impl Terminal {
     }
     
     pub fn show_prompt(&self) {
-        colors::print_prompt("alloy> ");
+        colors::print_prompt("Root:Root/> ");
     }
     
     pub fn handle_input(&mut self, c: char) -> bool {
@@ -114,6 +114,11 @@ impl Terminal {
                         ffi::put_char('\n');
                         self.show_prompt();
                     }
+                }
+            } else {
+                // Halt CPU until next interrupt to save power and prevent busy-waiting
+                unsafe {
+                    core::arch::asm!("hlt");
                 }
             }
         }

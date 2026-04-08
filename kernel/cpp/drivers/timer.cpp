@@ -66,7 +66,7 @@ extern "C" void timer_handler() {
     // Increment tick counter
     g_timer_ticks++;
     
-    // TODO: Call scheduler for task switching (Phase 8 integration)
+    // TODO: Call scheduler for task switching
     
     // Send EOI (End of Interrupt) to PIC
     // IRQ 0 is on master PIC, so send EOI to port 0x20

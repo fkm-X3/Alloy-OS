@@ -12,6 +12,12 @@ extern "C" {
     pub fn vga_println(s: *const u8);
     pub fn vga_putchar(c: u8);
     pub fn vga_set_color(fg: u8, bg: u8);
+    pub fn vga_clear();
+    pub fn vga_set_cursor(x: u8, y: u8);
+    pub fn vga_get_cursor_x() -> u8;
+    pub fn vga_get_cursor_y() -> u8;
+    pub fn vga_print_hex(value: u32);
+    pub fn vga_print_dec(value: u32);
     
     // Memory management functions (from VMM)
     pub fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
@@ -132,17 +138,26 @@ pub fn keyboard_has_key() -> bool {
     }
 }
 
-/// Get character from keyboard (returns as u8, converted from signed char)
+/// Get character from keyboard (returns as u8, handles special keys 128-255)
 pub fn keyboard_read() -> u8 {
     unsafe {
         let c = keyboard_get_char();
-        if c < 0 {
-            0  // Invalid/special key
-        } else {
-            c as u8
-        }
+        // Special keys use values 128-255, regular ASCII is 0-127
+        // Just cast to u8 to handle full range
+        c as u8
     }
 }
+
+// Special key codes (match C++ keyboard.h)
+pub const SPECIAL_KEY_UP: u8 = 128;
+pub const SPECIAL_KEY_DOWN: u8 = 129;
+pub const SPECIAL_KEY_LEFT: u8 = 130;
+pub const SPECIAL_KEY_RIGHT: u8 = 131;
+pub const SPECIAL_KEY_HOME: u8 = 132;
+pub const SPECIAL_KEY_END: u8 = 133;
+pub const SPECIAL_KEY_DELETE: u8 = 134;
+pub const SPECIAL_KEY_PGUP: u8 = 135;
+pub const SPECIAL_KEY_PGDN: u8 = 136;
 
 // Page flags for memory mapping
 pub const PAGE_PRESENT: u32 = 0x001;

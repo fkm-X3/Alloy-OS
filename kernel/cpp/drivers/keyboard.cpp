@@ -21,6 +21,7 @@ static bool shift_pressed = false;
 static bool ctrl_pressed = false;
 static bool alt_pressed = false;
 static bool capslock_active = false;
+static bool extended_scancode = false;  // Track if next scancode is extended (0xE0 prefix)
 
 // Circular buffer for keyboard input
 static char keyboard_buffer[KEYBOARD_BUFFER_SIZE];
@@ -94,9 +95,64 @@ extern "C" void keyboard_init() {
 extern "C" void keyboard_handler() {
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
     
+    // Check for extended scancode prefix (0xE0)
+    if (scancode == 0xE0) {
+        extended_scancode = true;
+        return;
+    }
+    
     // Check if this is a key release (bit 7 set)
     bool key_released = (scancode & 0x80) != 0;
     scancode &= 0x7F; // Remove release bit
+    
+    // Handle extended keys (arrows, home, end, delete, etc.)
+    if (extended_scancode) {
+        extended_scancode = false;
+        
+        // Only process key presses, not releases
+        if (key_released) {
+            return;
+        }
+        
+        // Map extended scancodes to special key codes
+        char special_key = 0;
+        switch (scancode) {
+            case KEY_UP_ARROW:
+                special_key = SPECIAL_KEY_UP;
+                break;
+            case KEY_DOWN_ARROW:
+                special_key = SPECIAL_KEY_DOWN;
+                break;
+            case KEY_LEFT_ARROW:
+                special_key = SPECIAL_KEY_LEFT;
+                break;
+            case KEY_RIGHT_ARROW:
+                special_key = SPECIAL_KEY_RIGHT;
+                break;
+            case KEY_HOME:
+                special_key = SPECIAL_KEY_HOME;
+                break;
+            case KEY_END:
+                special_key = SPECIAL_KEY_END;
+                break;
+            case KEY_DELETE:
+                special_key = SPECIAL_KEY_DELETE;
+                break;
+            case KEY_PGUP:
+                special_key = SPECIAL_KEY_PGUP;
+                break;
+            case KEY_PGDN:
+                special_key = SPECIAL_KEY_PGDN;
+                break;
+            default:
+                return; // Unknown extended key
+        }
+        
+        if (special_key != 0) {
+            buffer_put(special_key);
+        }
+        return;
+    }
     
     // Handle modifier keys
     if (scancode == KEY_LSHIFT || scancode == KEY_RSHIFT) {

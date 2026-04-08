@@ -34,5 +34,7 @@ extern "C" void vga_putchar(char c);
 extern "C" void vga_print(const char* str);
 extern "C" void vga_set_color(uint8_t fg, uint8_t bg);
 extern "C" void vga_set_cursor(uint8_t x, uint8_t y);
+extern "C" uint8_t vga_get_cursor_x();
+extern "C" uint8_t vga_get_cursor_y();
 
 #endif // ALLOY_VGA_H

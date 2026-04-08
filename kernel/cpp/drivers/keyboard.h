@@ -24,6 +24,28 @@
 #define KEY_F9 0x43
 #define KEY_F10 0x44
 
+// Extended key scancodes (require 0xE0 prefix)
+#define KEY_HOME 0x47
+#define KEY_UP_ARROW 0x48
+#define KEY_PGUP 0x49
+#define KEY_LEFT_ARROW 0x4B
+#define KEY_RIGHT_ARROW 0x4D
+#define KEY_END 0x4F
+#define KEY_DOWN_ARROW 0x50
+#define KEY_PGDN 0x51
+#define KEY_DELETE 0x53
+
+// Special key codes for Rust FFI (above ASCII range 128-255)
+#define SPECIAL_KEY_UP 128
+#define SPECIAL_KEY_DOWN 129
+#define SPECIAL_KEY_LEFT 130
+#define SPECIAL_KEY_RIGHT 131
+#define SPECIAL_KEY_HOME 132
+#define SPECIAL_KEY_END 133
+#define SPECIAL_KEY_DELETE 134
+#define SPECIAL_KEY_PGUP 135
+#define SPECIAL_KEY_PGDN 136
+
 // Keyboard buffer size
 #define KEYBOARD_BUFFER_SIZE 256
 

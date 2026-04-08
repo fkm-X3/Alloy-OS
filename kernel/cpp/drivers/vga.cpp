@@ -90,6 +90,16 @@ extern "C" void vga_set_cursor(uint8_t x, uint8_t y) {
     }
 }
 
+// Get cursor X position
+extern "C" uint8_t vga_get_cursor_x() {
+    return cursor_x;
+}
+
+// Get cursor Y position
+extern "C" uint8_t vga_get_cursor_y() {
+    return cursor_y;
+}
+
 // Put a single character on the screen
 extern "C" void vga_putchar(char c) {
     // Handle special characters

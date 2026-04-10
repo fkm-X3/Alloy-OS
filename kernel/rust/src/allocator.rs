@@ -41,9 +41,9 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         lock();
         
-        let result = if SLAB_ALLOCATOR.can_allocate(layout.size()) {
+        let result = if SLAB_ALLOCATOR.can_allocate(layout.size(), layout.align()) {
             // Use slab allocator for small objects
-            SLAB_ALLOCATOR.alloc(layout.size())
+            SLAB_ALLOCATOR.alloc(layout.size(), layout.align())
         } else {
             // Use heap allocator for larger objects
             HEAP_ALLOCATOR.alloc(layout)
@@ -56,8 +56,8 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         lock();
         
-        if SLAB_ALLOCATOR.can_allocate(layout.size()) {
-            SLAB_ALLOCATOR.free(ptr, layout.size());
+        if SLAB_ALLOCATOR.can_allocate(layout.size(), layout.align()) {
+            SLAB_ALLOCATOR.free(ptr, layout.size(), layout.align());
         } else {
             HEAP_ALLOCATOR.dealloc(ptr, layout);
         }

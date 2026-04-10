@@ -9,13 +9,11 @@ use crate::ffi;
 /// Size classes for slab allocator (powers of 2)
 const SLAB_SIZES: [usize; 8] = [8, 16, 32, 64, 128, 256, 512, 1024];
 
-/// Number of objects per slab page
-const OBJECTS_PER_SLAB: usize = 32;
-
 /// Slab header
 #[repr(C)]
 struct SlabHeader {
     size_class: usize,
+    object_count: usize,
     free_count: usize,
     free_list: *mut FreeNode,
     next: *mut SlabHeader,
@@ -114,7 +112,7 @@ impl SlabCache {
         self.objects_freed += 1;
         
         // Move slab to appropriate list
-        if (*slab).free_count == OBJECTS_PER_SLAB {
+        if (*slab).free_count == (*slab).object_count {
             self.move_to_empty(slab);
         } else if (*slab).free_count == 1 {
             // Was full, now partial
@@ -136,18 +134,34 @@ impl SlabCache {
         
         let header = ptr as *mut SlabHeader;
         (*header).size_class = self.size;
-        (*header).free_count = OBJECTS_PER_SLAB;
+        // Align object data start to size class to satisfy alignment guarantees.
+        let slab_start = ptr as usize;
+        let header_end = slab_start + core::mem::size_of::<SlabHeader>();
+        let aligned_start = (header_end + (self.size - 1)) & !(self.size - 1);
+        let slab_end = slab_start + 4096;
+        if aligned_start >= slab_end {
+            return null_mut();
+        }
+
+        let usable_bytes = slab_end - aligned_start;
+        let object_count = usable_bytes / self.size;
+        if object_count == 0 {
+            return null_mut();
+        }
+
+        (*header).object_count = object_count;
+        (*header).free_count = object_count;
         (*header).free_list = null_mut();
         (*header).next = null_mut();
         
         // Initialize free list
-        let data_start = ptr.add(core::mem::size_of::<SlabHeader>());
+        let data_start = aligned_start as *mut u8;
         let mut current = data_start;
         
-        for i in 0..OBJECTS_PER_SLAB {
+        for i in 0..object_count {
             let node = current as *mut FreeNode;
             
-            if i < OBJECTS_PER_SLAB - 1 {
+            if i < object_count - 1 {
                 (*node).next = current.add(self.size) as *mut FreeNode;
             } else {
                 (*node).next = null_mut();
@@ -255,10 +269,10 @@ impl SlabAllocator {
     }
     
     /// Allocate from appropriate slab cache
-    pub unsafe fn alloc(&mut self, size: usize) -> *mut u8 {
+    pub unsafe fn alloc(&mut self, size: usize, align: usize) -> *mut u8 {
         // Find appropriate size class
         for cache in &mut self.caches {
-            if size <= cache.size {
+            if size <= cache.size && align <= cache.size {
                 let result = cache.alloc();
                 if result.is_null() {
                     use crate::ffi;
@@ -273,19 +287,24 @@ impl SlabAllocator {
     }
     
     /// Free to appropriate slab cache
-    pub unsafe fn free(&mut self, ptr: *mut u8, size: usize) {
+    pub unsafe fn free(&mut self, ptr: *mut u8, size: usize, align: usize) {
         // Find appropriate size class
         for cache in &mut self.caches {
-            if size <= cache.size {
+            if size <= cache.size && align <= cache.size {
                 cache.free(ptr);
                 return;
             }
         }
     }
     
-    /// Check if size is suitable for slab allocation
-    pub fn can_allocate(&self, size: usize) -> bool {
-        size <= SLAB_SIZES[SLAB_SIZES.len() - 1]
+    /// Check if size/alignment are suitable for slab allocation.
+    pub fn can_allocate(&self, size: usize, align: usize) -> bool {
+        for slab_size in &SLAB_SIZES {
+            if size <= *slab_size && align <= *slab_size {
+                return true;
+            }
+        }
+        false
     }
     
     /// Get statistics

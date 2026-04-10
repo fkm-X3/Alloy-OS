@@ -20,8 +20,11 @@ pub mod process;
 pub mod syscall;
 pub mod graphics;
 pub mod fusion;
+pub mod display_server;
 
 use core::panic::PanicInfo;
+
+const ENABLE_OS_DISPLAY_SERVER: bool = false;
 
 /// Test graphics functionality including VESA framebuffer access and rendering.
 /// 
@@ -205,71 +208,84 @@ pub extern "C" fn rust_main() {
     // Run graphics test before starting display manager
     let _graphics_ok = test_graphics();
     
-    // Try to initialize Fusion DisplayManager
+    // Try to initialize VESA display
     if let Some(display) = graphics::vesa::VesaDisplay::new() {
         unsafe {
             ffi::serial_print(b"[Fusion] VESA display created\n\0".as_ptr());
         }
-        
-        let mut manager = fusion::DisplayManager::new(display);
-        
-        match manager.start() {
-            Ok(_) => {
-                unsafe {
-                    ffi::serial_print(b"[Fusion] DisplayManager started\n\0".as_ptr());
-                    ffi::vga_println(b"[Fusion] Display Manager Ready\n\0".as_ptr());
+
+        if ENABLE_OS_DISPLAY_SERVER {
+            match display_server::run(display) {
+                Ok(_) => {
+                    unsafe {
+                        ffi::serial_print(
+                            b"[DisplayServer] Exited display mode, starting terminal\n\0".as_ptr(),
+                        );
+                        ffi::vga_println(b"[DisplayServer] Returning to terminal\n\0".as_ptr());
+                    }
+                    start_terminal();
                 }
-                
-                // Clear the display to black
-                let _ = manager.queue_render(fusion::RenderCommand::ClearScreen(
-                    graphics::color::Color::BLACK
-                ));
-                let _ = manager.process_queue();
-                let _ = manager.flush();
-                
-                // Display boot message
-                let _ = manager.queue_render(fusion::RenderCommand::DrawText {
-                    x: 50,
-                    y: 50,
-                    text: "Fusion Display Manager Ready",
-                    color: graphics::color::Color::WHITE,
-                });
-                let _ = manager.process_queue();
-                let _ = manager.flush();
-                
-                unsafe {
-                    ffi::serial_print(b"[Fusion] Boot complete - display manager running\n\0".as_ptr());
+                Err(_) => {
+                    unsafe {
+                        ffi::serial_print(
+                            b"[DisplayServer] Failed to start, falling back to terminal\n\0".as_ptr(),
+                        );
+                        ffi::vga_println(
+                            b"[DisplayServer] Failed to start, using terminal\n\0".as_ptr(),
+                        );
+                    }
+                    start_terminal();
                 }
-                
-                // Keep the display manager running with a simple event loop
-                loop {
-                    // Check for keyboard input
-                    if ffi::keyboard_has_key() {
-                        let key = ffi::keyboard_read();
-                        
-                        // ESC key to return to terminal (for debugging)
-                        if key == 27 {
-                            break;
+            }
+        } else {
+            // Keep legacy display path as default until OS display server path is stabilized.
+            let mut manager = fusion::DisplayManager::new(display);
+
+            match manager.start() {
+                Ok(_) => {
+                    unsafe {
+                        ffi::serial_print(b"[Fusion] DisplayManager started\n\0".as_ptr());
+                        ffi::vga_println(b"[Fusion] Display Manager Ready\n\0".as_ptr());
+                        ffi::serial_print(
+                            b"[Fusion] Skipping boot render in VESA compatibility mode\n\0".as_ptr(),
+                        );
+                    }
+
+                    unsafe {
+                        ffi::serial_print(
+                            b"[Fusion] Boot complete - display manager running\n\0".as_ptr(),
+                        );
+                    }
+
+                    // Keep the display manager running with a simple event loop
+                    loop {
+                        if ffi::keyboard_has_key() {
+                            let key = ffi::keyboard_read();
+                            if key == 27 {
+                                break;
+                            }
+                        }
+
+                        for _ in 0..100000 {
+                            // Simple delay loop
                         }
                     }
-                    
-                    // Brief pause to avoid busy waiting (simple loop)
-                    for _ in 0..100000 {
-                        // Simple delay loop
+
+                    unsafe {
+                        ffi::serial_print(b"[Fusion] Shutting down display manager\n\0".as_ptr());
                     }
+                    let _ = manager.stop();
+                    start_terminal();
                 }
-                
-                unsafe {
-                    ffi::serial_print(b"[Fusion] Shutting down display manager\n\0".as_ptr());
+                Err(_) => {
+                    unsafe {
+                        ffi::serial_print(
+                            b"[Fusion] Failed to start DisplayManager, falling back to terminal\n\0".as_ptr(),
+                        );
+                        ffi::vga_println(b"[Fusion] Failed to start, falling back to terminal\n\0".as_ptr());
+                    }
+                    start_terminal();
                 }
-                let _ = manager.stop();
-            }
-            Err(_) => {
-                unsafe {
-                    ffi::serial_print(b"[Fusion] Failed to start DisplayManager, falling back to terminal\n\0".as_ptr());
-                    ffi::vga_println(b"[Fusion] Failed to start, falling back to terminal\n\0".as_ptr());
-                }
-                start_terminal();
             }
         }
     } else {

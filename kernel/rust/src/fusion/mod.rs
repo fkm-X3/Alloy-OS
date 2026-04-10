@@ -14,6 +14,7 @@
 pub mod manager;
 pub mod surface;
 pub mod compositor;
+pub mod backend;
 pub mod terminal;
 pub mod ui;
 pub mod apps;
@@ -22,5 +23,6 @@ pub mod apps;
 pub use manager::{DisplayManager, RenderCommand, ManagerError, Rect};
 pub use surface::{Surface, SurfaceError};
 pub use compositor::{Compositor, CompositorError, DisplayLike, DisplayAdapter};
+pub use backend::{FusionBackendError, FusionDisplayBackend};
 pub use terminal::{TerminalSurface, TerminalError};
 pub use apps::{AppError, ApplicationLifecycle, TerminalApp};

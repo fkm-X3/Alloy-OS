@@ -3,6 +3,8 @@
 
 extern "C" void serial_print(const char* str);
 extern "C" void serial_print_hex(uint32_t value);
+extern "C" uint32_t _kernel_start;
+extern "C" uint32_t _kernel_end;
 
 // Global instance
 PhysicalMemoryManager g_pmm;
@@ -117,6 +119,24 @@ void PhysicalMemoryManager::init(uint32_t multiboot_addr) {
     for (uint32_t frame = 0; frame < 256; frame++) {
         set_frame(frame);
         used_frames++;
+    }
+
+    // Reserve the full kernel image so PMM never hands out frames backing code/data.
+    uint32_t kernel_start = (uint32_t)&_kernel_start;
+    uint32_t kernel_end = (uint32_t)&_kernel_end;
+    serial_print("  Kernel region start: 0x");
+    serial_print_hex(kernel_start);
+    serial_print("\n");
+    serial_print("  Kernel region end: 0x");
+    serial_print_hex(kernel_end);
+    serial_print("\n");
+    uint32_t kernel_start_frame = kernel_start / PAGE_SIZE;
+    uint32_t kernel_end_frame = (kernel_end + PAGE_SIZE - 1) / PAGE_SIZE;
+    for (uint32_t frame = kernel_start_frame; frame < kernel_end_frame; frame++) {
+        if (!test_frame(frame)) {
+            set_frame(frame);
+            used_frames++;
+        }
     }
     
     serial_print("PMM: Initialization complete\n");

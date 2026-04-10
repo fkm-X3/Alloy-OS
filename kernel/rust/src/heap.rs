@@ -11,13 +11,13 @@ use crate::ffi;
 const MIN_BLOCK_SIZE: usize = 16;
 
 /// Alignment for all allocations
-const HEAP_ALIGN: usize = 8;
+const HEAP_ALIGN: usize = 16;
 
 /// Magic number to detect corruption
 const MAGIC: u32 = 0xDEADBEEF;
 
 /// Header for each allocated block
-#[repr(C)]
+#[repr(C, align(16))]
 struct BlockHeader {
     magic: u32,
     size: usize,
@@ -66,6 +66,11 @@ impl BlockHeader {
     }
 }
 
+#[inline]
+const fn align_up(value: usize, align: usize) -> usize {
+    (value + (align - 1)) & !(align - 1)
+}
+
 /// Heap allocator with free list
 pub struct HeapAllocator {
     free_list: *mut BlockHeader,
@@ -86,11 +91,16 @@ impl HeapAllocator {
     
     /// Allocate a block from the heap
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        let size = layout.size().max(MIN_BLOCK_SIZE);
-        let _align = layout.align().max(HEAP_ALIGN);
+        let align = layout.align().max(HEAP_ALIGN);
+        if align > HEAP_ALIGN {
+            ffi::serial_print(b"[Heap] ERROR: Unsupported allocation alignment\n\0".as_ptr());
+            return null_mut();
+        }
+
+        let size = align_up(layout.size().max(MIN_BLOCK_SIZE), HEAP_ALIGN);
         
         // Total size needed including header
-        let total_size = size + core::mem::size_of::<BlockHeader>();
+        let total_size = align_up(size + core::mem::size_of::<BlockHeader>(), HEAP_ALIGN);
         
         // Try to find a suitable free block
         if let Some(block) = self.find_free_block(total_size) {

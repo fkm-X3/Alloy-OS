@@ -56,6 +56,46 @@ extern "C" {
     pub fn timer_init_ffi(frequency: u32);
     pub fn timer_get_ticks_ffi() -> u64;
     pub fn timer_get_uptime_ms_ffi() -> u64;
+    
+    // VESA VBE graphics functions (from vesa.cpp)
+    /// Initialize VESA VBE detection and controller check
+    pub fn vesa_init();
+    
+    /// Set a graphics mode
+    /// Returns: 0 on success, 1 if not initialized, 2 if mode not supported, 3 if mode setting failed
+    pub fn vesa_set_mode(mode: u16) -> u16;
+    
+    /// Get current framebuffer linear address
+    /// Returns: Physical address of linear framebuffer, 0 if not available
+    pub fn vesa_get_framebuffer() -> u32;
+    
+    /// Get current graphics mode resolution
+    /// Parameters: width, height - pointers to store resolution
+    pub fn vesa_get_resolution(width: *mut u16, height: *mut u16);
+    
+    /// Get current graphics mode number
+    /// Returns: 0 on success, non-zero on failure
+    pub fn vesa_get_mode(mode: *mut u16) -> u16;
+    
+    /// Check if VESA VBE is available
+    /// Returns: 1 if available, 0 if not
+    pub fn vesa_is_available() -> u8;
+    
+    /// Get controller capabilities
+    /// Returns: Capabilities byte from VBE info block
+    pub fn vesa_get_capabilities() -> u8;
+    
+    /// Get bits per pixel for current mode
+    /// Returns: 0, 16, 24, or 32 bits per pixel; 0 if not in graphics mode
+    pub fn vesa_get_bits_per_pixel() -> u8;
+    
+    /// Get bytes per scanline for current mode
+    /// Returns: Bytes per scan line, or 0 if not in graphics mode
+    pub fn vesa_get_bytes_per_scanline() -> u16;
+    
+    /// Get total framebuffer size in bytes
+    /// Returns: Size in bytes, or 0 if not in graphics mode
+    pub fn vesa_get_framebuffer_size() -> u32;
 }
 
 // Safe wrappers
@@ -163,3 +203,96 @@ pub const SPECIAL_KEY_PGDN: u8 = 136;
 pub const PAGE_PRESENT: u32 = 0x001;
 pub const PAGE_WRITE: u32 = 0x002;
 pub const PAGE_USER: u32 = 0x004;
+
+// ============================================================================
+// VESA VBE Graphics Safe Wrappers
+// ============================================================================
+
+/// Initialize VESA VBE graphics mode detection
+pub fn vesa_initialize() {
+    unsafe {
+        vesa_init();
+    }
+}
+
+/// Set graphics mode with error handling
+/// Returns tuple of (success, error_code)
+pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
+    unsafe {
+        let result = vesa_set_mode(mode);
+        (result == 0, result)
+    }
+}
+
+/// Get framebuffer physical address
+/// Returns None if not available
+pub fn vesa_framebuffer_addr() -> Option<u32> {
+    unsafe {
+        let addr = vesa_get_framebuffer();
+        if addr != 0 {
+            Some(addr)
+        } else {
+            None
+        }
+    }
+}
+
+/// Get current display resolution in pixels
+/// Returns (width, height) or (0, 0) if not available
+pub fn vesa_display_resolution() -> (u16, u16) {
+    unsafe {
+        let mut width: u16 = 0;
+        let mut height: u16 = 0;
+        vesa_get_resolution(&mut width, &mut height);
+        (width, height)
+    }
+}
+
+/// Get current graphics mode
+/// Returns Some(mode) on success, None on failure
+pub fn vesa_current_mode() -> Option<u16> {
+    unsafe {
+        let mut mode: u16 = 0;
+        let result = vesa_get_mode(&mut mode);
+        if result == 0 {
+            Some(mode)
+        } else {
+            None
+        }
+    }
+}
+
+/// Check if VESA VBE graphics is available
+pub fn vesa_available() -> bool {
+    unsafe {
+        vesa_is_available() != 0
+    }
+}
+
+/// Get VESA controller capabilities
+pub fn vesa_controller_capabilities() -> u8 {
+    unsafe {
+        vesa_get_capabilities()
+    }
+}
+
+/// Get current color depth in bits per pixel
+pub fn vesa_color_depth() -> u8 {
+    unsafe {
+        vesa_get_bits_per_pixel()
+    }
+}
+
+/// Get scanline stride in bytes
+pub fn vesa_scanline_bytes() -> u16 {
+    unsafe {
+        vesa_get_bytes_per_scanline()
+    }
+}
+
+/// Get total framebuffer size in bytes
+pub fn vesa_buffer_size() -> u32 {
+    unsafe {
+        vesa_get_framebuffer_size()
+    }
+}

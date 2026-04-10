@@ -43,6 +43,7 @@ CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(ARCH_DIR)/idt.cpp \
               $(DRIVERS_DIR)/serial.cpp \
               $(DRIVERS_DIR)/vga.cpp \
+              $(DRIVERS_DIR)/vesa.cpp \
               $(DRIVERS_DIR)/keyboard.cpp \
               $(DRIVERS_DIR)/timer.cpp \
               $(MM_DIR)/pmm.cpp \

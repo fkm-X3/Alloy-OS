@@ -295,6 +295,16 @@ impl Terminal {
         }
     }
     
+    /// Get reference to the line buffer for external rendering
+    pub fn get_buffer(&self) -> &LineBuffer {
+        &self.buffer
+    }
+    
+    /// Get mutable reference to the line buffer
+    pub fn get_buffer_mut(&mut self) -> &mut LineBuffer {
+        &mut self.buffer
+    }
+    
     pub fn run(&mut self) {
         colors::print_banner();
         

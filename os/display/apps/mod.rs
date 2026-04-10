@@ -1,3 +1,5 @@
+pub mod window_manager;
+
 use crate::protocol::SurfaceId;
 
 /// Known system app categories for early boot integration.

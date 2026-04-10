@@ -12,3 +12,10 @@ make fuck
 # debug (headless qemu)
 make output
 ```
+
+## experimental window manager
+window-manager scaffolding now exists in the display-server path (`os/display/apps/window_manager.rs`).
+
+- it is keyboard-first (floating windows, focus cycling, move/resize controls)
+- it is **not** the default boot path yet
+- enable it by setting `ENABLE_OS_DISPLAY_SERVER` to `true` in `kernel/rust/src/lib.rs`

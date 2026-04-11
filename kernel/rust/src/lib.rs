@@ -24,7 +24,7 @@ pub mod display_server;
 
 use core::panic::PanicInfo;
 
-const ENABLE_OS_DISPLAY_SERVER: bool = false;
+const ENABLE_OS_DISPLAY_SERVER: bool = true;
 
 /// Test graphics functionality including VESA framebuffer access and rendering.
 /// 

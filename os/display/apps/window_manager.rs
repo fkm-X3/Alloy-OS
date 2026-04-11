@@ -31,6 +31,7 @@ pub enum WindowManagerError {
     Server(ServerError),
     InvalidDimensions,
     WindowNotFound,
+    WindowNotFocusable,
     UnexpectedResponse,
     ServerRejected,
     WindowIdExhausted,
@@ -42,6 +43,7 @@ impl fmt::Display for WindowManagerError {
             WindowManagerError::Server(err) => write!(f, "server error: {}", err),
             WindowManagerError::InvalidDimensions => write!(f, "invalid window dimensions"),
             WindowManagerError::WindowNotFound => write!(f, "window not found"),
+            WindowManagerError::WindowNotFocusable => write!(f, "window not focusable"),
             WindowManagerError::UnexpectedResponse => write!(f, "unexpected server response"),
             WindowManagerError::ServerRejected => write!(f, "server rejected request"),
             WindowManagerError::WindowIdExhausted => write!(f, "window id space exhausted"),
@@ -73,6 +75,13 @@ pub struct WindowOptions {
     pub visible: bool,
     pub focused: bool,
     pub resizable: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowState {
+    Normal,
+    Minimized,
+    Hidden,
 }
 
 impl WindowOptions {
@@ -127,9 +136,15 @@ struct ManagedWindow {
     y: i32,
     width: u32,
     height: u32,
-    visible: bool,
+    state: WindowState,
     z_order: u32,
     resizable: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WorkspaceBounds {
+    width: u32,
+    height: u32,
 }
 
 pub struct WindowManager {
@@ -138,6 +153,7 @@ pub struct WindowManager {
     next_window_id: WindowId,
     next_z_order: u32,
     control_mode: bool,
+    workspace_bounds: Option<WorkspaceBounds>,
 }
 
 impl WindowManager {
@@ -148,6 +164,7 @@ impl WindowManager {
             next_window_id: 1,
             next_z_order: 1,
             control_mode: false,
+            workspace_bounds: None,
         }
     }
 
@@ -163,8 +180,28 @@ impl WindowManager {
         self.control_mode
     }
 
+    pub fn set_workspace_bounds(&mut self, width: u32, height: u32) -> Result<(), WindowManagerError> {
+        if width == 0 || height == 0 {
+            return Err(WindowManagerError::InvalidDimensions);
+        }
+        self.workspace_bounds = Some(WorkspaceBounds { width, height });
+        Ok(())
+    }
+
+    pub fn clear_workspace_bounds(&mut self) {
+        self.workspace_bounds = None;
+    }
+
+    pub fn workspace_bounds(&self) -> Option<(u32, u32)> {
+        self.workspace_bounds.map(|bounds| (bounds.width, bounds.height))
+    }
+
     pub fn content_surface(&self, window_id: WindowId) -> Option<SurfaceId> {
         self.windows.get(&window_id).map(|window| window.content_surface)
+    }
+
+    pub fn window_state(&self, window_id: WindowId) -> Option<WindowState> {
+        self.windows.get(&window_id).map(|window| window.state)
     }
 
     pub fn create_window<B: DisplayBackend>(
@@ -179,7 +216,9 @@ impl WindowManager {
         let window_id = self.allocate_window_id()?;
         let width = options.width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         let height = options.height.clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT);
+        let (width, height) = self.clamp_dimensions_to_workspace(width, height);
         let (frame_width, frame_height) = Self::frame_dimensions(width, height)?;
+        let (x, y) = self.clamp_position_to_workspace(options.x, options.y, frame_width, frame_height);
 
         let frame_surface = Self::create_surface(server, options.owner, frame_width, frame_height)?;
         let content_surface = match Self::create_surface(server, options.owner, width, height) {
@@ -198,28 +237,31 @@ impl WindowManager {
             owner: options.owner,
             frame_surface,
             content_surface,
-            x: options.x,
-            y: options.y,
+            x,
+            y,
             width,
             height,
-            visible: options.visible,
+            state: if options.visible {
+                WindowState::Normal
+            } else {
+                WindowState::Hidden
+            },
             z_order,
             resizable: options.resizable,
         };
 
         self.windows.insert(window_id, window);
-
-        if let Err(err) = Self::apply_window_geometry(server, &window) {
+        if let Err(err) = self.rebalance_z_orders(server) {
             self.windows.remove(&window_id);
             let _ = Self::destroy_surface(server, options.owner, content_surface);
             let _ = Self::destroy_surface(server, options.owner, frame_surface);
             return Err(err);
         }
 
-        self.upload_frame(server, window_id, false)?;
-
-        if options.focused || self.focused_window.is_none() {
+        if window.state == WindowState::Normal && (options.focused || self.focused_window.is_none()) {
             self.focus_window(server, window_id)?;
+        } else {
+            self.refresh_frames(server)?;
         }
 
         Ok(window_id)
@@ -243,11 +285,9 @@ impl WindowManager {
         }
 
         if self.focused_window == Some(window_id) {
-            self.focused_window = None;
-            if let Some(next_focus) = self.ordered_window_ids().last().copied() {
-                self.focus_window(server, next_focus)?;
-            }
+            self.assign_focus_after_mutation(server, window.owner)?;
         } else {
+            self.rebalance_z_orders(server)?;
             self.refresh_frames(server)?;
         }
 
@@ -264,12 +304,15 @@ impl WindowManager {
             .get(&window_id)
             .copied()
             .ok_or(WindowManagerError::WindowNotFound)?;
+        if window.state != WindowState::Normal {
+            return Err(WindowManagerError::WindowNotFocusable);
+        }
 
         window.z_order = self.next_z_order.max(1);
         self.next_z_order = self.next_z_order.saturating_add(1).max(window.z_order.saturating_add(1));
         self.windows.insert(window_id, window);
 
-        Self::apply_window_geometry(server, &window)?;
+        self.rebalance_z_orders(server)?;
         Self::request_focus(server, window.owner, Some(window.content_surface))?;
 
         self.focused_window = Some(window_id);
@@ -281,8 +324,14 @@ impl WindowManager {
         &mut self,
         server: &mut DisplayServer<B>,
     ) -> Result<(), WindowManagerError> {
-        let ordered = self.ordered_window_ids();
+        let ordered = self.ordered_focusable_window_ids();
         if ordered.is_empty() {
+            if let Some(focused) = self.focused_window {
+                if let Some(window) = self.windows.get(&focused).copied() {
+                    Self::request_focus(server, window.owner, None)?;
+                }
+            }
+            self.focused_window = None;
             return Ok(());
         }
 
@@ -301,8 +350,14 @@ impl WindowManager {
         &mut self,
         server: &mut DisplayServer<B>,
     ) -> Result<(), WindowManagerError> {
-        let ordered = self.ordered_window_ids();
+        let ordered = self.ordered_focusable_window_ids();
         if ordered.is_empty() {
+            if let Some(focused) = self.focused_window {
+                if let Some(window) = self.windows.get(&focused).copied() {
+                    Self::request_focus(server, window.owner, None)?;
+                }
+            }
+            self.focused_window = None;
             return Ok(());
         }
 
@@ -324,15 +379,25 @@ impl WindowManager {
         delta_x: i32,
         delta_y: i32,
     ) -> Result<(), WindowManagerError> {
-        let window_id = self.focused_window.ok_or(WindowManagerError::WindowNotFound)?;
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
         let mut window = self
             .windows
             .get(&window_id)
             .copied()
             .ok_or(WindowManagerError::WindowNotFound)?;
+        if window.state != WindowState::Normal {
+            return Ok(());
+        }
 
-        window.x = window.x.saturating_add(delta_x);
-        window.y = window.y.saturating_add(delta_y);
+        let next_x = window.x.saturating_add(delta_x);
+        let next_y = window.y.saturating_add(delta_y);
+        let (frame_width, frame_height) = Self::frame_dimensions(window.width, window.height)?;
+        let (clamped_x, clamped_y) =
+            self.clamp_position_to_workspace(next_x, next_y, frame_width, frame_height);
+        window.x = clamped_x;
+        window.y = clamped_y;
         self.windows.insert(window_id, window);
 
         Self::apply_window_geometry(server, &window)
@@ -344,12 +409,17 @@ impl WindowManager {
         delta_width: i32,
         delta_height: i32,
     ) -> Result<(), WindowManagerError> {
-        let window_id = self.focused_window.ok_or(WindowManagerError::WindowNotFound)?;
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
         let mut window = self
             .windows
             .get(&window_id)
             .copied()
             .ok_or(WindowManagerError::WindowNotFound)?;
+        if window.state != WindowState::Normal {
+            return Ok(());
+        }
 
         if !window.resizable {
             return Ok(());
@@ -358,12 +428,114 @@ impl WindowManager {
         window.width = Self::clamp_dimension(window.width, delta_width, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
         window.height =
             Self::clamp_dimension(window.height, delta_height, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT);
+        let (clamped_width, clamped_height) = self.clamp_dimensions_to_workspace(window.width, window.height);
+        window.width = clamped_width;
+        window.height = clamped_height;
+
+        let (frame_width, frame_height) = Self::frame_dimensions(window.width, window.height)?;
+        let (clamped_x, clamped_y) =
+            self.clamp_position_to_workspace(window.x, window.y, frame_width, frame_height);
+        window.x = clamped_x;
+        window.y = clamped_y;
 
         Self::resize_window_surfaces(server, &window)?;
         Self::apply_window_geometry(server, &window)?;
 
         self.windows.insert(window_id, window);
         self.upload_frame(server, window_id, self.focused_window == Some(window_id))
+    }
+
+    pub fn set_window_state<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+        window_id: WindowId,
+        state: WindowState,
+    ) -> Result<(), WindowManagerError> {
+        let mut window = self
+            .windows
+            .get(&window_id)
+            .copied()
+            .ok_or(WindowManagerError::WindowNotFound)?;
+
+        if window.state == state {
+            return Ok(());
+        }
+
+        window.state = state;
+        self.windows.insert(window_id, window);
+
+        if state == WindowState::Normal {
+            self.focus_window(server, window_id)
+        } else {
+            Self::apply_window_geometry(server, &window)?;
+            if self.focused_window == Some(window_id) {
+                self.assign_focus_after_mutation(server, window.owner)?;
+            } else {
+                self.rebalance_z_orders(server)?;
+                self.refresh_frames(server)?;
+            }
+            Ok(())
+        }
+    }
+
+    pub fn minimize_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        self.set_window_state(server, window_id, WindowState::Minimized)
+    }
+
+    pub fn hide_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        self.set_window_state(server, window_id, WindowState::Hidden)
+    }
+
+    pub fn restore_window<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+        window_id: WindowId,
+    ) -> Result<(), WindowManagerError> {
+        self.set_window_state(server, window_id, WindowState::Normal)
+    }
+
+    pub fn restore_next_window<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let mut candidates: Vec<(u32, WindowId)> = self
+            .windows
+            .values()
+            .filter(|window| window.state != WindowState::Normal)
+            .map(|window| (window.z_order, window.id))
+            .collect();
+        if candidates.is_empty() {
+            return Ok(());
+        }
+
+        candidates.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+        let window_id = candidates
+            .last()
+            .map(|(_, id)| *id)
+            .ok_or(WindowManagerError::WindowNotFound)?;
+        self.restore_window(server, window_id)
+    }
+
+    pub fn close_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        self.destroy_window(server, window_id)
     }
 
     pub fn handle_key<B: DisplayBackend>(
@@ -408,6 +580,22 @@ impl WindowManager {
                 }
                 b'-' | b'_' => {
                     self.resize_focused_by(server, -RESIZE_STEP, -RESIZE_STEP)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'm' | b'M' => {
+                    self.minimize_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'h' | b'H' => {
+                    self.hide_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'r' | b'R' => {
+                    self.restore_next_window(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'c' | b'C' | b'x' | b'X' => {
+                    self.close_focused(server)?;
                     Ok(InputOutcome::Consumed)
                 }
                 b'q' | b'Q' => Ok(InputOutcome::ExitDisplay),
@@ -481,6 +669,90 @@ impl WindowManager {
             .collect();
         ordered.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
         ordered.into_iter().map(|(_, id)| id).collect()
+    }
+
+    fn ordered_focusable_window_ids(&self) -> Vec<WindowId> {
+        let mut ordered: Vec<(u32, WindowId)> = self
+            .windows
+            .values()
+            .filter(|window| window.state == WindowState::Normal)
+            .map(|window| (window.z_order, window.id))
+            .collect();
+        ordered.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
+        ordered.into_iter().map(|(_, id)| id).collect()
+    }
+
+    fn rebalance_z_orders<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let ordered = self.ordered_window_ids();
+        let mut next_z = 1u32;
+
+        for window_id in ordered {
+            let mut window = self
+                .windows
+                .get(&window_id)
+                .copied()
+                .ok_or(WindowManagerError::WindowNotFound)?;
+            window.z_order = next_z;
+            self.windows.insert(window_id, window);
+            Self::apply_window_geometry(server, &window)?;
+            next_z = next_z.saturating_add(1);
+        }
+
+        self.next_z_order = next_z.max(1);
+        Ok(())
+    }
+
+    fn assign_focus_after_mutation<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+        owner: ClientId,
+    ) -> Result<(), WindowManagerError> {
+        if let Some(next_focus) = self.ordered_focusable_window_ids().last().copied() {
+            self.focus_window(server, next_focus)?;
+            return Ok(());
+        }
+
+        self.focused_window = None;
+        Self::request_focus(server, owner, None)?;
+        self.rebalance_z_orders(server)?;
+        self.refresh_frames(server)
+    }
+
+    fn clamp_dimensions_to_workspace(&self, width: u32, height: u32) -> (u32, u32) {
+        let Some(bounds) = self.workspace_bounds else {
+            return (width, height);
+        };
+
+        let max_width = bounds
+            .width
+            .saturating_sub(BORDER_THICKNESS.saturating_mul(2))
+            .max(1);
+        let max_height = bounds
+            .height
+            .saturating_sub(Self::content_offset_y().saturating_add(BORDER_THICKNESS))
+            .max(1);
+
+        (width.min(max_width), height.min(max_height))
+    }
+
+    fn clamp_position_to_workspace(
+        &self,
+        x: i32,
+        y: i32,
+        frame_width: u32,
+        frame_height: u32,
+    ) -> (i32, i32) {
+        let Some(bounds) = self.workspace_bounds else {
+            return (x, y);
+        };
+
+        let max_x = bounds.width.saturating_sub(frame_width) as i32;
+        let max_y = bounds.height.saturating_sub(frame_height) as i32;
+
+        (x.clamp(0, max_x), y.clamp(0, max_y))
     }
 
     fn allocate_window_id(&mut self) -> Result<WindowId, WindowManagerError> {
@@ -703,6 +975,7 @@ impl WindowManager {
         let content_y = window.y.saturating_add(Self::content_offset_y() as i32);
         let frame_z = window.z_order.saturating_mul(2);
         let content_z = frame_z.saturating_add(1);
+        let visible = window.state == WindowState::Normal;
 
         let frame_pos = server
             .handle_request(
@@ -755,7 +1028,7 @@ impl WindowManager {
                 window.owner,
                 DisplayRequest::SetSurfaceVisibility {
                     surface_id: window.frame_surface,
-                    visible: window.visible,
+                    visible,
                 },
             )
             .map_err(WindowManagerError::Server)?;
@@ -766,7 +1039,7 @@ impl WindowManager {
                 window.owner,
                 DisplayRequest::SetSurfaceVisibility {
                     surface_id: window.content_surface,
-                    visible: window.visible,
+                    visible,
                 },
             )
             .map_err(WindowManagerError::Server)?;
@@ -1076,5 +1349,156 @@ mod tests {
             .expect("surface metadata should exist");
         assert!(flexible_after.width > flexible_before.width);
         assert!(flexible_after.height > flexible_before.height);
+    }
+
+    #[test]
+    fn workspace_bounds_clamp_geometry_and_resize() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let mut wm = WindowManager::new();
+        wm.set_workspace_bounds(300, 220)
+            .expect("workspace bounds should be accepted");
+
+        let window_id = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 500, 500)
+                    .with_position(-120, -80)
+                    .with_focused(true),
+            )
+            .expect("window should be created");
+        let content_surface = wm.content_surface(window_id).expect("content surface should exist");
+
+        let created = server
+            .surface(content_surface)
+            .copied()
+            .expect("surface metadata should exist");
+        assert_eq!(created.width, 296);
+        assert_eq!(created.height, 198);
+        assert_eq!(created.x, BORDER_THICKNESS as i32);
+        assert_eq!(created.y, WindowManager::content_offset_y() as i32);
+
+        wm.move_focused_by(&mut server, 1000, 1000)
+            .expect("move should be clamped into workspace");
+        let moved = server
+            .surface(content_surface)
+            .copied()
+            .expect("surface metadata should exist");
+        assert_eq!(moved.x, BORDER_THICKNESS as i32);
+        assert_eq!(moved.y, WindowManager::content_offset_y() as i32);
+
+        wm.resize_focused_by(&mut server, 400, 400)
+            .expect("resize should be clamped into workspace");
+        let resized = server
+            .surface(content_surface)
+            .copied()
+            .expect("surface metadata should exist");
+        assert_eq!(resized.width, 296);
+        assert_eq!(resized.height, 198);
+    }
+
+    #[test]
+    fn minimize_restore_and_close_update_focus_and_visibility() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let mut wm = WindowManager::new();
+        let first = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 320, 200)
+                    .with_position(16, 16)
+                    .with_focused(true),
+            )
+            .expect("first window should be created");
+        let second = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 240, 160).with_position(80, 48),
+            )
+            .expect("second window should be created");
+        wm.focus_window(&mut server, second)
+            .expect("second window should become focused");
+        assert_eq!(wm.focused_window(), Some(second));
+
+        let second_surface = wm
+            .content_surface(second)
+            .expect("second content surface should exist");
+        wm.minimize_focused(&mut server)
+            .expect("minimize should succeed");
+        assert_eq!(wm.window_state(second), Some(WindowState::Minimized));
+        assert_eq!(wm.focused_window(), Some(first));
+        assert!(
+            !server
+                .surface(second_surface)
+                .copied()
+                .expect("surface metadata should exist")
+                .visible
+        );
+
+        wm.restore_next_window(&mut server)
+            .expect("restore should succeed");
+        assert_eq!(wm.window_state(second), Some(WindowState::Normal));
+        assert_eq!(wm.focused_window(), Some(second));
+        assert!(
+            server
+                .surface(second_surface)
+                .copied()
+                .expect("surface metadata should exist")
+                .visible
+        );
+
+        wm.close_focused(&mut server).expect("close should succeed");
+        assert_eq!(wm.focused_window(), Some(first));
+        wm.close_focused(&mut server).expect("close should succeed");
+        assert_eq!(wm.focused_window(), None);
+        assert_eq!(wm.window_count(), 0);
+    }
+
+    #[test]
+    fn z_order_is_rebalanced_after_repeated_focus_changes() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let mut wm = WindowManager::new();
+        let first = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 320, 200).with_focused(true),
+            )
+            .expect("first window should be created");
+        let second = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 280, 180),
+            )
+            .expect("second window should be created");
+        let third = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 260, 160),
+            )
+            .expect("third window should be created");
+
+        for _ in 0..64 {
+            wm.focus_window(&mut server, second).expect("focus should succeed");
+            wm.focus_window(&mut server, third).expect("focus should succeed");
+            wm.focus_window(&mut server, first).expect("focus should succeed");
+        }
+
+        let mut content_z = [
+            wm.content_surface(first)
+                .and_then(|id| server.surface(id).map(|entry| entry.z_order))
+                .expect("first surface should exist"),
+            wm.content_surface(second)
+                .and_then(|id| server.surface(id).map(|entry| entry.z_order))
+                .expect("second surface should exist"),
+            wm.content_surface(third)
+                .and_then(|id| server.surface(id).map(|entry| entry.z_order))
+                .expect("third surface should exist"),
+        ];
+        content_z.sort();
+        assert_eq!(content_z, [3, 5, 7]);
     }
 }

@@ -20,6 +20,9 @@
 //! let mut surface = create_terminal_surface(80, 25).unwrap();
 //! ```
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 use crate::terminal::Terminal;
 use crate::fusion::surface::Surface;
 use crate::graphics::text::TextRenderer;
@@ -70,13 +73,74 @@ const VGA_TO_ARGB: [u32; 16] = [
     0xFFFFFFFF, // 15: White
 ];
 
-/// Convert VGA color index to ARGB8888
-fn vga_to_argb(vga_color: u8) -> u32 {
+/// Convert VGA color index to ARGB8888.
+const fn vga_to_argb(vga_color: u8) -> u32 {
     if (vga_color as usize) < VGA_TO_ARGB.len() {
         VGA_TO_ARGB[vga_color as usize]
     } else {
         0xFFFFFFFF // Default to white
     }
+}
+
+const TERMINAL_PROMPT: &str = "Root(user):Root/> ";
+const TERMINAL_BANNER_LINES: [&str; 6] = [
+    "█████╗ ██╗     ██╗      ██████╗ ██╗   ██╗    ██╗  ██╗███████╗██████╗ ███╗   ██╗ █████╗ ██╗",
+    "██╔══██╗██║     ██║     ██╔═══██╗╚██╗ ██╔╝    ██║ ██╔╝██╔════╝██╔══██╗████╗  ██║██╔══██╗██║",
+    "███████║██║     ██║     ██║   ██║ ╚████╔╝     █████╔╝ █████╗  ██████╔╝██╔██╗ ██║███████║██║",
+    "██╔══██║██║     ██║     ██║   ██║  ╚██╔╝      ██╔═██╗ ██╔══╝  ██╔══██╗██║╚██╗██║██╔══██║██║",
+    "██║  ██║███████╗███████╗╚██████╔╝   ██║       ██║  ██╗███████╗██║  ██║██║ ╚████║██║  ██║███████╗",
+    "╚═╝  ╚═╝╚══════╝╚══════╝ ╚═════╝    ╚═╝       ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝",
+];
+
+const COLOR_BACKGROUND: u32 = vga_to_argb(0);
+const COLOR_TEXT: u32 = vga_to_argb(7);
+const COLOR_PROMPT: u32 = vga_to_argb(11);
+
+fn normalize_terminal_char(ch: char) -> char {
+    match ch {
+        '█' => '#',
+        '║' => '|',
+        '═' => '-',
+        '╔' | '╗' | '╚' | '╝' => '+',
+        _ if ch.is_ascii() => ch,
+        _ => '?',
+    }
+}
+
+fn wrap_terminal_line(line: &str, max_cols: usize) -> Vec<String> {
+    let mut wrapped = Vec::new();
+    if max_cols == 0 {
+        return wrapped;
+    }
+
+    if line.is_empty() {
+        wrapped.push(String::new());
+        return wrapped;
+    }
+
+    let mut current = String::new();
+    let mut current_cols = 0usize;
+
+    for ch in line.chars() {
+        if ch == '\n' {
+            wrapped.push(current);
+            current = String::new();
+            current_cols = 0;
+            continue;
+        }
+
+        if current_cols >= max_cols {
+            wrapped.push(current);
+            current = String::new();
+            current_cols = 0;
+        }
+
+        current.push(normalize_terminal_char(ch));
+        current_cols += 1;
+    }
+
+    wrapped.push(current);
+    wrapped
 }
 
 /// Terminal Surface wrapper for rendering terminal within Fusion
@@ -109,8 +173,6 @@ pub struct TerminalSurface {
     terminal: *mut Terminal,
     /// Surface for rendering terminal display
     surface: Surface,
-    /// Text renderer for character glyph rendering
-    renderer: TextRenderer,
     /// Character width in pixels (5 for 5x7 font)
     char_width: u32,
     /// Character height in pixels (7 for 5x7 font)
@@ -125,6 +187,8 @@ pub struct TerminalSurface {
     dirty_bottom: u32,
     /// Whether entire surface needs rerendering
     full_dirty: bool,
+    /// Local Fusion-side scrollback for readable command history.
+    scrollback: Vec<String>,
 }
 
 impl TerminalSurface {
@@ -143,7 +207,7 @@ impl TerminalSurface {
     /// # Behavior
     ///
     /// - Creates a new Surface with dimensions (width * char_width) × (height * char_height)
-    /// - Initializes renderer and dirty region tracking
+    /// - Initializes dirty region tracking and Fusion-side scrollback
     /// - Marks entire surface as dirty for initial render
     pub fn new(
         terminal: &mut Terminal,
@@ -166,14 +230,9 @@ impl TerminalSurface {
         let surface = Surface::new(pixel_width, pixel_height)
             .map_err(|_| TerminalError::SurfaceError)?;
 
-        // Create renderer
-        let mut renderer = TextRenderer::new();
-        renderer.set_color(0xFFC0C0C0, 0xFF000000); // Light gray on black
-
         Ok(TerminalSurface {
             terminal: terminal as *mut Terminal,
             surface,
-            renderer,
             char_width,
             char_height,
             term_width: width,
@@ -181,6 +240,7 @@ impl TerminalSurface {
             dirty_top: 0,
             dirty_bottom: height,
             full_dirty: true,
+            scrollback: Vec::new(),
         })
     }
 
@@ -235,6 +295,95 @@ impl TerminalSurface {
         self.full_dirty || (self.dirty_top < self.dirty_bottom)
     }
 
+    fn banner_row_count(&self) -> u32 {
+        core::cmp::min(
+            TERMINAL_BANNER_LINES.len() as u32,
+            self.term_height.saturating_sub(1),
+        )
+    }
+
+    fn history_start_row(&self) -> u32 {
+        let banner_rows = self.banner_row_count();
+        if banner_rows + 1 < self.term_height {
+            banner_rows + 1
+        } else {
+            banner_rows
+        }
+    }
+
+    fn max_scrollback_rows(&self) -> usize {
+        let prompt_row = self.term_height.saturating_sub(1);
+        let history_start = self.history_start_row();
+        prompt_row.saturating_sub(history_start) as usize
+    }
+
+    fn trim_scrollback(&mut self) {
+        let max_rows = self.max_scrollback_rows();
+        if max_rows == 0 {
+            self.scrollback.clear();
+            return;
+        }
+
+        if self.scrollback.len() > max_rows {
+            let overflow = self.scrollback.len() - max_rows;
+            self.scrollback.drain(0..overflow);
+        }
+    }
+
+    fn push_scrollback_line(&mut self, line: &str) {
+        let max_cols = self.term_width as usize;
+        if max_cols == 0 {
+            return;
+        }
+
+        for wrapped in wrap_terminal_line(line, max_cols) {
+            self.scrollback.push(wrapped);
+        }
+        self.trim_scrollback();
+    }
+
+    fn clear_row(&mut self, row: u32) -> Result<(), TerminalError> {
+        let y = row.saturating_mul(self.char_height);
+        self.surface
+            .fill_rect(
+                0,
+                y,
+                self.term_width.saturating_mul(self.char_width),
+                self.char_height,
+                COLOR_BACKGROUND,
+            )
+            .map_err(|_| TerminalError::RenderError)
+    }
+
+    fn render_text_at_row(
+        &mut self,
+        row: u32,
+        start_col: u32,
+        text: &str,
+        color: u32,
+    ) -> Result<u32, TerminalError> {
+        let mut col = start_col;
+        let pixel_y = row.saturating_mul(self.char_height);
+
+        for ch in text.chars() {
+            if col >= self.term_width {
+                break;
+            }
+
+            let pixel_x = col.saturating_mul(self.char_width);
+            self.render_char_to_surface(pixel_x, pixel_y, normalize_terminal_char(ch), color)?;
+            col += 1;
+        }
+
+        Ok(col)
+    }
+
+    fn render_text_row(&mut self, row: u32, text: &str, color: u32) -> Result<(), TerminalError> {
+        self.clear_row(row)?;
+        self.render_text_at_row(row, 0, text, color)?;
+        Ok(())
+    }
+
     /// Render the terminal to the surface
     ///
     /// Renders character by character from the terminal buffer to the surface,
@@ -263,60 +412,59 @@ impl TerminalSurface {
             return Ok(());
         }
 
-        // Clear surface if full dirty
-        if self.full_dirty {
-            self.surface
-                .clear(0xFF000000)
-                .map_err(|_| TerminalError::SurfaceError)?;
+        self.surface
+            .clear(COLOR_BACKGROUND)
+            .map_err(|_| TerminalError::SurfaceError)?;
+
+        let banner_rows = self.banner_row_count();
+        for (row, line) in TERMINAL_BANNER_LINES
+            .iter()
+            .take(banner_rows as usize)
+            .enumerate()
+        {
+            self.render_text_row(row as u32, line, COLOR_PROMPT)?;
         }
 
-        // For now, render the current prompt line (from terminal buffer)
-        // This is a simplified rendering that shows what's in the terminal buffer
-        let char_width = self.char_width;
-        let char_height = self.char_height;
-
-        // Render prompt line at bottom with current buffer content
-        let row = self.term_height.saturating_sub(1);
-        let prompt = "Root:Root/> ";
-        let mut col = 0;
-
-        // Render prompt
-        for ch in prompt.chars() {
-            let pixel_x = col * char_width;
-            let pixel_y = row * char_height;
-
-            self.render_char_to_surface(pixel_x, pixel_y, ch, 0xFFC0C0C0)
-                .map_err(|_| TerminalError::RenderError)?;
-
-            col += 1;
+        let history_start = self.history_start_row();
+        let prompt_row = self.term_height.saturating_sub(1);
+        self.trim_scrollback();
+        for row in history_start..prompt_row {
+            self.clear_row(row)?;
         }
 
-        // Render terminal buffer content
-        let term_ref = unsafe { &*self.terminal };
-        let line_buffer = term_ref.get_buffer().get_line();
-
-        for ch in line_buffer.chars() {
-            let pixel_x = col * char_width;
-            let pixel_y = row * char_height;
-
-            self.render_char_to_surface(pixel_x, pixel_y, ch, 0xFFC0C0C0)
-                .map_err(|_| TerminalError::RenderError)?;
-
-            col += 1;
-            if col >= self.term_width {
-                break;
-            }
+        let max_history_rows = prompt_row.saturating_sub(history_start) as usize;
+        let history_start_index = self
+            .scrollback
+            .len()
+            .saturating_sub(max_history_rows);
+        let visible_history: Vec<String> = self.scrollback[history_start_index..]
+            .iter()
+            .cloned()
+            .collect();
+        for (offset, line) in visible_history.iter().enumerate() {
+            self.render_text_row(history_start + offset as u32, line, COLOR_TEXT)?;
         }
 
-        // Clear rest of line
-        while col < self.term_width {
-            let pixel_x = col * char_width;
-            let pixel_y = row * char_height;
+        let (input_line, cursor_pos) = {
+            let term_ref = self.terminal();
+            (
+                String::from(term_ref.get_buffer().get_line()),
+                term_ref.get_buffer().cursor_pos() as u32,
+            )
+        };
 
-            self.clear_char_area(pixel_x, pixel_y)
-                .map_err(|_| TerminalError::RenderError)?;
+        self.clear_row(prompt_row)?;
+        let prompt_end_col = self.render_text_at_row(prompt_row, 0, TERMINAL_PROMPT, COLOR_PROMPT)?;
+        self.render_text_at_row(prompt_row, prompt_end_col, &input_line, COLOR_TEXT)?;
 
-            col += 1;
+        let cursor_col = prompt_end_col.saturating_add(cursor_pos);
+        if cursor_col < self.term_width {
+            self.render_char_to_surface(
+                cursor_col.saturating_mul(self.char_width),
+                prompt_row.saturating_mul(self.char_height),
+                '_',
+                COLOR_TEXT,
+            )?;
         }
 
         self.clear_dirty();
@@ -379,18 +527,6 @@ impl TerminalSurface {
         Ok(())
     }
 
-    /// Clear a character area in the surface
-    ///
-    /// # Arguments
-    ///
-    /// * `x` - Pixel X coordinate
-    /// * `y` - Pixel Y coordinate
-    fn clear_char_area(&mut self, x: u32, y: u32) -> Result<(), TerminalError> {
-        self.surface
-            .fill_rect(x, y, self.char_width, self.char_height, 0xFF000000)
-            .map_err(|_| TerminalError::RenderError)
-    }
-
     /// Handle terminal input from a keyboard event
     ///
     /// # Arguments
@@ -407,8 +543,25 @@ impl TerminalSurface {
     /// - Marks display as dirty if terminal state changed
     /// - Returns true if prompt should be displayed (command executed)
     pub fn handle_input(&mut self, key: u8) -> Result<bool, TerminalError> {
-        let term = self.terminal_mut();
-        let show_prompt = term.handle_input(key);
+        let current_line = {
+            let term = self.terminal();
+            String::from(term.get_buffer().get_line())
+        };
+
+        let show_prompt = {
+            let term = self.terminal_mut();
+            term.handle_input(key)
+        };
+
+        if show_prompt {
+            if current_line.trim().eq_ignore_ascii_case("clear") {
+                self.scrollback.clear();
+            } else {
+                let mut rendered = String::from(TERMINAL_PROMPT);
+                rendered.push_str(&current_line);
+                self.push_scrollback_line(&rendered);
+            }
+        }
 
         // Mark as dirty to trigger rerender
         self.mark_full_dirty();
@@ -729,4 +882,33 @@ pub fn render_terminal_to_surface(
 /// - Returns Ok if successful, Err if invalid key code
 pub fn handle_terminal_input(_terminal: &mut Terminal, _key: u32) -> Result<(), TerminalError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_has_no_placeholder_segments() {
+        assert_eq!(TERMINAL_PROMPT, "Root(user):Root/> ");
+        assert!(!TERMINAL_PROMPT.contains("(what folder"));
+        assert!(!TERMINAL_PROMPT.contains("(commend"));
+    }
+
+    #[test]
+    fn normalize_terminal_char_maps_non_ascii_banner_glyphs() {
+        assert_eq!(normalize_terminal_char('█'), '#');
+        assert_eq!(normalize_terminal_char('╔'), '+');
+        assert_eq!(normalize_terminal_char('═'), '-');
+        assert_eq!(normalize_terminal_char('║'), '|');
+        assert_eq!(normalize_terminal_char('é'), '?');
+    }
+
+    #[test]
+    fn wrap_terminal_line_respects_requested_width() {
+        let wrapped = wrap_terminal_line("Root(user):Root/> version", 10);
+        assert!(!wrapped.is_empty());
+        assert!(wrapped.iter().all(|line| line.chars().count() <= 10));
+        assert_eq!(wrapped.concat(), "Root(user):Root/> version");
+    }
 }

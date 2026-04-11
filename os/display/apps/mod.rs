@@ -1,4 +1,5 @@
 pub mod window_manager;
+pub mod desktop_shell;
 
 use crate::protocol::SurfaceId;
 
@@ -6,6 +7,8 @@ use crate::protocol::SurfaceId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppKind {
     Terminal,
+    InfoPanel,
+    DesktopShell,
 }
 
 /// Placement hints used when creating app surfaces.

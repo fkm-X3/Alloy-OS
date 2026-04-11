@@ -13,6 +13,8 @@ use buffer::LineBuffer;
 use command::CommandRegistry;
 use history::CommandHistory;
 
+const PROMPT: &str = "Root:Root/> ";
+
 pub struct Terminal {
     buffer: LineBuffer,
     commands: Option<CommandRegistry>,  // Make optional for lazy init
@@ -54,7 +56,7 @@ impl Terminal {
     }
     
     pub fn show_prompt(&self) {
-        colors::print_prompt("Root:Root/> ");
+        colors::print_prompt(PROMPT);
     }
     
     /// Redraw the current line from cursor position to end
@@ -125,7 +127,7 @@ impl Terminal {
     }
     
     pub fn handle_input(&mut self, key: u8) -> bool {
-        const PROMPT_LEN: usize = 13; // "Root:Root/> ".len()
+        const PROMPT_LEN: usize = PROMPT.len();
         
         // Handle special keys
         if key >= ffi::SPECIAL_KEY_UP {

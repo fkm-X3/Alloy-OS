@@ -26,6 +26,14 @@ use core::panic::PanicInfo;
 
 const ENABLE_OS_DISPLAY_SERVER: bool = true;
 
+fn serial_print_u32(value: u32) {
+    let value_buf = utils::format::u32_to_decimal(value);
+    let start = utils::format::trim_leading_spaces(&value_buf);
+    unsafe {
+        ffi::serial_print(&value_buf[start] as *const u8);
+    }
+}
+
 /// Test graphics functionality including VESA framebuffer access and rendering.
 /// 
 /// This function verifies:
@@ -104,25 +112,21 @@ fn test_graphics() -> bool {
     }
     
     // Log graphics info
-    unsafe {
-        ffi::serial_print(b"[Graphics Test] Graphics mode detected: \0".as_ptr());
-        ffi::vga_print_dec(width as u32);
-        ffi::serial_print(b"x\0".as_ptr());
-        ffi::vga_print_dec(height as u32);
-        ffi::serial_print(b"x\0".as_ptr());
-        ffi::vga_print_dec(bpp as u32);
-        ffi::serial_print(b"\n\0".as_ptr());
-    }
+    unsafe { ffi::serial_print(b"[Graphics Test] Graphics mode detected: \0".as_ptr()); }
+    serial_print_u32(width as u32);
+    unsafe { ffi::serial_print(b"x\0".as_ptr()); }
+    serial_print_u32(height as u32);
+    unsafe { ffi::serial_print(b"x\0".as_ptr()); }
+    serial_print_u32(bpp as u32);
+    unsafe { ffi::serial_print(b"\n\0".as_ptr()); }
     
     // Log framebuffer size
     let fb_size = scanline_bytes as u32 * height as u32;
-    unsafe {
-        ffi::serial_print(b"[Graphics Test] Framebuffer size: \0".as_ptr());
-        ffi::vga_print_dec(fb_size);
-        ffi::serial_print(b" bytes, scanline: \0".as_ptr());
-        ffi::vga_print_dec(scanline_bytes as u32);
-        ffi::serial_print(b" bytes\n\0".as_ptr());
-    }
+    unsafe { ffi::serial_print(b"[Graphics Test] Framebuffer size: \0".as_ptr()); }
+    serial_print_u32(fb_size);
+    unsafe { ffi::serial_print(b" bytes, scanline: \0".as_ptr()); }
+    serial_print_u32(scanline_bytes as u32);
+    unsafe { ffi::serial_print(b" bytes\n\0".as_ptr()); }
     
     // Create framebuffer info with standard color masks (validation only)
     let (red_mask, green_mask, blue_mask) = match bpp {
@@ -225,13 +229,15 @@ pub extern "C" fn rust_main() {
                     }
                     start_terminal();
                 }
-                Err(_) => {
+                Err(err) => {
                     unsafe {
+                        ffi::serial_print(err.serial_message().as_ptr());
                         ffi::serial_print(
-                            b"[DisplayServer] Failed to start, falling back to terminal\n\0".as_ptr(),
+                            b"[DisplayServer] Falling back to terminal mode\n\0".as_ptr(),
                         );
+                        ffi::vga_println(err.vga_message().as_ptr());
                         ffi::vga_println(
-                            b"[DisplayServer] Failed to start, using terminal\n\0".as_ptr(),
+                            b"[DisplayServer] Falling back to terminal mode\n\0".as_ptr(),
                         );
                     }
                     start_terminal();

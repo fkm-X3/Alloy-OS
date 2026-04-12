@@ -569,6 +569,12 @@ impl TerminalSurface {
         Ok(show_prompt)
     }
 
+    /// Append a shell/runtime message line into the rendered terminal history.
+    pub fn append_system_message(&mut self, message: &str) {
+        self.push_scrollback_line(message);
+        self.mark_full_dirty();
+    }
+
     /// Set surface position on screen
     pub fn set_position(&mut self, x: i32, y: i32) {
         self.surface.set_position(x, y);

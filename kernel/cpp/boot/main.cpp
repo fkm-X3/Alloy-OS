@@ -18,6 +18,7 @@ extern "C" void keyboard_init();
 extern "C" char keyboard_get_char();
 extern "C" void timer_init_ffi(uint32_t frequency);
 extern "C" void vesa_init();
+extern "C" void vesa_init_from_multiboot(uint32_t multiboot_addr);
 extern "C" uint8_t vesa_is_available();
 
 // Rust kernel entry point
@@ -119,7 +120,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     // Initialize VESA graphics
     serial_print("Initializing VESA graphics...\n");
     vga_print("[ ] Initializing VESA...");
-    vesa_init();
+    vesa_init_from_multiboot(multiboot_addr);
     if (vesa_is_available()) {
         vga_set_color(10, 0);
         vga_println(" OK");
@@ -129,7 +130,7 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
         vga_set_color(14, 0);  // Yellow for warning
         vga_println(" SKIP");
         vga_set_color(7, 0);
-        serial_print("[VESA] Graphics not available (VBE not supported)\n");
+        serial_print("[VESA] Graphics not available (missing framebuffer metadata)\n");
     }
     
     vga_println("");

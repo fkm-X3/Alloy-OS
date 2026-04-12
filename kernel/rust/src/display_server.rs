@@ -298,9 +298,14 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     shell.render(&mut server).map_err(|_| DisplayServerBootError::Shell)?;
 
     let boot_uptime = unsafe { ffi::timer_get_uptime_ms_ffi() };
-    server
-        .update_frame(boot_uptime)
+    let first_present_time = boot_uptime.saturating_add(server.frame_interval_ms() as u64);
+    let first_presented = server
+        .update_frame(first_present_time)
         .map_err(|_| DisplayServerBootError::FramePresent)?;
+    if !first_presented {
+        return Err(DisplayServerBootError::FramePresent);
+    }
+    serial_log(b"[DisplayServer] First frame presented\n\0");
     serial_log(
         b"[DisplayServer] Desktop shell ready - launcher starts open, Arrow/Tab selects tile, Enter/Space activates tile, ` toggles control mode, 1 focuses terminal, 2 prints coming soon\n\0",
     );

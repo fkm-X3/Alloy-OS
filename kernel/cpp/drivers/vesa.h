@@ -274,6 +274,9 @@ extern "C" {
     // Initialize VESA VBE detection and controller check
     void vesa_init();
     
+    // Initialize VESA using Multiboot2 framebuffer metadata (recommended boot path)
+    void vesa_init_from_multiboot(uint32_t multiboot_addr);
+    
     // Set a graphics mode
     // Parameters: mode - VBE mode number (with optional VBE_MODE_LINEAR_FRAMEBUFFER flag)
     // Returns: 0 on success, 1 if not initialized, 2 if mode not supported, 3 if mode setting failed

@@ -15,6 +15,15 @@ header_start:
     ; Checksum
     dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start))
 
+    ; Request a linear framebuffer mode from GRUB.
+    align 8
+    dw 5       ; type = framebuffer
+    dw 0       ; flags = optional
+    dd 20      ; size
+    dd 1024    ; width
+    dd 768     ; height
+    dd 16      ; depth (RGB565)
+
     ; End tag (required)
     align 8
     dw 0    ; type = end tag

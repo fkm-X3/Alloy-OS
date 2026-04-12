@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Boot Alloy OS in QEMU, wait for desktop-shell marker, capture PNG screenshot."""
-
 from __future__ import annotations
 
 import argparse
@@ -233,7 +230,7 @@ def run_capture(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Boot QEMU, wait for desktop shell readiness marker, "
+            "Boot QEMU, wait for first displayed desktop frame marker, "
             "then capture screenshot to PNG."
         )
     )
@@ -260,7 +257,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--marker",
-        default="[DisplayServer] Desktop shell ready",
+        default="[DisplayServer] First frame presented",
         help="Serial log marker to wait for before capture",
     )
     parser.add_argument(

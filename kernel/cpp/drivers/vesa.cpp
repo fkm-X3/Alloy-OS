@@ -1,5 +1,6 @@
 #include "vesa.h"
 #include "boot/types.h"
+#include "../boot/multiboot2.h"
 
 extern "C" void serial_print(const char* str);
 extern "C" void serial_print_hex_with_prefix(const char* prefix, uint32_t value);
@@ -12,6 +13,7 @@ extern "C" void serial_print_hex_with_prefix(const char* prefix, uint32_t value)
 static struct {
     uint8_t available;                      // VESA VBE is available and initialized
     uint8_t initialized;                    // vesa_init() has been called
+    uint8_t framebuffer_ready;              // Framebuffer metadata is valid
     uint16_t vbe_version;                   // VBE version (0x0200, 0x0300, etc)
     uint8_t capabilities;                   // Controller capabilities flags
     uint16_t current_mode;                  // Currently set graphics mode
@@ -23,7 +25,90 @@ static struct {
     uint32_t framebuffer_size;              // Framebuffer size in bytes
     uint16_t supported_modes[128];          // List of supported graphics modes
     uint8_t num_supported_modes;            // Number of supported modes
-} g_vesa_state = {0};
+} g_vesa_state = {};
+
+static uint16_t mode_for_dimensions(uint16_t width, uint16_t height, uint8_t bpp) {
+    if (width == 1024 && height == 768 && bpp == 16) {
+        return VBE_MODE_1024x768x16;
+    }
+    if (width == 800 && height == 600 && bpp == 16) {
+        return VBE_MODE_800x600x16;
+    }
+    if (width == 640 && height == 480 && bpp == 16) {
+        return VBE_MODE_640x480x16;
+    }
+    if (width == 1024 && height == 768 && bpp == 32) {
+        return VBE_MODE_1024x768x32;
+    }
+    if (width == 800 && height == 600 && bpp == 32) {
+        return VBE_MODE_800x600x32;
+    }
+    if (width == 640 && height == 480 && bpp == 32) {
+        return VBE_MODE_640x480x32;
+    }
+    return 0;
+}
+
+static uint8_t load_multiboot_framebuffer(uint32_t multiboot_addr) {
+    if (multiboot_addr == 0) {
+        return 0;
+    }
+
+    struct multiboot_tag* tag = (struct multiboot_tag*)(multiboot_addr + 8);
+    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+        if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER) {
+            struct multiboot_tag_framebuffer_common* fb =
+                (struct multiboot_tag_framebuffer_common*)tag;
+
+            if (fb->framebuffer_type == MULTIBOOT_FRAMEBUFFER_TYPE_EGA_TEXT) {
+                serial_print("[VESA] Multiboot framebuffer is text mode\n");
+                return 0;
+            }
+
+            if ((fb->framebuffer_addr >> 32) != 0) {
+                serial_print("[VESA] Framebuffer address above 4GB is unsupported\n");
+                return 0;
+            }
+
+            if (fb->framebuffer_addr == 0 ||
+                fb->framebuffer_pitch == 0 ||
+                fb->framebuffer_width == 0 ||
+                fb->framebuffer_height == 0 ||
+                fb->framebuffer_bpp == 0 ||
+                fb->framebuffer_width > 0xFFFF ||
+                fb->framebuffer_height > 0xFFFF ||
+                fb->framebuffer_pitch > 0xFFFF) {
+                serial_print("[VESA] Invalid multiboot framebuffer metadata\n");
+                return 0;
+            }
+
+            g_vesa_state.linear_framebuffer = (uint32_t)fb->framebuffer_addr;
+            g_vesa_state.bytes_per_scanline = (uint16_t)fb->framebuffer_pitch;
+            g_vesa_state.x_resolution = (uint16_t)fb->framebuffer_width;
+            g_vesa_state.y_resolution = (uint16_t)fb->framebuffer_height;
+            g_vesa_state.bits_per_pixel = fb->framebuffer_bpp;
+
+            uint64_t fb_size = ((uint64_t)g_vesa_state.bytes_per_scanline) *
+                               ((uint64_t)g_vesa_state.y_resolution);
+            if (fb_size > 0xFFFFFFFFULL) {
+                serial_print("[VESA] Framebuffer size overflow\n");
+                return 0;
+            }
+            g_vesa_state.framebuffer_size = (uint32_t)fb_size;
+            g_vesa_state.current_mode = mode_for_dimensions(
+                g_vesa_state.x_resolution,
+                g_vesa_state.y_resolution,
+                g_vesa_state.bits_per_pixel
+            );
+            g_vesa_state.framebuffer_ready = 1;
+            return 1;
+        }
+
+        tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+    }
+
+    return 0;
+}
 
 // ============================================================================
 // VESA Initialization - Core Implementation
@@ -53,55 +138,59 @@ static struct {
 /// vesa_initialize();
 /// assert!(ffi::vesa_available());
 /// ```
-extern "C" void vesa_init() {
+extern "C" void vesa_init_from_multiboot(uint32_t multiboot_addr) {
     // Guard against double initialization
     if (g_vesa_state.initialized) {
         return;
     }
-    
+
     // Mark that initialization has been attempted
     g_vesa_state.initialized = 1;
     g_vesa_state.available = 0;
+    g_vesa_state.framebuffer_ready = 0;
     g_vesa_state.current_mode = 0;
     g_vesa_state.num_supported_modes = 0;
-    
+    g_vesa_state.bytes_per_scanline = 0;
+    g_vesa_state.x_resolution = 0;
+    g_vesa_state.y_resolution = 0;
+    g_vesa_state.bits_per_pixel = 0;
+    g_vesa_state.linear_framebuffer = 0;
+    g_vesa_state.framebuffer_size = 0;
+
     serial_print("[VESA] Initializing VBE detection...\n");
-    
-    // Initialize supported mode list with commonly available modes
-    // These modes represent a good coverage of graphics capabilities
-    // Ordered by preference (highest quality first)
-    g_vesa_state.supported_modes[0] = VBE_MODE_1024x768x32;  // 1024x768 32-bit
-    g_vesa_state.supported_modes[1] = VBE_MODE_800x600x32;   // 800x600 32-bit
-    g_vesa_state.supported_modes[2] = VBE_MODE_640x480x32;   // 640x480 32-bit
-    g_vesa_state.supported_modes[3] = VBE_MODE_1024x768x16;  // 1024x768 16-bit
-    g_vesa_state.supported_modes[4] = VBE_MODE_800x600x16;   // 800x600 16-bit
-    g_vesa_state.supported_modes[5] = VBE_MODE_640x480x16;   // 640x480 16-bit
+
+    // Known, validated modes used for matching bootloader-provided metadata.
+    g_vesa_state.supported_modes[0] = VBE_MODE_1024x768x32;
+    g_vesa_state.supported_modes[1] = VBE_MODE_800x600x32;
+    g_vesa_state.supported_modes[2] = VBE_MODE_640x480x32;
+    g_vesa_state.supported_modes[3] = VBE_MODE_1024x768x16;
+    g_vesa_state.supported_modes[4] = VBE_MODE_800x600x16;
+    g_vesa_state.supported_modes[5] = VBE_MODE_640x480x16;
     g_vesa_state.num_supported_modes = 6;
-    
-    // Note: Full VBE detection requires real mode BIOS calls (int 0x10 AX=0x4F00)
-    // This would:
-    // 1. Set VBE2 signature at 0x10000 (low memory)
-    // 2. Call int 0x10 to get controller info
-    // 3. Parse mode list from info block
-    // 4. Store supported modes
-    //
-    // Alternative: Parse Multiboot2 VBE tag (tag type 7) if provided by bootloader
-    // The Multiboot2 tag contains pre-detected VBE info in protected mode
-    //
-    // Since real mode transitions are not yet implemented, we mark VESA as detected
-    // with a safe default configuration. This allows mode setting to function
-    // for bootloaders that set graphics mode before handoff (GRUB2).
-    
-    // Mark VESA as available with basic initialization
-    // A real bootloader (GRUB2) typically provides VBE info or sets graphics mode
-    g_vesa_state.available = 1;
-    g_vesa_state.vbe_version = 0x0300;  // Assume VBE 3.0 compatible
+
+    g_vesa_state.vbe_version = 0x0300;
     g_vesa_state.capabilities = VBE_CAP_DAC_SWITCHABLE | VBE_CAP_BLANK_SCREEN_VBE;
-    
+
+    if (!load_multiboot_framebuffer(multiboot_addr)) {
+        serial_print("[VESA] No valid multiboot framebuffer metadata; graphics unavailable\n");
+        return;
+    }
+
+    g_vesa_state.available = 1;
+
     serial_print("[VESA] VESA VBE initialized - ");
     serial_print_hex_with_prefix("version=0x", g_vesa_state.vbe_version);
     serial_print("[VESA] Supported modes: ");
     serial_print_hex_with_prefix("count=", g_vesa_state.num_supported_modes);
+    serial_print("[VESA] Framebuffer: ");
+    serial_print_hex_with_prefix("addr=0x", g_vesa_state.linear_framebuffer);
+    serial_print_hex_with_prefix("width=0x", g_vesa_state.x_resolution);
+    serial_print_hex_with_prefix("height=0x", g_vesa_state.y_resolution);
+    serial_print_hex_with_prefix("bpp=0x", g_vesa_state.bits_per_pixel);
+}
+
+extern "C" void vesa_init() {
+    vesa_init_from_multiboot(0);
 }
 
 // ============================================================================
@@ -150,16 +239,19 @@ extern "C" void vesa_init() {
 /// }
 /// ```
 extern "C" uint16_t vesa_set_mode(uint16_t mode) {
-    // Check if VESA has been initialized
-    if (!g_vesa_state.available || !g_vesa_state.initialized) {
+    if (!g_vesa_state.initialized) {
         serial_print("[VESA] Error: VESA not initialized\n");
         return 1;
     }
-    
-    // Extract the actual mode number (mask off flags)
+
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
+        serial_print("[VESA] Error: Bootloader framebuffer is unavailable\n");
+        return 3;
+    }
+
     uint16_t mode_number = mode & VBE_MODE_MASK;
-    
-    // Validate that the requested mode is in our supported list
+
+    // Validate that the requested mode is in our supported list.
     uint8_t mode_supported = 0;
     for (int i = 0; i < g_vesa_state.num_supported_modes; i++) {
         if ((g_vesa_state.supported_modes[i] & VBE_MODE_MASK) == mode_number) {
@@ -174,103 +266,21 @@ extern "C" uint16_t vesa_set_mode(uint16_t mode) {
         serial_print(" not supported\n");
         return 2;
     }
-    
-    // Note on implementation:
-    // Real mode BIOS calls are required for actual mode switching:
-    //
-    // 1. Save current segment descriptors (GDT descriptors for data and code)
-    // 2. Transition to real mode:
-    //    - Disable paging (CR0.PG = 0)
-    //    - Load real mode GDT (16-bit segments)
-    //    - Jump to 16-bit code segment
-    // 3. Execute VBE BIOS call:
-    //    - AX = 0x4F02 (SET VBE MODE function)
-    //    - BX = mode_number | 0x4000 (request linear framebuffer)
-    //    - int 0x10 (BIOS video interrupt)
-    // 4. Check return value in AX (should be 0x004F for success)
-    // 5. Transition back to protected mode:
-    //    - Enable paging (CR0.PG = 1)
-    //    - Restore original segment descriptors
-    //    - Jump to 32-bit code segment
-    // 6. Update g_vesa_state with new mode information
-    //
-    // Current limitation: Without real mode transition framework, we simulate
-    // successful mode setting but don't actually change hardware mode.
-    // The bootloader (GRUB2) typically sets graphics mode before kernel load,
-    // so this simulation is often safe.
-    
-    // Update internal state as if mode was successfully set
-    // This assumes the bootloader has already set the graphics mode
-    g_vesa_state.current_mode = mode_number;
-    
-    // Store mode information for common modes
-    // These values are typical for standard VBE modes
-    switch (mode_number) {
-        case VBE_MODE_640x480x32:
-            g_vesa_state.x_resolution = 640;
-            g_vesa_state.y_resolution = 480;
-            g_vesa_state.bits_per_pixel = 32;
-            g_vesa_state.bytes_per_scanline = 640 * 4;
-            g_vesa_state.linear_framebuffer = 0xE0000000;  // Typical LFB address
-            g_vesa_state.framebuffer_size = 640 * 480 * 4;
-            break;
-            
-        case VBE_MODE_800x600x32:
-            g_vesa_state.x_resolution = 800;
-            g_vesa_state.y_resolution = 600;
-            g_vesa_state.bits_per_pixel = 32;
-            g_vesa_state.bytes_per_scanline = 800 * 4;
-            g_vesa_state.linear_framebuffer = 0xE0000000;
-            g_vesa_state.framebuffer_size = 800 * 600 * 4;
-            break;
-            
-        case VBE_MODE_1024x768x32:
-            g_vesa_state.x_resolution = 1024;
-            g_vesa_state.y_resolution = 768;
-            g_vesa_state.bits_per_pixel = 32;
-            g_vesa_state.bytes_per_scanline = 1024 * 4;
-            g_vesa_state.linear_framebuffer = 0xE0000000;
-            g_vesa_state.framebuffer_size = 1024 * 768 * 4;
-            break;
-            
-        case VBE_MODE_640x480x16:
-            g_vesa_state.x_resolution = 640;
-            g_vesa_state.y_resolution = 480;
-            g_vesa_state.bits_per_pixel = 16;
-            g_vesa_state.bytes_per_scanline = 640 * 2;
-            g_vesa_state.linear_framebuffer = 0xE0000000;
-            g_vesa_state.framebuffer_size = 640 * 480 * 2;
-            break;
-            
-        case VBE_MODE_800x600x16:
-            g_vesa_state.x_resolution = 800;
-            g_vesa_state.y_resolution = 600;
-            g_vesa_state.bits_per_pixel = 16;
-            g_vesa_state.bytes_per_scanline = 800 * 2;
-            g_vesa_state.linear_framebuffer = 0xE0000000;
-            g_vesa_state.framebuffer_size = 800 * 600 * 2;
-            break;
-            
-        case VBE_MODE_1024x768x16:
-            g_vesa_state.x_resolution = 1024;
-            g_vesa_state.y_resolution = 768;
-            g_vesa_state.bits_per_pixel = 16;
-            g_vesa_state.bytes_per_scanline = 1024 * 2;
-            g_vesa_state.linear_framebuffer = 0xE0000000;
-            g_vesa_state.framebuffer_size = 1024 * 768 * 2;
-            break;
-            
-        default:
-            serial_print("[VESA] Warning: Unknown mode ");
-            serial_print_hex_with_prefix("0x", mode_number);
-            serial_print(" - using generic settings\n");
-            g_vesa_state.x_resolution = 0;
-            g_vesa_state.y_resolution = 0;
-            g_vesa_state.bits_per_pixel = 0;
-            g_vesa_state.bytes_per_scanline = 0;
-            break;
+
+    // The driver does not perform BIOS mode switching in protected mode.
+    // Accept the mode only when it matches the active boot framebuffer.
+    uint16_t detected_mode = mode_for_dimensions(
+        g_vesa_state.x_resolution,
+        g_vesa_state.y_resolution,
+        g_vesa_state.bits_per_pixel
+    );
+    if (detected_mode == 0 || detected_mode != mode_number) {
+        serial_print("[VESA] Error: Requested mode does not match active boot framebuffer\n");
+        return 3;
     }
-    
+
+    g_vesa_state.current_mode = mode_number;
+
     serial_print("[VESA] Mode set: ");
     serial_print_hex_with_prefix("0x", mode_number);
     serial_print(" (");
@@ -280,8 +290,8 @@ extern "C" uint16_t vesa_set_mode(uint16_t mode) {
     serial_print(", bpp=");
     serial_print_hex_with_prefix("0x", g_vesa_state.bits_per_pixel);
     serial_print(")\n");
-    
-    return 0;  // Success
+
+    return 0;
 }
 
 // ============================================================================
@@ -360,7 +370,7 @@ extern "C" uint8_t vesa_get_capabilities() {
 /// }
 /// ```
 extern "C" uint32_t vesa_get_framebuffer() {
-    if (!g_vesa_state.available || g_vesa_state.current_mode == 0) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }
     return g_vesa_state.linear_framebuffer;
@@ -409,7 +419,7 @@ extern "C" void vesa_get_resolution(uint16_t* width, uint16_t* height) {
         return;
     }
     
-    if (!g_vesa_state.available || g_vesa_state.current_mode == 0) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         *width = 0;
         *height = 0;
         return;
@@ -450,7 +460,7 @@ extern "C" uint16_t vesa_get_mode(uint16_t* mode) {
         return 1;
     }
     
-    if (!g_vesa_state.available) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 1;
     }
     
@@ -478,7 +488,7 @@ extern "C" uint16_t vesa_get_mode(uint16_t* mode) {
 /// - Uses C FFI: extern "C" uint8_t
 /// - Callable from Rust via: `ffi::vesa_color_depth()`
 extern "C" uint8_t vesa_get_bits_per_pixel() {
-    if (!g_vesa_state.available || g_vesa_state.current_mode == 0) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }
     return g_vesa_state.bits_per_pixel;
@@ -505,7 +515,7 @@ extern "C" uint8_t vesa_get_bits_per_pixel() {
 /// - Uses C FFI: extern "C" uint16_t
 /// - Callable from Rust via: `ffi::vesa_scanline_bytes()`
 extern "C" uint16_t vesa_get_bytes_per_scanline() {
-    if (!g_vesa_state.available || g_vesa_state.current_mode == 0) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }
     return g_vesa_state.bytes_per_scanline;
@@ -542,7 +552,7 @@ extern "C" uint16_t vesa_get_bytes_per_scanline() {
 /// }
 /// ```
 extern "C" uint32_t vesa_get_framebuffer_size() {
-    if (!g_vesa_state.available || g_vesa_state.current_mode == 0) {
+    if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }
     return g_vesa_state.framebuffer_size;

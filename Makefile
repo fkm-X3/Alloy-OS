@@ -60,7 +60,7 @@ OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso
+.PHONY: all clean run iso output screenshot debug
 
 all: $(KERNEL_ELF)
 
@@ -108,6 +108,10 @@ run: $(KERNEL_ISO)
 
 output: $(KERNEL_ISO)
 	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -display none -no-reboot -no-shutdown -D qemu.log
+
+# Boot headless and auto-capture desktop shell screenshot (PNG)
+screenshot: $(KERNEL_ISO)
+	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)

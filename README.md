@@ -11,6 +11,9 @@ make fuck
 
 # debug (headless qemu)
 make output
+
+# boot headless, wait for desktop shell ready, then save screenshot png
+make screenshot
 ```
 
 ## desktop shell (keyboard-first)

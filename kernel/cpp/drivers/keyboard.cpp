@@ -4,6 +4,8 @@
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_STATUS_PORT 0x64
 #define KEYBOARD_COMMAND_PORT 0x64
+#define KEYBOARD_STATUS_OUTPUT_FULL 0x01
+#define KEYBOARD_STATUS_INPUT_FULL 0x02
 
 // Port I/O functions
 static inline void outb(uint16_t port, uint8_t value) {
@@ -14,6 +16,24 @@ static inline uint8_t inb(uint16_t port) {
     uint8_t ret;
     asm volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
     return ret;
+}
+
+static bool keyboard_wait_input_ready() {
+    for (uint32_t i = 0; i < 100000; i++) {
+        if ((inb(KEYBOARD_STATUS_PORT) & KEYBOARD_STATUS_INPUT_FULL) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void keyboard_flush_output_buffer() {
+    for (uint32_t i = 0; i < KEYBOARD_BUFFER_SIZE; i++) {
+        if ((inb(KEYBOARD_STATUS_PORT) & KEYBOARD_STATUS_OUTPUT_FULL) == 0) {
+            break;
+        }
+        (void)inb(KEYBOARD_DATA_PORT);
+    }
 }
 
 // Keyboard state
@@ -86,9 +106,22 @@ extern "C" void keyboard_init() {
     // Clear buffer
     buffer_read_pos = 0;
     buffer_write_pos = 0;
-    
-    // Keyboard should already be initialized by BIOS
-    // Just need to set up IRQ handler (done in IDT setup)
+
+    // Reset modifier state from any stale boot-time events.
+    shift_pressed = false;
+    ctrl_pressed = false;
+    alt_pressed = false;
+    capslock_active = false;
+    extended_scancode = false;
+
+    // Drain pending controller bytes before enabling normal key processing.
+    keyboard_flush_output_buffer();
+
+    // Ensure keyboard scanning is enabled (discard ACK/RESEND replies).
+    if (keyboard_wait_input_ready()) {
+        outb(KEYBOARD_DATA_PORT, 0xF4);
+        keyboard_flush_output_buffer();
+    }
 }
 
 // Keyboard interrupt handler (called from IRQ1)

@@ -67,10 +67,6 @@ extern "C" void timer_handler() {
     g_timer_ticks++;
     
     // TODO: Call scheduler for task switching
-    
-    // Send EOI (End of Interrupt) to PIC
-    // IRQ 0 is on master PIC, so send EOI to port 0x20
-    outb(0x20, 0x20);
 }
 
 // Export functions for FFI

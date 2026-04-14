@@ -15,6 +15,23 @@ extern "C" uint32_t _kernel_end;
 static page_directory kernel_dir __attribute__((aligned(4096)));
 static page_table kernel_pts[4] __attribute__((aligned(4096))); // First 16MB
 
+// Virtual window (12MB-16MB) used to access arbitrary page-table frames.
+// We keep a stable virtual mapping for each PDE index: PT_VIRT_BASE + index*4KB.
+#define PT_VIRT_BASE 0x00C00000
+#define PT_VIRT_MAP_TABLE_INDEX 3 // kernel_pts[3] covers 12MB-16MB
+
+static inline void invalidate_page_local(uint32_t virt_addr) {
+    asm volatile("invlpg (%0)" :: "r"(virt_addr) : "memory");
+}
+
+static page_table* map_page_table_window(uint32_t dir_index, uint32_t pt_phys) {
+    uint32_t pt_virt = PT_VIRT_BASE + (dir_index * PAGE_SIZE);
+    kernel_pts[PT_VIRT_MAP_TABLE_INDEX].entries[dir_index] =
+        (pt_phys & 0xFFFFF000) | PAGE_PRESENT | PAGE_WRITE;
+    invalidate_page_local(pt_virt);
+    return (page_table*)pt_virt;
+}
+
 void Paging::init() {
     serial_print("Paging: Initializing paging...\n");
     
@@ -113,6 +130,11 @@ page_directory* Paging::get_kernel_directory() {
 uint32_t* Paging::get_page_entry(uint32_t virt_addr, bool create) {
     uint32_t dir_index = virt_addr >> 22;
     uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+
+    // The first 16MB is always backed by the static identity-mapped tables.
+    if (dir_index < 4) {
+        return &kernel_pts[dir_index].entries[table_index];
+    }
     
     // Check if page table exists
     if (!(kernel_directory->entries[dir_index] & PAGE_PRESENT)) {
@@ -127,8 +149,8 @@ uint32_t* Paging::get_page_entry(uint32_t virt_addr, bool create) {
             return nullptr;
         }
         
-        // Clear the new page table
-        page_table* pt = (page_table*)pt_phys;
+        // Map this page-table frame into the stable PT window and clear it.
+        page_table* pt = map_page_table_window(dir_index, (uint32_t)pt_phys);
         for (int i = 0; i < 1024; i++) {
             pt->entries[i] = 0;
         }
@@ -141,7 +163,8 @@ uint32_t* Paging::get_page_entry(uint32_t virt_addr, bool create) {
     // Get page table
     page_table* pt = kernel_tables[dir_index];
     if (!pt) {
-        pt = (page_table*)(kernel_directory->entries[dir_index] & 0xFFFFF000);
+        uint32_t pt_phys = kernel_directory->entries[dir_index] & 0xFFFFF000;
+        pt = map_page_table_window(dir_index, pt_phys);
         kernel_tables[dir_index] = pt;
     }
     

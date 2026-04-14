@@ -19,6 +19,24 @@ struct idt_ptr {
 struct idt_entry idt[256];
 struct idt_ptr idtp;
 
+// Layout pushed by idt_stubs.asm before calling C handlers.
+struct interrupt_frame {
+    uint32_t gs;
+    uint32_t fs;
+    uint32_t es;
+    uint32_t ds;
+    uint32_t edi;
+    uint32_t esi;
+    uint32_t ebp;
+    uint32_t esp;
+    uint32_t ebx;
+    uint32_t edx;
+    uint32_t ecx;
+    uint32_t eax;
+    uint32_t int_no;
+    uint32_t err_code;
+} __attribute__((packed));
+
 // External assembly function to load IDT
 extern "C" void idt_flush(uint32_t idt_ptr);
 
@@ -129,6 +147,9 @@ static void pic_remap() {
     outb(PIC1_DATA, ICW4_8086);
     outb(PIC2_DATA, ICW4_8086);
     
+    // Keep BIOS mask defaults, but always allow timer, keyboard, and cascade IRQs.
+    mask1 &= (uint8_t)~((1u << 0) | (1u << 1) | (1u << 2));
+
     // Restore masks
     outb(PIC1_DATA, mask1);
     outb(PIC2_DATA, mask2);
@@ -238,7 +259,10 @@ extern "C" void serial_print(const char* str);
 extern "C" void serial_print_hex(uint32_t value);
 
 // Common exception handler
-extern "C" void exception_handler(uint32_t int_no, uint32_t err_code) {
+extern "C" void exception_handler(interrupt_frame* frame) {
+    uint32_t int_no = frame->int_no;
+    uint32_t err_code = frame->err_code;
+
     // Print exception info to serial
     serial_print("\n!!! EXCEPTION: ");
     if (int_no < 19) {
@@ -264,7 +288,9 @@ extern "C" void exception_handler(uint32_t int_no, uint32_t err_code) {
 extern "C" void keyboard_handler();
 extern "C" void timer_handler(); // From timer.cpp
 
-extern "C" void irq_handler(uint32_t irq_no) {
+extern "C" void irq_handler(interrupt_frame* frame) {
+    uint32_t irq_no = frame->int_no;
+
     // Route to specific handler
     switch (irq_no) {
         case 0: // Timer (PIT)
@@ -279,7 +305,6 @@ extern "C" void irq_handler(uint32_t irq_no) {
     }
     
     // Send EOI (End of Interrupt) to PIC
-    // Note: Timer handler already sends EOI, but doing it twice is safe
     if (irq_no >= 8) {
         outb(PIC2_COMMAND, 0x20); // Send to slave
     }

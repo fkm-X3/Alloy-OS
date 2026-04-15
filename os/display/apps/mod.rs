@@ -1,5 +1,6 @@
 pub mod window_manager;
 pub mod desktop_shell;
+pub mod toolbox_apps;
 
 use crate::protocol::SurfaceId;
 

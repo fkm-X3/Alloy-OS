@@ -29,16 +29,28 @@ const KEY_SPECIAL_RIGHT: u8 = 131;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellApp {
     Terminal,
-    ComingSoon,
+    Settings,
+    FileExplorer,
+    TextEditor,
+    Calculator,
 }
 
 impl ShellApp {
-    pub const ALL: [ShellApp; 2] = [ShellApp::Terminal, ShellApp::ComingSoon];
+    pub const ALL: [ShellApp; 5] = [
+        ShellApp::Terminal,
+        ShellApp::Settings,
+        ShellApp::FileExplorer,
+        ShellApp::TextEditor,
+        ShellApp::Calculator,
+    ];
 
     pub const fn index(self) -> usize {
         match self {
             ShellApp::Terminal => 0,
-            ShellApp::ComingSoon => 1,
+            ShellApp::Settings => 1,
+            ShellApp::FileExplorer => 2,
+            ShellApp::TextEditor => 3,
+            ShellApp::Calculator => 4,
         }
     }
 }
@@ -119,7 +131,7 @@ pub struct DesktopShell {
     launcher_selection: usize,
     control_mode: bool,
     dirty: bool,
-    entries: [ShellWindowEntry; 2],
+    entries: [ShellWindowEntry; 5],
 }
 
 impl DesktopShell {
@@ -186,7 +198,10 @@ impl DesktopShell {
             dirty: true,
             entries: [
                 ShellWindowEntry::new(ShellApp::Terminal),
-                ShellWindowEntry::new(ShellApp::ComingSoon),
+                ShellWindowEntry::new(ShellApp::Settings),
+                ShellWindowEntry::new(ShellApp::FileExplorer),
+                ShellWindowEntry::new(ShellApp::TextEditor),
+                ShellWindowEntry::new(ShellApp::Calculator),
             ],
         };
 
@@ -297,7 +312,25 @@ impl DesktopShell {
                 self.launcher_selection = 1;
                 self.launcher_visible = false;
                 self.dirty = true;
-                return ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::ComingSoon));
+                return ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::Settings));
+            }
+            b'3' => {
+                self.launcher_selection = 2;
+                self.launcher_visible = false;
+                self.dirty = true;
+                return ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::FileExplorer));
+            }
+            b'4' => {
+                self.launcher_selection = 3;
+                self.launcher_visible = false;
+                self.dirty = true;
+                return ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::TextEditor));
+            }
+            b'5' => {
+                self.launcher_selection = 4;
+                self.launcher_visible = false;
+                self.dirty = true;
+                return ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::Calculator));
             }
             _ => {}
         }
@@ -540,7 +573,10 @@ impl DesktopShell {
 
             let accent = match entry.app {
                 ShellApp::Terminal => 0xFF66D9EF,
-                ShellApp::ComingSoon => 0xFF8CD79A,
+                ShellApp::Settings => 0xFF95B8FF,
+                ShellApp::FileExplorer => 0xFFE0B46D,
+                ShellApp::TextEditor => 0xFFBEC6D8,
+                ShellApp::Calculator => 0xFF8FD1A2,
             };
             Self::fill_rect(
                 &mut pixels,
@@ -617,23 +653,29 @@ impl DesktopShell {
             0xFF84C0FF,
         );
 
-        let grid_padding_x: u32 = 16;
-        let grid_start_y: u32 = 36;
-        let grid_gap: u32 = 12;
+        let grid_padding_x: u32 = 12;
+        let grid_padding_y: u32 = 36;
+        let grid_gap_x: u32 = 8;
+        let grid_gap_y: u32 = 8;
+        let columns = 3u32;
+        let rows = 2u32;
         let usable_width = self
             .launcher_width
             .saturating_sub(grid_padding_x.saturating_mul(2))
-            .saturating_sub(grid_gap);
-        let tile_width = (usable_width / 2).max(32);
-        let tile_height = self
+            .saturating_sub(grid_gap_x.saturating_mul(columns.saturating_sub(1)));
+        let usable_height = self
             .launcher_height
-            .saturating_sub(grid_start_y)
-            .saturating_sub(18)
-            .max(40);
+            .saturating_sub(grid_padding_y)
+            .saturating_sub(12)
+            .saturating_sub(grid_gap_y.saturating_mul(rows.saturating_sub(1)));
+        let tile_width = (usable_width / columns.max(1)).max(24);
+        let tile_height = (usable_height / rows.max(1)).max(24);
 
         for (index, entry) in self.entries.iter().enumerate() {
-            let x = grid_padding_x + (index as u32).saturating_mul(tile_width + grid_gap);
-            let y = grid_start_y;
+            let grid_col = (index as u32) % columns;
+            let grid_row = (index as u32) / columns;
+            let x = grid_padding_x + grid_col.saturating_mul(tile_width + grid_gap_x);
+            let y = grid_padding_y + grid_row.saturating_mul(tile_height + grid_gap_y);
             let mut tile_color = match entry.app {
                 ShellApp::Terminal => match entry.status {
                     ShellWindowStatus::Closed => 0xFF2A2F36,
@@ -641,7 +683,10 @@ impl DesktopShell {
                     ShellWindowStatus::Minimized => 0xFF2E3239,
                     ShellWindowStatus::Hidden => 0xFF2A2F35,
                 },
-                ShellApp::ComingSoon => 0xFF2F3A30,
+                ShellApp::Settings => 0xFF2E3750,
+                ShellApp::FileExplorer => 0xFF4A3E2E,
+                ShellApp::TextEditor => 0xFF3D3D47,
+                ShellApp::Calculator => 0xFF334036,
             };
 
             if self.launcher_selection == index {
@@ -686,9 +731,7 @@ impl DesktopShell {
                     let dot_x = x.saturating_add(tile_width.saturating_sub(14));
                     Self::fill_rect(&mut pixels, self.launcher_width, dot_x, y + 8, 7, 7, status_dot);
                 }
-                ShellApp::ComingSoon => {
-                    Self::draw_plus_icon(&mut pixels, self.launcher_width, x, y, tile_width, tile_height);
-                }
+                _ => Self::draw_app_icon(&mut pixels, self.launcher_width, entry.app, x, y, tile_width, tile_height),
             }
         }
 
@@ -749,9 +792,10 @@ impl DesktopShell {
         );
     }
 
-    fn draw_plus_icon(
+    fn draw_app_icon(
         pixels: &mut [u32],
         stride: u32,
+        app: ShellApp,
         x: u32,
         y: u32,
         width: u32,
@@ -759,27 +803,68 @@ impl DesktopShell {
     ) {
         let center_x = x.saturating_add(width / 2);
         let center_y = y.saturating_add(height / 2);
-        let arm = (width.min(height) / 4).max(8);
-        let thickness = (width.min(height) / 10).max(2);
+        let size = width.min(height).max(8);
 
-        Self::fill_rect(
-            pixels,
-            stride,
-            center_x.saturating_sub(thickness / 2),
-            center_y.saturating_sub(arm),
-            thickness,
-            arm.saturating_mul(2).saturating_add(1),
-            0xFF8CD79A,
-        );
-        Self::fill_rect(
-            pixels,
-            stride,
-            center_x.saturating_sub(arm),
-            center_y.saturating_sub(thickness / 2),
-            arm.saturating_mul(2).saturating_add(1),
-            thickness,
-            0xFF8CD79A,
-        );
+        match app {
+            ShellApp::Settings => {
+                let arm = (size / 4).max(6);
+                Self::fill_rect(
+                    pixels,
+                    stride,
+                    center_x.saturating_sub(1),
+                    center_y.saturating_sub(arm),
+                    3,
+                    arm.saturating_mul(2).saturating_add(1),
+                    0xFF95B8FF,
+                );
+                Self::fill_rect(
+                    pixels,
+                    stride,
+                    center_x.saturating_sub(arm),
+                    center_y.saturating_sub(1),
+                    arm.saturating_mul(2).saturating_add(1),
+                    3,
+                    0xFF95B8FF,
+                );
+            }
+            ShellApp::FileExplorer => {
+                let left = x.saturating_add(6);
+                let top = y.saturating_add(height / 3);
+                let body_w = width.saturating_sub(12).max(8);
+                let body_h = height.saturating_sub(height / 3).saturating_sub(6).max(6);
+                Self::fill_rect(pixels, stride, left, top, body_w, body_h, 0xFFE0B46D);
+                Self::fill_rect(
+                    pixels,
+                    stride,
+                    left.saturating_add(2),
+                    top.saturating_add(2),
+                    body_w.saturating_sub(4).max(1),
+                    body_h.saturating_sub(4).max(1),
+                    0xFF243142,
+                );
+            }
+            ShellApp::TextEditor => {
+                let left = x.saturating_add(7);
+                let top = y.saturating_add(6);
+                let line_w = width.saturating_sub(14).max(6);
+                for row in 0..4u32 {
+                    let line_y = top.saturating_add(row.saturating_mul(6));
+                    Self::fill_rect(pixels, stride, left, line_y, line_w, 2, 0xFFBEC6D8);
+                }
+            }
+            ShellApp::Calculator => {
+                let key_w = (width.saturating_sub(14) / 3).max(4);
+                let key_h = (height.saturating_sub(14) / 3).max(4);
+                for row in 0..3u32 {
+                    for col in 0..3u32 {
+                        let key_x = x.saturating_add(6).saturating_add(col.saturating_mul(key_w + 1));
+                        let key_y = y.saturating_add(6).saturating_add(row.saturating_mul(key_h + 1));
+                        Self::fill_rect(pixels, stride, key_x, key_y, key_w, key_h, 0xFF8FD1A2);
+                    }
+                }
+            }
+            ShellApp::Terminal => {}
+        }
     }
 
     fn slot_color(entry: ShellWindowEntry) -> u32 {
@@ -876,15 +961,15 @@ pub fn default_window_options_for_app(
                 .with_focused(true)
                 .with_resizable(false)
         }
-        ShellApp::ComingSoon => {
+        ShellApp::Settings | ShellApp::FileExplorer | ShellApp::TextEditor | ShellApp::Calculator => {
             let width = 320u32.min(workspace_width.saturating_sub(32).max(120));
             let max_height = workspace_height.saturating_sub(PANEL_HEIGHT + 32).max(96);
             let height = 180u32.min(max_height);
             WindowOptions::new(ClientId::new(1), width, height)
                 .with_position(24, 24)
-                .with_z_order(1)
-                .with_visibility(false)
-                .with_focused(false)
+                .with_z_order(2)
+                .with_visibility(true)
+                .with_focused(true)
                 .with_resizable(false)
         }
     }
@@ -1035,7 +1120,7 @@ mod tests {
         );
         assert_eq!(
             shell.handle_control_key(KEY_ENTER),
-            ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::ComingSoon)),
+            ShellInputOutcome::Action(ShellAction::ActivateApp(ShellApp::Settings)),
             "selected app should activate"
         );
         assert!(!shell.launcher_visible(), "launcher should close after activation");
@@ -1066,11 +1151,9 @@ mod tests {
         let entries = shell.entries();
         assert_eq!(entries[0].status, ShellWindowStatus::Normal);
         assert!(entries[0].focused, "terminal should start focused");
-        assert_eq!(
-            entries[1].status,
-            ShellWindowStatus::Closed,
-            "coming-soon tile should not map to a managed window"
-        );
+        for entry in entries.iter().skip(1) {
+            assert_eq!(entry.status, ShellWindowStatus::Closed, "non-terminal app should start closed");
+        }
 
         wm.minimize_focused(&mut server)
             .expect("focused terminal window should minimize");

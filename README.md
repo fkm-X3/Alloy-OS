@@ -32,7 +32,7 @@ the display-server path now boots into a keyboard-first desktop shell (`os/displ
 - **ESC**: exit display mode
 - **`**: toggle keyboard window-control mode
 - **L** (control mode): toggle launcher
-- **1 / 2** (control mode): quick-switch terminal/info app
+- **1 / 2 / 3 / 4 / 5** (control mode): quick-launch terminal/settings/file explorer/text editor/calculator
 - **Arrow keys / Tab** (launcher open): move launcher selection
 - **Enter / Space** (launcher open): activate selected launcher app
 - **PgUp / PgDn**: cycle focused window
@@ -55,5 +55,5 @@ when Alloy falls back to terminal mode, these built-in commands are available:
 the display-server + window-manager path should stay gated until all are true:
 - wm + shell unit tests pass in `os/display` (focus/state/bounds + shell behavior)
 - kernel builds cleanly with the display-server path integrated (`make`)
-- headless runtime smoke (`make output`) exercises launcher/quick-switch + focus/move/resize/minimize/hide/restore/close without lockups
+- headless runtime smoke (`make output`) exercises launcher/toolbox app activation + focus/move/resize/minimize/hide/restore/close without lockups
 - terminal fallback remains intact if display-server startup fails

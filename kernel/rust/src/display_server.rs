@@ -1,6 +1,7 @@
 use alloy_os_display::apps::desktop_shell::{
     DesktopShell, ShellAction, ShellApp, ShellInputOutcome, default_window_options_for_app,
 };
+use alloy_os_display::apps::toolbox_apps::{ToolboxAppState, render_toolbox_app};
 use alloy_os_display::apps::window_manager::{InputOutcome, WindowId, WindowManager, WindowOptions, WindowState};
 use alloy_os_display::protocol::{ClientId, DisplayEvent, DisplayRequest, SurfaceId};
 use alloy_os_display::server::{DisplayBackend, DisplayServer};
@@ -94,6 +95,83 @@ struct ManagedWindowBinding {
     surface_id: SurfaceId,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct AppRuntime {
+    terminal_binding: Option<ManagedWindowBinding>,
+    settings_binding: Option<ManagedWindowBinding>,
+    file_explorer_binding: Option<ManagedWindowBinding>,
+    text_editor_binding: Option<ManagedWindowBinding>,
+    calculator_binding: Option<ManagedWindowBinding>,
+    settings_state: ToolboxAppState,
+    file_explorer_state: ToolboxAppState,
+    text_editor_state: ToolboxAppState,
+    calculator_state: ToolboxAppState,
+}
+
+impl AppRuntime {
+    fn new() -> Self {
+        Self {
+            terminal_binding: None,
+            settings_binding: None,
+            file_explorer_binding: None,
+            text_editor_binding: None,
+            calculator_binding: None,
+            settings_state: ToolboxAppState::new(ShellApp::Settings),
+            file_explorer_state: ToolboxAppState::new(ShellApp::FileExplorer),
+            text_editor_state: ToolboxAppState::new(ShellApp::TextEditor),
+            calculator_state: ToolboxAppState::new(ShellApp::Calculator),
+        }
+    }
+
+    fn binding(&self, app: ShellApp) -> Option<ManagedWindowBinding> {
+        match app {
+            ShellApp::Terminal => self.terminal_binding,
+            ShellApp::Settings => self.settings_binding,
+            ShellApp::FileExplorer => self.file_explorer_binding,
+            ShellApp::TextEditor => self.text_editor_binding,
+            ShellApp::Calculator => self.calculator_binding,
+        }
+    }
+
+    fn binding_mut(&mut self, app: ShellApp) -> &mut Option<ManagedWindowBinding> {
+        match app {
+            ShellApp::Terminal => &mut self.terminal_binding,
+            ShellApp::Settings => &mut self.settings_binding,
+            ShellApp::FileExplorer => &mut self.file_explorer_binding,
+            ShellApp::TextEditor => &mut self.text_editor_binding,
+            ShellApp::Calculator => &mut self.calculator_binding,
+        }
+    }
+
+    fn toolbox_state_mut(&mut self, app: ShellApp) -> Option<&mut ToolboxAppState> {
+        match app {
+            ShellApp::Settings => Some(&mut self.settings_state),
+            ShellApp::FileExplorer => Some(&mut self.file_explorer_state),
+            ShellApp::TextEditor => Some(&mut self.text_editor_state),
+            ShellApp::Calculator => Some(&mut self.calculator_state),
+            ShellApp::Terminal => None,
+        }
+    }
+
+    fn app_for_window(&self, window_id: WindowId) -> Option<ShellApp> {
+        for app in ShellApp::ALL {
+            if self.binding(app).map(|binding| binding.window_id) == Some(window_id) {
+                return Some(app);
+            }
+        }
+        None
+    }
+
+    fn app_for_surface(&self, surface_id: SurfaceId) -> Option<ShellApp> {
+        for app in ShellApp::ALL {
+            if self.binding(app).map(|binding| binding.surface_id) == Some(surface_id) {
+                return Some(app);
+            }
+        }
+        None
+    }
+}
+
 fn serial_log(message: &'static [u8]) {
     unsafe {
         ffi::serial_print(message.as_ptr());
@@ -185,11 +263,11 @@ fn ensure_terminal_binding<B: DisplayBackend>(
     wm: &mut WindowManager,
     server: &mut DisplayServer<B>,
     terminal_surface: &mut TerminalSurface,
-    terminal_binding: &mut Option<ManagedWindowBinding>,
+    runtime: &mut AppRuntime,
     workspace_width: u32,
     workspace_height: u32,
 ) -> Result<ManagedWindowBinding, DisplayServerBootError> {
-    if let Some(binding) = terminal_binding.as_ref().copied() {
+    if let Some(binding) = runtime.terminal_binding {
         if wm.window_state(binding.window_id).is_some() {
             focus_or_restore_binding(wm, server, binding)?;
             shell.bind_window(ShellApp::Terminal, binding.window_id);
@@ -197,13 +275,60 @@ fn ensure_terminal_binding<B: DisplayBackend>(
         }
     }
 
-    *terminal_binding = None;
+    runtime.terminal_binding = None;
     shell.clear_binding(ShellApp::Terminal);
 
     let created = spawn_terminal_window(wm, server, terminal_surface, workspace_width, workspace_height)?;
     shell.bind_window(ShellApp::Terminal, created.window_id);
-    *terminal_binding = Some(created);
+    runtime.terminal_binding = Some(created);
     Ok(created)
+}
+
+fn upload_toolbox_surface<B: DisplayBackend>(
+    server: &mut DisplayServer<B>,
+    binding: ManagedWindowBinding,
+    state: &ToolboxAppState,
+) -> Result<(), DisplayServerBootError> {
+    let (surface_width, surface_height) = {
+        let surface = server
+            .surface(binding.surface_id)
+            .ok_or(DisplayServerBootError::SurfaceUpload)?;
+        (surface.width, surface.height)
+    };
+    let pixels = render_toolbox_app(binding.app, state, surface_width, surface_height)
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+    server
+        .upload_surface_pixels(
+            binding.client_id,
+            binding.surface_id,
+            surface_width,
+            surface_height,
+            &pixels,
+            None,
+        )
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)
+}
+
+fn spawn_toolbox_window<B: DisplayBackend>(
+    wm: &mut WindowManager,
+    server: &mut DisplayServer<B>,
+    app: ShellApp,
+    state: &ToolboxAppState,
+    workspace_width: u32,
+    workspace_height: u32,
+    terminal_width: u32,
+    terminal_height: u32,
+) -> Result<ManagedWindowBinding, DisplayServerBootError> {
+    let options = default_window_options_for_app(
+        app,
+        workspace_width,
+        workspace_height,
+        terminal_width,
+        terminal_height,
+    );
+    let binding = create_window_binding(wm, server, app, options)?;
+    upload_toolbox_surface(server, binding, state)?;
+    Ok(binding)
 }
 
 fn activate_shell_app<B: DisplayBackend>(
@@ -212,50 +337,66 @@ fn activate_shell_app<B: DisplayBackend>(
     wm: &mut WindowManager,
     server: &mut DisplayServer<B>,
     terminal_surface: &mut TerminalSurface,
-    terminal_binding: &mut Option<ManagedWindowBinding>,
+    runtime: &mut AppRuntime,
     workspace_width: u32,
     workspace_height: u32,
+    terminal_width: u32,
+    terminal_height: u32,
 ) -> Result<(), DisplayServerBootError> {
-    match app {
-        ShellApp::Terminal => {
-            let _ = ensure_terminal_binding(
-                shell,
-                wm,
-                server,
-                terminal_surface,
-                terminal_binding,
-                workspace_width,
-                workspace_height,
-            )?;
-            Ok(())
-        }
-        ShellApp::ComingSoon => {
-            let binding = ensure_terminal_binding(
-                shell,
-                wm,
-                server,
-                terminal_surface,
-                terminal_binding,
-                workspace_width,
-                workspace_height,
-            )?;
-            terminal_surface.append_system_message("coming soon");
-            let (surface_width, surface_height) = terminal_surface.get_surface_dimensions();
-            upload_terminal_surface(server, terminal_surface, binding, surface_width, surface_height)?;
-            Ok(())
+    if let Some(binding) = runtime.binding(app) {
+        if wm.window_state(binding.window_id).is_some() {
+            focus_or_restore_binding(wm, server, binding)?;
+            shell.bind_window(app, binding.window_id);
+            return Ok(());
         }
     }
+
+    *runtime.binding_mut(app) = None;
+    shell.clear_binding(app);
+
+    if app == ShellApp::Terminal {
+        let _ = ensure_terminal_binding(
+            shell,
+            wm,
+            server,
+            terminal_surface,
+            runtime,
+            workspace_width,
+            workspace_height,
+        )?;
+        return Ok(());
+    }
+
+    let state = *runtime
+        .toolbox_state_mut(app)
+        .ok_or(DisplayServerBootError::SurfaceUpload)?;
+    let created = spawn_toolbox_window(
+        wm,
+        server,
+        app,
+        &state,
+        workspace_width,
+        workspace_height,
+        terminal_width,
+        terminal_height,
+    )?;
+    shell.bind_window(app, created.window_id);
+    *runtime.binding_mut(app) = Some(created);
+    Ok(())
 }
 
-fn clear_dead_binding(
+fn clear_dead_bindings(
     wm: &WindowManager,
     shell: &mut DesktopShell,
-    binding: &mut Option<ManagedWindowBinding>,
+    runtime: &mut AppRuntime,
 ) {
-    if let Some(current) = binding.as_ref().copied() {
-        if wm.window_state(current.window_id).is_none() {
-            shell.clear_binding(current.app);
-            *binding = None;
+    for app in ShellApp::ALL {
+        let binding = runtime.binding(app);
+        if let Some(current) = binding {
+            if wm.window_state(current.window_id).is_none() {
+                shell.clear_binding(current.app);
+                *runtime.binding_mut(app) = None;
+            }
         }
     }
 }
@@ -292,8 +433,8 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     wm.set_workspace_bounds(display_width, workspace_height)
         .map_err(|_| DisplayServerBootError::WindowManager)?;
 
-    let (surface_width, surface_height) = terminal_surface.get_surface_dimensions();
-    let mut terminal_binding: Option<ManagedWindowBinding> = None;
+    let (terminal_surface_width, terminal_surface_height) = terminal_surface.get_surface_dimensions();
+    let mut runtime = AppRuntime::new();
     shell.sync_from_window_manager(&wm);
     shell.render(&mut server).map_err(|_| DisplayServerBootError::Shell)?;
 
@@ -307,7 +448,7 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     }
     serial_log(b"[DisplayServer] First frame presented\n\0");
     serial_log(
-        b"[DisplayServer] Desktop shell ready - launcher starts open, Arrow/Tab selects tile, Enter/Space activates tile, ` toggles control mode, 1 focuses terminal, 2 prints coming soon\n\0",
+        b"[DisplayServer] Desktop shell ready - launcher starts open, Arrow/Tab selects tile, Enter/Space activates tile, ` toggles control mode, 1-5 quick-launch toolbox apps\n\0",
     );
 
     loop {
@@ -329,9 +470,11 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                                         &mut wm,
                                         &mut server,
                                         &mut terminal_surface,
-                                        &mut terminal_binding,
+                                        &mut runtime,
                                         display_width,
                                         display_height,
+                                        terminal_surface_width,
+                                        terminal_surface_height,
                                     )?;
                                 }
                             }
@@ -353,8 +496,8 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                                 .route_key_input(key, true)
                                 .map_err(|_| DisplayServerBootError::FramePresent)?;
 
-                            if terminal_binding
-                                .as_ref()
+                            if runtime
+                                .terminal_binding
                                 .map(|binding| binding.window_id)
                                 == Some(window_id)
                             {
@@ -365,17 +508,26 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                                     .render()
                                     .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
 
-                                if let Some(binding) = terminal_binding.as_ref().copied() {
+                                if let Some(binding) = runtime.terminal_binding {
                                     server
                                         .upload_surface_pixels(
                                             binding.client_id,
                                             binding.surface_id,
-                                            surface_width,
-                                            surface_height,
+                                            terminal_surface_width,
+                                            terminal_surface_height,
                                             terminal_surface.surface().get_buffer(),
                                             None,
                                         )
                                         .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+                                }
+                            } else if let Some(app) = runtime.app_for_window(window_id) {
+                                if let Some(state) = runtime.toolbox_state_mut(app) {
+                                    let _ = state.handle_input(key);
+                                }
+                                if let Some(binding) = runtime.binding(app) {
+                                    if let Some(state) = runtime.toolbox_state_mut(app) {
+                                        upload_toolbox_surface(&mut server, binding, state)?;
+                                    }
                                 }
                             }
                         }
@@ -384,7 +536,7 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
             }
         }
 
-        clear_dead_binding(&wm, &mut shell, &mut terminal_binding);
+        clear_dead_bindings(&wm, &mut shell, &mut runtime);
         shell.set_control_mode(wm.is_control_mode());
         shell.sync_from_window_manager(&wm);
         shell.render(&mut server).map_err(|_| DisplayServerBootError::Shell)?;
@@ -399,28 +551,31 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                 DisplayEvent::FocusChanged {
                     surface_id: Some(surface_id),
                 } => {
-                    if terminal_binding
-                        .as_ref()
-                        .map(|binding| binding.surface_id)
-                        == Some(surface_id)
-                    {
-                        serial_log(b"[DisplayServer] Focus changed -> terminal\n\0");
-                    } else {
-                        serial_log(b"[DisplayServer] Focus changed -> unmanaged surface\n\0");
+                    match runtime.app_for_surface(surface_id) {
+                        Some(ShellApp::Terminal) => serial_log(b"[DisplayServer] Focus changed -> terminal\n\0"),
+                        Some(ShellApp::Settings) => serial_log(b"[DisplayServer] Focus changed -> settings\n\0"),
+                        Some(ShellApp::FileExplorer) => serial_log(b"[DisplayServer] Focus changed -> file explorer\n\0"),
+                        Some(ShellApp::TextEditor) => serial_log(b"[DisplayServer] Focus changed -> text editor\n\0"),
+                        Some(ShellApp::Calculator) => serial_log(b"[DisplayServer] Focus changed -> calculator\n\0"),
+                        None => serial_log(b"[DisplayServer] Focus changed -> unmanaged surface\n\0"),
                     }
                 }
                 DisplayEvent::FocusChanged { surface_id: None } => {
                     serial_log(b"[DisplayServer] Focus cleared\n\0");
                 }
                 DisplayEvent::SurfaceDestroyed { surface_id } => {
-                    if terminal_binding
-                        .as_ref()
-                        .map(|binding| binding.surface_id)
-                        == Some(surface_id)
-                    {
-                        terminal_binding = None;
-                        shell.clear_binding(ShellApp::Terminal);
-                        serial_log(b"[DisplayServer] Terminal surface destroyed\n\0");
+                    if let Some(app) = runtime.app_for_surface(surface_id) {
+                        *runtime.binding_mut(app) = None;
+                        shell.clear_binding(app);
+                        match app {
+                            ShellApp::Terminal => serial_log(b"[DisplayServer] Terminal surface destroyed\n\0"),
+                            ShellApp::Settings => serial_log(b"[DisplayServer] Settings surface destroyed\n\0"),
+                            ShellApp::FileExplorer => {
+                                serial_log(b"[DisplayServer] File explorer surface destroyed\n\0")
+                            }
+                            ShellApp::TextEditor => serial_log(b"[DisplayServer] Text editor surface destroyed\n\0"),
+                            ShellApp::Calculator => serial_log(b"[DisplayServer] Calculator surface destroyed\n\0"),
+                        }
                     }
                 }
                 _ => {}

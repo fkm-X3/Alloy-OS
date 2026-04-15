@@ -43,6 +43,14 @@ the display-server path now boots into a keyboard-first desktop shell (`os/displ
 - **R** (control mode): restore next hidden/minimized window
 - **C / X** (control mode): close focused window
 
+### terminal core utilities
+when Alloy falls back to terminal mode, these built-in commands are available:
+
+- `help [command]` - list commands or show detailed help
+- `clear`, `echo`, `version`
+- `sysinfo`, `uname`, `free`, `ticks`
+- `meminfo`, `cpuinfo`, `uptime`
+
 ### default-boot promotion gate
 the display-server + window-manager path should stay gated until all are true:
 - wm + shell unit tests pass in `os/display` (focus/state/bounds + shell behavior)

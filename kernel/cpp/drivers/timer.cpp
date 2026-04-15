@@ -61,6 +61,10 @@ extern "C" uint64_t timer_get_uptime_ms() {
     return (g_timer_ticks * 1000) / g_timer_frequency;
 }
 
+extern "C" uint32_t timer_get_frequency() {
+    return g_timer_frequency;
+}
+
 // Timer IRQ handler (will be called from IDT interrupt handler)
 extern "C" void timer_handler() {
     // Increment tick counter
@@ -81,5 +85,9 @@ extern "C" {
     
     uint64_t timer_get_uptime_ms_ffi() {
         return timer_get_uptime_ms();
+    }
+
+    uint32_t timer_get_frequency_ffi() {
+        return timer_get_frequency();
     }
 }

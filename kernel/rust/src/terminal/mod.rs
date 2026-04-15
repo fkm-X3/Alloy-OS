@@ -50,6 +50,10 @@ impl Terminal {
         registry.register(Box::new(ClearCommand));
         registry.register(Box::new(EchoCommand));
         registry.register(Box::new(VersionCommand));
+        registry.register(Box::new(SysinfoCommand));
+        registry.register(Box::new(UnameCommand));
+        registry.register(Box::new(FreeCommand));
+        registry.register(Box::new(TicksCommand));
         registry.register(Box::new(MeminfoCommand));
         registry.register(Box::new(CpuInfoCommand));
         registry.register(Box::new(UptimeCommand));

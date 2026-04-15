@@ -39,6 +39,9 @@ extern "C" uint64_t timer_get_ticks();
 // Get system uptime in milliseconds
 extern "C" uint64_t timer_get_uptime_ms();
 
+// Get configured PIT frequency in Hz
+extern "C" uint32_t timer_get_frequency();
+
 // Timer IRQ handler (called from IDT)
 extern "C" void timer_handler();
 

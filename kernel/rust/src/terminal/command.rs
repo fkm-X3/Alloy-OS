@@ -9,6 +9,98 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use crate::terminal::colors;
 
+const OS_NAME: &str = "Alloy Operating System";
+const OS_VERSION: &str = "0.7.0-dev (Phase 7)";
+const OS_ARCH: &str = "x86 (32-bit)";
+const OS_LANGUAGE: &str = "C++ + Rust";
+const OS_UNAME: &str = "AlloyOS";
+
+fn print_u32_decimal_line(label: &str, value: u32) {
+    use crate::utils::format;
+
+    let value_buf = format::u32_to_decimal(value);
+    let value_start = format::trim_leading_spaces(&value_buf);
+    crate::ffi::vga_print_str(label);
+    unsafe {
+        crate::ffi::vga_println(&value_buf[value_start] as *const u8);
+    }
+}
+
+fn print_u64_decimal_line(label: &str, value: u64) {
+    use crate::utils::format;
+
+    let value_buf = format::u64_to_decimal(value);
+    let value_start = format::trim_leading_spaces(&value_buf);
+    crate::ffi::vga_print_str(label);
+    unsafe {
+        crate::ffi::vga_println(&value_buf[value_start] as *const u8);
+    }
+}
+
+fn print_size_line(label: &str, bytes: u64) {
+    use crate::utils::format;
+
+    let (value_buf, unit_buf) = format::format_bytes(bytes);
+    let value_start = format::trim_leading_spaces(&value_buf);
+    crate::ffi::vga_print_str(label);
+    unsafe {
+        crate::ffi::vga_print(&value_buf[value_start] as *const u8);
+        crate::ffi::vga_print(b" \0".as_ptr());
+        crate::ffi::vga_println(&unit_buf[0] as *const u8);
+    }
+}
+
+fn print_uptime_value(uptime_ms: u64) {
+    use crate::utils::format;
+
+    let total_seconds = uptime_ms / 1000;
+    let seconds = total_seconds % 60;
+    let total_minutes = total_seconds / 60;
+    let minutes = total_minutes % 60;
+    let total_hours = total_minutes / 60;
+    let hours = total_hours % 24;
+    let days = total_hours / 24;
+
+    if days > 0 {
+        let days_str = format::u32_to_decimal(days as u32);
+        let days_start = format::trim_leading_spaces(&days_str);
+        unsafe {
+            crate::ffi::vga_print(&days_str[days_start] as *const u8);
+            if days == 1 {
+                crate::ffi::vga_print(b" day, \0".as_ptr());
+            } else {
+                crate::ffi::vga_print(b" days, \0".as_ptr());
+            }
+        }
+    }
+
+    let hours_str = format::u32_to_decimal(hours as u32);
+    let minutes_str = format::u32_to_decimal(minutes as u32);
+    let seconds_str = format::u32_to_decimal(seconds as u32);
+
+    unsafe {
+        crate::ffi::vga_print(
+            &hours_str[format::trim_leading_spaces(&hours_str)] as *const u8
+        );
+        crate::ffi::vga_print(b":\0".as_ptr());
+
+        if minutes < 10 {
+            crate::ffi::vga_print(b"0\0".as_ptr());
+        }
+        crate::ffi::vga_print(
+            &minutes_str[format::trim_leading_spaces(&minutes_str)] as *const u8
+        );
+        crate::ffi::vga_print(b":\0".as_ptr());
+
+        if seconds < 10 {
+            crate::ffi::vga_print(b"0\0".as_ptr());
+        }
+        crate::ffi::vga_println(
+            &seconds_str[format::trim_leading_spaces(&seconds_str)] as *const u8
+        );
+    }
+}
+
 /// Command trait for terminal commands
 pub trait Command {
     /// Get command name
@@ -17,8 +109,8 @@ pub trait Command {
     /// Get command help text
     fn help(&self) -> &str;
     
-    /// Execute the command with given arguments
-    fn execute(&self, args: &[&str]) -> Result<(), &str>;
+    /// Execute the command with given arguments and registry context
+    fn execute(&self, args: &[&str], registry: &CommandRegistry) -> Result<(), &str>;
 }
 
 /// Command registry
@@ -42,7 +134,7 @@ impl CommandRegistry {
     /// Execute a command by name
     pub fn execute(&self, name: &str, args: &[&str]) {
         if let Some(cmd) = self.commands.get(name) {
-            match cmd.execute(args) {
+            match cmd.execute(args, self) {
                 Ok(_) => {},
                 Err(err) => {
                     colors::print_error(err);
@@ -59,8 +151,8 @@ impl CommandRegistry {
     }
     
     /// Get a specific command
-    pub fn get(&self, name: &str) -> Option<&Box<dyn Command>> {
-        self.commands.get(name)
+    pub fn get(&self, name: &str) -> Option<&dyn Command> {
+        self.commands.get(name).map(|cmd| cmd.as_ref())
     }
 }
 
@@ -78,16 +170,33 @@ impl Command for HelpCommand {
         "Display available commands or help for a specific command"
     }
     
-    fn execute(&self, args: &[&str]) -> Result<(), &str> {
-        // TODO: Implement help display
+    fn execute(&self, args: &[&str], registry: &CommandRegistry) -> Result<(), &str> {
+        if args.len() > 1 {
+            return Err("Usage: help [command]");
+        }
+
+        if let Some(command_name) = args.first() {
+            if let Some(command) = registry.get(command_name) {
+                colors::print_info(&alloc::format!(
+                    "{:<8} - {}",
+                    command_name,
+                    command.help()
+                ));
+                return Ok(());
+            }
+            return Err("Command not found");
+        }
+
         colors::print_info("Available commands:");
-        crate::ffi::vga_println_str("  help     - Show this help message");
-        crate::ffi::vga_println_str("  clear    - Clear the screen");
-        crate::ffi::vga_println_str("  echo     - Print text to the screen");
-        crate::ffi::vga_println_str("  version  - Show OS version information");
-        crate::ffi::vga_println_str("  meminfo  - Display memory statistics");
-        crate::ffi::vga_println_str("  cpuinfo  - Display CPU information");
-        crate::ffi::vga_println_str("  uptime   - Display system uptime");
+        for command_name in registry.get_commands() {
+            if let Some(command) = registry.get(command_name) {
+                crate::ffi::vga_println_str(&alloc::format!(
+                    "  {:<8} - {}",
+                    command_name,
+                    command.help()
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -104,7 +213,7 @@ impl Command for ClearCommand {
         "Clear the screen"
     }
     
-    fn execute(&self, _args: &[&str]) -> Result<(), &str> {
+    fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         unsafe {
             // Clear screen by printing 25 empty lines
             crate::ffi::vga_set_color(0, 0);
@@ -129,7 +238,7 @@ impl Command for EchoCommand {
         "Print arguments to the screen"
     }
     
-    fn execute(&self, args: &[&str]) -> Result<(), &str> {
+    fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         if args.is_empty() {
             crate::ffi::vga_println_str("");
         } else {
@@ -152,11 +261,11 @@ impl Command for VersionCommand {
         "Display OS version information"
     }
     
-    fn execute(&self, _args: &[&str]) -> Result<(), &str> {
-        colors::print_info("Alloy Operating System");
-        crate::ffi::vga_println_str("Version: 0.7.0-dev (Phase 7)");
-        crate::ffi::vga_println_str("Architecture: x86 (32-bit)");
-        crate::ffi::vga_println_str("Language: C++ + Rust");
+    fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
+        colors::print_info(OS_NAME);
+        crate::ffi::vga_println_str(&alloc::format!("Version: {}", OS_VERSION));
+        crate::ffi::vga_println_str(&alloc::format!("Architecture: {}", OS_ARCH));
+        crate::ffi::vga_println_str(&alloc::format!("Language: {}", OS_LANGUAGE));
         crate::ffi::vga_println_str("");
         crate::ffi::vga_println_str("Features:");
         crate::ffi::vga_println_str("  [x] Multiboot2 boot");
@@ -166,6 +275,159 @@ impl Command for VersionCommand {
         crate::ffi::vga_println_str("  [x] Rust integration");
         crate::ffi::vga_println_str("  [x] Terminal interface");
         crate::ffi::vga_println_str("  [x] Diagnostic commands");
+        Ok(())
+    }
+}
+
+/// System summary command
+pub struct SysinfoCommand;
+
+impl Command for SysinfoCommand {
+    fn name(&self) -> &str {
+        "sysinfo"
+    }
+
+    fn help(&self) -> &str {
+        "Display compact system summary"
+    }
+
+    fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
+        if !args.is_empty() {
+            return Err("Usage: sysinfo");
+        }
+
+        colors::print_info("System Summary");
+        crate::ffi::vga_println_str("");
+        crate::ffi::vga_println_str(OS_NAME);
+        crate::ffi::vga_println_str(&alloc::format!("Version: {}", OS_VERSION));
+        crate::ffi::vga_println_str(&alloc::format!("Architecture: {}", OS_ARCH));
+
+        let mut vendor = [0u8; 13];
+        unsafe {
+            crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
+            crate::ffi::vga_print(b"CPU Vendor: \0".as_ptr());
+            crate::ffi::vga_println(vendor.as_ptr());
+        }
+
+        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
+        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let used_memory = total_memory.saturating_sub(available_memory);
+        print_size_line("Memory Total: ", total_memory);
+        print_size_line("Memory Used:  ", used_memory);
+        print_size_line("Memory Free:  ", available_memory);
+
+        let uptime_ms = unsafe { crate::ffi::get_system_uptime_ms() };
+        crate::ffi::vga_print_str("Uptime: ");
+        print_uptime_value(uptime_ms);
+        Ok(())
+    }
+}
+
+/// Uname command
+pub struct UnameCommand;
+
+impl Command for UnameCommand {
+    fn name(&self) -> &str {
+        "uname"
+    }
+
+    fn help(&self) -> &str {
+        "Print system name (use -a for extended output)"
+    }
+
+    fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
+        if args.len() > 1 {
+            return Err("Usage: uname [-a]");
+        }
+
+        match args.first().copied() {
+            None => crate::ffi::vga_println_str(OS_UNAME),
+            Some("-a") => crate::ffi::vga_println_str(&alloc::format!(
+                "{} {} {} {}",
+                OS_UNAME,
+                OS_VERSION,
+                OS_ARCH,
+                OS_LANGUAGE
+            )),
+            _ => return Err("Usage: uname [-a]"),
+        }
+
+        Ok(())
+    }
+}
+
+/// Free command
+pub struct FreeCommand;
+
+impl Command for FreeCommand {
+    fn name(&self) -> &str {
+        "free"
+    }
+
+    fn help(&self) -> &str {
+        "Display physical and virtual memory usage"
+    }
+
+    fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
+        if !args.is_empty() {
+            return Err("Usage: free");
+        }
+
+        colors::print_info("Memory Usage");
+        crate::ffi::vga_println_str("");
+
+        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
+        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let used_memory = total_memory.saturating_sub(available_memory);
+        let heap_size = unsafe { crate::ffi::vmm_get_heap_size() };
+        let allocated_pages = unsafe { crate::ffi::vmm_get_allocated_pages() };
+
+        crate::ffi::vga_println_str("Physical:");
+        print_size_line("  Total: ", total_memory);
+        print_size_line("  Used:  ", used_memory);
+        print_size_line("  Free:  ", available_memory);
+
+        crate::ffi::vga_println_str("");
+        crate::ffi::vga_println_str("Virtual Heap:");
+        print_size_line("  Mapped bytes: ", heap_size as u64);
+        print_u32_decimal_line("  Alloc pages:  ", allocated_pages);
+
+        Ok(())
+    }
+}
+
+/// Ticks command
+pub struct TicksCommand;
+
+impl Command for TicksCommand {
+    fn name(&self) -> &str {
+        "ticks"
+    }
+
+    fn help(&self) -> &str {
+        "Display PIT tick count and timer configuration"
+    }
+
+    fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
+        if !args.is_empty() {
+            return Err("Usage: ticks");
+        }
+
+        colors::print_info("Timer Statistics");
+        crate::ffi::vga_println_str("");
+
+        let tick_count = unsafe { crate::ffi::timer_get_ticks_ffi() };
+        let uptime_ms = unsafe { crate::ffi::timer_get_uptime_ms_ffi() };
+        let frequency_hz = unsafe { crate::ffi::timer_get_frequency_ffi() };
+
+        print_u64_decimal_line("Tick count:     ", tick_count);
+        print_u64_decimal_line("Uptime (ms):    ", uptime_ms);
+        print_u32_decimal_line("Frequency (Hz): ", frequency_hz);
+
+        if tick_count > 0 {
+            print_u64_decimal_line("Avg ms/tick:    ", uptime_ms / tick_count);
+        }
+
         Ok(())
     }
 }
@@ -182,7 +444,7 @@ impl Command for MeminfoCommand {
         "Display memory allocation statistics"
     }
     
-    fn execute(&self, _args: &[&str]) -> Result<(), &str> {
+    fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         use crate::utils::format;
         
         colors::print_info("Memory Statistics");
@@ -318,7 +580,7 @@ impl Command for CpuInfoCommand {
         "Display CPU information and features"
     }
     
-    fn execute(&self, _args: &[&str]) -> Result<(), &str> {
+    fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         use crate::utils::format;
         
         colors::print_info("CPU Information");
@@ -394,51 +656,12 @@ impl Command for UptimeCommand {
         "Display system uptime"
     }
     
-    fn execute(&self, _args: &[&str]) -> Result<(), &str> {
-        use crate::utils::format;
-        
+    fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         unsafe {
             let uptime_ms = crate::ffi::get_system_uptime_ms();
-            
-            // Convert to seconds, minutes, hours
-            let total_seconds = uptime_ms / 1000;
-            let seconds = total_seconds % 60;
-            let total_minutes = total_seconds / 60;
-            let minutes = total_minutes % 60;
-            let total_hours = total_minutes / 60;
-            let hours = total_hours % 24;
-            let days = total_hours / 24;
-            
+
             colors::print_info("System Uptime");
-            
-            if days > 0 {
-                let days_str = format::u32_to_decimal(days as u32);
-                crate::ffi::vga_print(&days_str[format::trim_leading_spaces(&days_str)] as *const u8);
-                if days == 1 {
-                    crate::ffi::vga_print(b" day, \0".as_ptr());
-                } else {
-                    crate::ffi::vga_print(b" days, \0".as_ptr());
-                }
-            }
-            
-            let hours_str = format::u32_to_decimal(hours as u32);
-            let minutes_str = format::u32_to_decimal(minutes as u32);
-            let seconds_str = format::u32_to_decimal(seconds as u32);
-            
-            crate::ffi::vga_print(&hours_str[format::trim_leading_spaces(&hours_str)] as *const u8);
-            crate::ffi::vga_print(b":\0".as_ptr());
-            
-            // Pad minutes and seconds with leading zeros if needed
-            if minutes < 10 {
-                crate::ffi::vga_print(b"0\0".as_ptr());
-            }
-            crate::ffi::vga_print(&minutes_str[format::trim_leading_spaces(&minutes_str)] as *const u8);
-            crate::ffi::vga_print(b":\0".as_ptr());
-            
-            if seconds < 10 {
-                crate::ffi::vga_print(b"0\0".as_ptr());
-            }
-            crate::ffi::vga_println(&seconds_str[format::trim_leading_spaces(&seconds_str)] as *const u8);
+            print_uptime_value(uptime_ms);
         }
         
         Ok(())

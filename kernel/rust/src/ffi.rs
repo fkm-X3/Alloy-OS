@@ -56,6 +56,7 @@ extern "C" {
     pub fn timer_init_ffi(frequency: u32);
     pub fn timer_get_ticks_ffi() -> u64;
     pub fn timer_get_uptime_ms_ffi() -> u64;
+    pub fn timer_get_frequency_ffi() -> u32;
     
     // VESA VBE graphics functions (from vesa.cpp)
     /// Initialize VESA VBE detection and controller check

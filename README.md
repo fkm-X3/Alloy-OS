@@ -7,7 +7,7 @@ An os built in c/c++ and rust
 make iso
 
 # or be lazy after making iso for the first time
-make fuck
+make lazy
 
 # debug (headless qemu)
 make output

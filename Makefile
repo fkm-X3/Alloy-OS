@@ -123,7 +123,7 @@ clean:
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
 
 # Im lazy
-fuck:
+lazy:
 	@echo "Doing all dat for you."
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean

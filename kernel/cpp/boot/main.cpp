@@ -15,7 +15,7 @@ extern "C" void vga_println(const char* str);
 extern "C" void vga_set_color(uint8_t fg, uint8_t bg);
 extern "C" void vga_putchar(char c);
 extern "C" void keyboard_init();
-extern "C" void mouse_init();
+extern "C" bool mouse_init();
 extern "C" char keyboard_get_char();
 extern "C" void timer_init_ffi(uint32_t frequency);
 extern "C" void vesa_init();
@@ -84,11 +84,17 @@ extern "C" void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     // Initialize PS/2 mouse
     serial_print("Initializing mouse...\n");
     vga_print("[ ] Initializing mouse...");
-    mouse_init();
-    vga_set_color(10, 0);
-    vga_println(" OK");
-    vga_set_color(7, 0);
-    serial_print("Mouse initialized\n");
+    if (mouse_init()) {
+        vga_set_color(10, 0);
+        vga_println(" OK");
+        vga_set_color(7, 0);
+        serial_print("Mouse initialized\n");
+    } else {
+        vga_set_color(14, 0); // Yellow warning
+        vga_println(" WARN");
+        vga_set_color(7, 0);
+        serial_print("Mouse initialization failed; continuing without mouse input\n");
+    }
     
     // Initialize PIT timer
     serial_print("Initializing timer...\n");

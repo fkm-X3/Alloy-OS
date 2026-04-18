@@ -14,6 +14,7 @@ use crate::fusion::terminal::TerminalSurface;
 use crate::graphics::Display;
 use crate::graphics::vesa::VesaDisplay;
 use crate::terminal::Terminal;
+use crate::utils::pointer;
 
 const TERMINAL_CLIENT_ID: ClientId = ClientId::new(1);
 const CURSOR_CLIENT_ID: ClientId = ClientId::new(2);
@@ -513,6 +514,24 @@ fn set_cursor_position<B: DisplayBackend>(
     )
 }
 
+fn set_cursor_visibility<B: DisplayBackend>(
+    server: &mut DisplayServer<B>,
+    cursor_surface: SurfaceId,
+    visible: bool,
+) -> Result<(), DisplayServerBootError> {
+    expect_ack(
+        server
+            .handle_request(
+                CURSOR_CLIENT_ID,
+                DisplayRequest::SetSurfaceVisibility {
+                    surface_id: cursor_surface,
+                    visible,
+                },
+            )
+            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
+    )
+}
+
 pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     serial_log(b"[DisplayServer] Bootstrapping desktop shell runtime\n\0");
     let (display_width, display_height) = display.get_resolution();
@@ -557,7 +576,15 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
         buttons: 0,
         dragging_window: None,
     };
-    set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+    let mouse_ready = ffi::mouse_ready();
+    if mouse_ready {
+        set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+    } else {
+        set_cursor_visibility(&mut server, cursor_surface, false)?;
+        serial_log(b"[DisplayServer] Mouse unavailable; cursor hidden until mouse input is ready\n\0");
+    }
+    let max_pointer_x = display_width.saturating_sub(1) as i32;
+    let max_pointer_y = display_height.saturating_sub(1) as i32;
 
     let boot_uptime = unsafe { ffi::timer_get_uptime_ms_ffi() };
     let first_present_time = boot_uptime.saturating_add(server.frame_interval_ms() as u64);
@@ -662,29 +689,37 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                 break;
             };
 
-            let delta_x = mouse_event.dx as i32;
-            let delta_y = -(mouse_event.dy as i32);
+            let mut delta_x = mouse_event.dx as i32;
+            let mut delta_y = -(mouse_event.dy as i32);
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_X_OVERFLOW) != 0 {
+                delta_x = 0;
+            }
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_Y_OVERFLOW) != 0 {
+                delta_y = 0;
+            }
 
             if delta_x != 0 || delta_y != 0 {
-                let max_x = display_width.saturating_sub(1) as i32;
-                let max_y = display_height.saturating_sub(1) as i32;
-                let next_x = pointer.x.saturating_add(delta_x).clamp(0, max_x);
-                let next_y = pointer.y.saturating_add(delta_y).clamp(0, max_y);
-                let actual_dx = next_x.saturating_sub(pointer.x);
-                let actual_dy = next_y.saturating_sub(pointer.y);
+                let movement = pointer::apply_relative_motion(
+                    pointer.x,
+                    pointer.y,
+                    delta_x,
+                    delta_y,
+                    max_pointer_x,
+                    max_pointer_y,
+                );
 
-                if actual_dx != 0 || actual_dy != 0 {
-                    pointer.x = next_x;
-                    pointer.y = next_y;
+                if movement.actual_dx != 0 || movement.actual_dy != 0 {
+                    pointer.x = movement.next_x;
+                    pointer.y = movement.next_y;
                     set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
                     server
-                        .route_pointer_motion(pointer.x, pointer.y, actual_dx, actual_dy)
+                        .route_pointer_motion(pointer.x, pointer.y, movement.actual_dx, movement.actual_dy)
                         .map_err(|_| DisplayServerBootError::FramePresent)?;
 
                     if pointer.dragging_window.is_some()
                         && (mouse_event.buttons & ffi::MOUSE_BUTTON_LEFT) != 0
                     {
-                        wm.move_focused_by(&mut server, actual_dx, actual_dy)
+                        wm.move_focused_by(&mut server, movement.actual_dx, movement.actual_dy)
                             .map_err(|_| DisplayServerBootError::WindowManager)?;
                     }
                 }
@@ -695,11 +730,9 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                 (ffi::MOUSE_BUTTON_RIGHT, MouseButton::Right),
                 (ffi::MOUSE_BUTTON_MIDDLE, MouseButton::Middle),
             ] {
-                let was_pressed = (pointer.buttons & mask) != 0;
-                let is_pressed = (mouse_event.buttons & mask) != 0;
-                if was_pressed == is_pressed {
+                let Some(is_pressed) = pointer::button_state_changed(pointer.buttons, mouse_event.buttons, mask) else {
                     continue;
-                }
+                };
 
                 server
                     .route_mouse_button(button, is_pressed, pointer.x, pointer.y)

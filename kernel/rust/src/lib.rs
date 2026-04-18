@@ -23,6 +23,7 @@ pub mod fusion;
 pub mod display_server;
 
 use core::panic::PanicInfo;
+use crate::graphics::color::Color;
 
 const ENABLE_OS_DISPLAY_SERVER: bool = true;
 
@@ -263,17 +264,14 @@ pub extern "C" fn rust_main() {
                         );
                     }
 
-                    // Keep the display manager running with a simple event loop
-                    loop {
-                        if ffi::keyboard_has_key() {
-                            let key = ffi::keyboard_read();
-                            if key == 27 {
-                                break;
+                    match run_legacy_fusion_mouse_runtime(&mut manager) {
+                        Ok(_) => {}
+                        Err(_) => {
+                            unsafe {
+                                ffi::serial_print(
+                                    b"[Fusion] Mouse runtime failed, falling back to terminal\n\0".as_ptr(),
+                                );
                             }
-                        }
-
-                        for _ in 0..100000 {
-                            // Simple delay loop
                         }
                     }
 
@@ -301,6 +299,119 @@ pub extern "C" fn rust_main() {
         }
         start_terminal();
     }
+}
+
+fn run_legacy_fusion_mouse_runtime(
+    manager: &mut fusion::DisplayManager,
+) -> Result<(), fusion::ManagerError> {
+    const CURSOR_WIDTH: u32 = 10;
+    const CURSOR_HEIGHT: u32 = 14;
+
+    let (display_width, display_height) = manager.resolution();
+    let max_x = display_width.saturating_sub(CURSOR_WIDTH) as i32;
+    let max_y = display_height.saturating_sub(CURSOR_HEIGHT) as i32;
+
+    let mut pointer_x = (display_width / 2) as i32;
+    let mut pointer_y = (display_height / 2) as i32;
+    let mut mouse_available = ffi::mouse_ready();
+
+    if !mouse_available {
+        unsafe {
+            ffi::serial_print(
+                b"[Fusion] Mouse unavailable in fallback mode; waiting for input events\n\0".as_ptr(),
+            );
+            ffi::serial_print(b"[Fusion] Mouse init error code: \0".as_ptr());
+        }
+        serial_print_u32(ffi::mouse_init_error_code() as u32);
+        unsafe {
+            ffi::serial_print(b"\n\0".as_ptr());
+        }
+    }
+
+    manager.queue_render(fusion::RenderCommand::ClearScreen(Color::BLACK))?;
+    if mouse_available {
+        manager.queue_render(fusion::RenderCommand::DrawRect {
+            x: pointer_x as u32,
+            y: pointer_y as u32,
+            w: CURSOR_WIDTH,
+            h: CURSOR_HEIGHT,
+            color: Color::WHITE,
+        })?;
+    }
+    manager.process_queue()?;
+    manager.flush()?;
+
+    loop {
+        if ffi::keyboard_has_key() {
+            let key = ffi::keyboard_read();
+            if key == 27 {
+                break;
+            }
+        }
+
+        while ffi::mouse_has_event() {
+            let Some(mouse_event) = ffi::mouse_read() else {
+                break;
+            };
+            if !mouse_available {
+                mouse_available = true;
+                unsafe {
+                    ffi::serial_print(b"[Fusion] Mouse input stream detected\n\0".as_ptr());
+                }
+            }
+
+            let mut delta_x = mouse_event.dx as i32;
+            let mut delta_y = -(mouse_event.dy as i32);
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_X_OVERFLOW) != 0 {
+                delta_x = 0;
+            }
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_Y_OVERFLOW) != 0 {
+                delta_y = 0;
+            }
+            if delta_x == 0 && delta_y == 0 {
+                continue;
+            }
+
+            let movement = utils::pointer::apply_relative_motion(
+                pointer_x,
+                pointer_y,
+                delta_x,
+                delta_y,
+                max_x,
+                max_y,
+            );
+            if movement.actual_dx == 0 && movement.actual_dy == 0 {
+                continue;
+            }
+
+            manager.queue_render(fusion::RenderCommand::DrawRect {
+                x: pointer_x as u32,
+                y: pointer_y as u32,
+                w: CURSOR_WIDTH,
+                h: CURSOR_HEIGHT,
+                color: Color::BLACK,
+            })?;
+
+            pointer_x = movement.next_x;
+            pointer_y = movement.next_y;
+            manager.queue_render(fusion::RenderCommand::DrawRect {
+                x: pointer_x as u32,
+                y: pointer_y as u32,
+                w: CURSOR_WIDTH,
+                h: CURSOR_HEIGHT,
+                color: Color::WHITE,
+            })?;
+
+            manager.process_queue()?;
+            manager.flush()?;
+        }
+
+        unsafe {
+            core::arch::asm!("hlt");
+        }
+    }
+
+    Ok(())
 }
 
 /// Start the Terminal as fallback or alternative interface

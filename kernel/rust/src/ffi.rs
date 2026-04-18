@@ -50,6 +50,8 @@ extern "C" {
         buttons: *mut u8,
         flags: *mut u8,
     ) -> bool;
+    pub fn mouse_is_initialized() -> bool;
+    pub fn mouse_last_init_error() -> u8;
     
     // CPU information functions
     pub fn cpu_get_vendor_ffi(vendor: *mut u8);
@@ -210,6 +212,14 @@ pub struct MouseEvent {
 
 pub fn mouse_has_event() -> bool {
     unsafe { mouse_has_data() }
+}
+
+pub fn mouse_ready() -> bool {
+    unsafe { mouse_is_initialized() }
+}
+
+pub fn mouse_init_error_code() -> u8 {
+    unsafe { mouse_last_init_error() }
 }
 
 pub fn mouse_read() -> Option<MouseEvent> {

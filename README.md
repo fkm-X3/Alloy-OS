@@ -52,6 +52,8 @@ the display-server path now boots into a desktop shell (`os/display/apps/desktop
 - **Left click**: focus top-most window under pointer
 - **Left click (launcher tile)**: activate clicked launcher app
 - **Left-drag (title bar)**: drag focused window
+- Mouse input is relative PS/2 input; click inside the QEMU window to grab pointer input.
+- `make output` is headless and cannot capture live host mouse input (use `make run` or `make mouse-smoke`).
 
 ### terminal core utilities
 when Alloy falls back to terminal mode, these built-in commands are available:

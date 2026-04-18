@@ -33,6 +33,7 @@ static mouse_event g_mouse_events[MOUSE_EVENT_BUFFER_SIZE];
 static uint8_t g_packet[3];
 static uint8_t g_packet_index = 0;
 static bool g_mouse_initialized = false;
+static uint8_t g_mouse_init_error = MOUSE_INIT_ERR_NONE;
 
 static inline void outb(uint16_t port, uint8_t value) {
     asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
@@ -59,6 +60,12 @@ static bool ps2_wait_output_ready() {
             return true;
         }
     }
+    return false;
+}
+
+static bool mouse_fail_init(uint8_t error_code) {
+    g_mouse_initialized = false;
+    g_mouse_init_error = error_code;
     return false;
 }
 
@@ -108,54 +115,57 @@ static void buffer_put(mouse_event event) {
     g_mouse_write_pos = next;
 }
 
-extern "C" void mouse_init() {
+extern "C" bool mouse_init() {
     g_mouse_read_pos = 0;
     g_mouse_write_pos = 0;
     g_packet_index = 0;
     g_mouse_initialized = false;
+    g_mouse_init_error = MOUSE_INIT_ERR_NONE;
 
     ps2_flush_output();
 
     if (!ps2_wait_input_ready()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_INPUT_NOT_READY);
     }
     outb(PS2_COMMAND_PORT, PS2_CMD_ENABLE_AUX_DEVICE);
 
     if (!ps2_wait_input_ready()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_INPUT_NOT_READY);
     }
     outb(PS2_COMMAND_PORT, PS2_CMD_READ_CONFIG);
     if (!ps2_wait_output_ready()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_OUTPUT_NOT_READY);
     }
     uint8_t config = inb(PS2_DATA_PORT);
     config |= (1u << 1);   // Enable IRQ12.
     config &= (uint8_t)~(1u << 5);  // Ensure mouse clock is enabled.
 
     if (!ps2_wait_input_ready()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_INPUT_NOT_READY);
     }
     outb(PS2_COMMAND_PORT, PS2_CMD_WRITE_CONFIG);
     if (!ps2_wait_input_ready()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_INPUT_NOT_READY);
     }
     outb(PS2_DATA_PORT, config);
 
     if (!mouse_send_device_command(PS2_MOUSE_CMD_SET_DEFAULTS)) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_SET_DEFAULTS);
     }
     if (!mouse_wait_ack()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_SET_DEFAULTS_ACK);
     }
 
     if (!mouse_send_device_command(PS2_MOUSE_CMD_ENABLE_STREAMING)) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_ENABLE_STREAMING);
     }
     if (!mouse_wait_ack()) {
-        return;
+        return mouse_fail_init(MOUSE_INIT_ERR_ENABLE_STREAMING_ACK);
     }
 
     g_mouse_initialized = true;
+    g_mouse_init_error = MOUSE_INIT_ERR_NONE;
+    return true;
 }
 
 extern "C" void mouse_handler() {
@@ -193,6 +203,14 @@ extern "C" void mouse_handler() {
 
 extern "C" bool mouse_has_data() {
     return g_mouse_read_pos != g_mouse_write_pos;
+}
+
+extern "C" bool mouse_is_initialized() {
+    return g_mouse_initialized;
+}
+
+extern "C" uint8_t mouse_last_init_error() {
+    return g_mouse_init_error;
 }
 
 extern "C" bool mouse_read_event(

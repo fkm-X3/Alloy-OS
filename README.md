@@ -14,6 +14,12 @@ make output
 
 # boot headless, wait for first rendered desktop frame, then save screenshot png
 make screenshot
+
+# boot headless and run scripted mouse smoke interactions
+make mouse-smoke
+
+# run scripted mouse interactions and capture png proof
+make mouse-screenshot
 ```
 
 ## what does alloy os look like?
@@ -21,8 +27,8 @@ make screenshot
 
 this is what it looks like so far, will receve a makeover at some point
 
-## desktop shell (keyboard-first)
-the display-server path now boots into a keyboard-first desktop shell (`os/display/apps/desktop_shell.rs`) layered on top of the floating window manager (`os/display/apps/window_manager.rs`).
+## desktop shell (keyboard + mouse)
+the display-server path now boots into a desktop shell (`os/display/apps/desktop_shell.rs`) layered on top of the floating window manager (`os/display/apps/window_manager.rs`).
 
 - desktop background + panel/taskbar + launcher + window switcher
 - default boot path while `ENABLE_OS_DISPLAY_SERVER` is `true`
@@ -42,6 +48,10 @@ the display-server path now boots into a keyboard-first desktop shell (`os/displ
 - **H** (control mode): hide focused window
 - **R** (control mode): restore next hidden/minimized window
 - **C / X** (control mode): close focused window
+- **Mouse move**: moves on-screen pointer
+- **Left click**: focus top-most window under pointer
+- **Left click (launcher tile)**: activate clicked launcher app
+- **Left-drag (title bar)**: drag focused window
 
 ### terminal core utilities
 when Alloy falls back to terminal mode, these built-in commands are available:

@@ -538,6 +538,40 @@ impl WindowManager {
         self.destroy_window(server, window_id)
     }
 
+    pub fn window_at_point(&self, x: i32, y: i32) -> Option<WindowId> {
+        let mut hit: Option<(u32, WindowId)> = None;
+
+        for window in self.windows.values() {
+            if window.state != WindowState::Normal || !Self::point_hits_frame(window, x, y) {
+                continue;
+            }
+
+            match hit {
+                Some((z, _)) if z > window.z_order => {}
+                _ => hit = Some((window.z_order, window.id)),
+            }
+        }
+
+        hit.map(|(_, id)| id)
+    }
+
+    pub fn title_bar_window_at_point(&self, x: i32, y: i32) -> Option<WindowId> {
+        let mut hit: Option<(u32, WindowId)> = None;
+
+        for window in self.windows.values() {
+            if window.state != WindowState::Normal || !Self::point_hits_title_bar(window, x, y) {
+                continue;
+            }
+
+            match hit {
+                Some((z, _)) if z > window.z_order => {}
+                _ => hit = Some((window.z_order, window.id)),
+            }
+        }
+
+        hit.map(|(_, id)| id)
+    }
+
     pub fn handle_key<B: DisplayBackend>(
         &mut self,
         server: &mut DisplayServer<B>,
@@ -865,6 +899,26 @@ impl WindowManager {
         }
 
         Ok(pixels)
+    }
+
+    fn point_hits_frame(window: &ManagedWindow, x: i32, y: i32) -> bool {
+        let Ok((frame_width, frame_height)) = Self::frame_dimensions(window.width, window.height) else {
+            return false;
+        };
+
+        let right = window.x.saturating_add(frame_width as i32);
+        let bottom = window.y.saturating_add(frame_height as i32);
+        x >= window.x && y >= window.y && x < right && y < bottom
+    }
+
+    fn point_hits_title_bar(window: &ManagedWindow, x: i32, y: i32) -> bool {
+        if !Self::point_hits_frame(window, x, y) {
+            return false;
+        }
+
+        let title_top = window.y.saturating_add(BORDER_THICKNESS as i32);
+        let title_bottom = title_top.saturating_add(TITLE_BAR_HEIGHT as i32);
+        y >= title_top && y < title_bottom
     }
 
     fn paint_rect(
@@ -1396,6 +1450,61 @@ mod tests {
             .expect("surface metadata should exist");
         assert_eq!(resized.width, 296);
         assert_eq!(resized.height, 198);
+    }
+
+    #[test]
+    fn hit_testing_prefers_topmost_and_detects_title_bar() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let mut wm = WindowManager::new();
+        let first = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 240, 160)
+                    .with_position(20, 20)
+                    .with_z_order(2)
+                    .with_focused(true),
+            )
+            .expect("first window should be created");
+        let second = wm
+            .create_window(
+                &mut server,
+                WindowOptions::new(ClientId::new(1), 240, 160)
+                    .with_position(80, 50)
+                    .with_z_order(4),
+            )
+            .expect("second window should be created");
+
+        let overlap_x = 100;
+        let overlap_y = 80;
+        assert_eq!(
+            wm.window_at_point(overlap_x, overlap_y),
+            Some(second),
+            "top-most overlapping window should win hit-test"
+        );
+
+        let title_x = 110;
+        let title_y = 50 + BORDER_THICKNESS as i32 + 2;
+        assert_eq!(
+            wm.title_bar_window_at_point(title_x, title_y),
+            Some(second),
+            "title bar hit-test should detect draggable frame area"
+        );
+
+        let content_y = 50 + WindowManager::content_offset_y() as i32 + 4;
+        assert_eq!(
+            wm.title_bar_window_at_point(title_x, content_y),
+            None,
+            "content area should not report as title bar"
+        );
+
+        wm.focus_window(&mut server, first).expect("focus should succeed");
+        assert_eq!(
+            wm.window_at_point(overlap_x, overlap_y),
+            Some(first),
+            "focus should raise z-order and affect hit-testing"
+        );
     }
 
     #[test]

@@ -149,6 +149,8 @@ static void pic_remap() {
     
     // Keep BIOS mask defaults, but always allow timer, keyboard, and cascade IRQs.
     mask1 &= (uint8_t)~((1u << 0) | (1u << 1) | (1u << 2));
+    // Always allow PS/2 mouse IRQ on the slave PIC (IRQ12 => bit 4 on PIC2).
+    mask2 &= (uint8_t)~(1u << 4);
 
     // Restore masks
     outb(PIC1_DATA, mask1);
@@ -286,6 +288,7 @@ extern "C" void exception_handler(interrupt_frame* frame) {
 
 // IRQ handler - routes to specific handlers
 extern "C" void keyboard_handler();
+extern "C" void mouse_handler();
 extern "C" void timer_handler(); // From timer.cpp
 
 extern "C" void irq_handler(interrupt_frame* frame) {
@@ -298,6 +301,9 @@ extern "C" void irq_handler(interrupt_frame* frame) {
             break;
         case 1: // Keyboard
             keyboard_handler();
+            break;
+        case 12: // PS/2 mouse
+            mouse_handler();
             break;
         default:
             // Unhandled IRQ

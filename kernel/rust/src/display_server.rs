@@ -3,7 +3,9 @@ use alloy_os_display::apps::desktop_shell::{
 };
 use alloy_os_display::apps::toolbox_apps::{ToolboxAppState, render_toolbox_app};
 use alloy_os_display::apps::window_manager::{InputOutcome, WindowId, WindowManager, WindowOptions, WindowState};
-use alloy_os_display::protocol::{ClientId, DisplayEvent, DisplayRequest, SurfaceId};
+use alloy_os_display::protocol::{
+    ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, SurfaceId,
+};
 use alloy_os_display::server::{DisplayBackend, DisplayServer};
 
 use crate::ffi;
@@ -14,9 +16,13 @@ use crate::graphics::vesa::VesaDisplay;
 use crate::terminal::Terminal;
 
 const TERMINAL_CLIENT_ID: ClientId = ClientId::new(1);
+const CURSOR_CLIENT_ID: ClientId = ClientId::new(2);
 const TERMINAL_WIDTH_CHARS: u32 = 80;
 const TERMINAL_HEIGHT_CHARS: u32 = 25;
 const DEFAULT_FRAME_INTERVAL_MS: u32 = 16;
+const CURSOR_WIDTH: u32 = 12;
+const CURSOR_HEIGHT: u32 = 18;
+const CURSOR_Z_ORDER: u32 = 65535;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayServerBootError {
@@ -106,6 +112,14 @@ struct AppRuntime {
     file_explorer_state: ToolboxAppState,
     text_editor_state: ToolboxAppState,
     calculator_state: ToolboxAppState,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PointerState {
+    x: i32,
+    y: i32,
+    buttons: u8,
+    dragging_window: Option<WindowId>,
 }
 
 impl AppRuntime {
@@ -401,6 +415,104 @@ fn clear_dead_bindings(
     }
 }
 
+fn expect_ack(response: DisplayResponse) -> Result<(), DisplayServerBootError> {
+    match response {
+        DisplayResponse::Ack => Ok(()),
+        _ => Err(DisplayServerBootError::SurfaceUpload),
+    }
+}
+
+fn build_cursor_pixels() -> alloc::vec::Vec<u32> {
+    let mut pixels = alloc::vec![0u32; (CURSOR_WIDTH * CURSOR_HEIGHT) as usize];
+    for y in 0..CURSOR_HEIGHT {
+        let fill_width = (y / 2 + 1).min(CURSOR_WIDTH.saturating_sub(1));
+        for x in 0..=fill_width {
+            let idx = (y * CURSOR_WIDTH + x) as usize;
+            let border = x == 0 || y == 0 || x == fill_width || y == CURSOR_HEIGHT - 1;
+            pixels[idx] = if border { 0xFF000000 } else { 0xFFF2F2F2 };
+        }
+    }
+    pixels
+}
+
+fn create_cursor_surface<B: DisplayBackend>(
+    server: &mut DisplayServer<B>,
+) -> Result<SurfaceId, DisplayServerBootError> {
+    let response = server
+        .handle_request(
+            CURSOR_CLIENT_ID,
+            DisplayRequest::CreateSurface {
+                width: CURSOR_WIDTH,
+                height: CURSOR_HEIGHT,
+                format: PixelFormat::Argb8888,
+            },
+        )
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+
+    let surface_id = match response {
+        DisplayResponse::SurfaceCreated { surface_id } => surface_id,
+        _ => return Err(DisplayServerBootError::SurfaceUpload),
+    };
+
+    expect_ack(
+        server
+            .handle_request(
+                CURSOR_CLIENT_ID,
+                DisplayRequest::SetSurfaceZOrder {
+                    surface_id,
+                    z_order: CURSOR_Z_ORDER,
+                },
+            )
+            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
+    )?;
+
+    expect_ack(
+        server
+            .handle_request(
+                CURSOR_CLIENT_ID,
+                DisplayRequest::SetSurfaceVisibility {
+                    surface_id,
+                    visible: true,
+                },
+            )
+            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
+    )?;
+
+    let cursor_pixels = build_cursor_pixels();
+    server
+        .upload_surface_pixels(
+            CURSOR_CLIENT_ID,
+            surface_id,
+            CURSOR_WIDTH,
+            CURSOR_HEIGHT,
+            &cursor_pixels,
+            None,
+        )
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+
+    Ok(surface_id)
+}
+
+fn set_cursor_position<B: DisplayBackend>(
+    server: &mut DisplayServer<B>,
+    cursor_surface: SurfaceId,
+    x: i32,
+    y: i32,
+) -> Result<(), DisplayServerBootError> {
+    expect_ack(
+        server
+            .handle_request(
+                CURSOR_CLIENT_ID,
+                DisplayRequest::SetSurfacePosition {
+                    surface_id: cursor_surface,
+                    x,
+                    y,
+                },
+            )
+            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
+    )
+}
+
 pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     serial_log(b"[DisplayServer] Bootstrapping desktop shell runtime\n\0");
     let (display_width, display_height) = display.get_resolution();
@@ -437,6 +549,15 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     let mut runtime = AppRuntime::new();
     shell.sync_from_window_manager(&wm);
     shell.render(&mut server).map_err(|_| DisplayServerBootError::Shell)?;
+
+    let cursor_surface = create_cursor_surface(&mut server)?;
+    let mut pointer = PointerState {
+        x: (display_width / 2) as i32,
+        y: (workspace_height / 2) as i32,
+        buttons: 0,
+        dragging_window: None,
+    };
+    set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
 
     let boot_uptime = unsafe { ffi::timer_get_uptime_ms_ffi() };
     let first_present_time = boot_uptime.saturating_add(server.frame_interval_ms() as u64);
@@ -536,7 +657,104 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
             }
         }
 
+        while ffi::mouse_has_event() {
+            let Some(mouse_event) = ffi::mouse_read() else {
+                break;
+            };
+
+            let delta_x = mouse_event.dx as i32;
+            let delta_y = -(mouse_event.dy as i32);
+
+            if delta_x != 0 || delta_y != 0 {
+                let max_x = display_width.saturating_sub(1) as i32;
+                let max_y = display_height.saturating_sub(1) as i32;
+                let next_x = pointer.x.saturating_add(delta_x).clamp(0, max_x);
+                let next_y = pointer.y.saturating_add(delta_y).clamp(0, max_y);
+                let actual_dx = next_x.saturating_sub(pointer.x);
+                let actual_dy = next_y.saturating_sub(pointer.y);
+
+                if actual_dx != 0 || actual_dy != 0 {
+                    pointer.x = next_x;
+                    pointer.y = next_y;
+                    set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+                    server
+                        .route_pointer_motion(pointer.x, pointer.y, actual_dx, actual_dy)
+                        .map_err(|_| DisplayServerBootError::FramePresent)?;
+
+                    if pointer.dragging_window.is_some()
+                        && (mouse_event.buttons & ffi::MOUSE_BUTTON_LEFT) != 0
+                    {
+                        wm.move_focused_by(&mut server, actual_dx, actual_dy)
+                            .map_err(|_| DisplayServerBootError::WindowManager)?;
+                    }
+                }
+            }
+
+            for (mask, button) in [
+                (ffi::MOUSE_BUTTON_LEFT, MouseButton::Left),
+                (ffi::MOUSE_BUTTON_RIGHT, MouseButton::Right),
+                (ffi::MOUSE_BUTTON_MIDDLE, MouseButton::Middle),
+            ] {
+                let was_pressed = (pointer.buttons & mask) != 0;
+                let is_pressed = (mouse_event.buttons & mask) != 0;
+                if was_pressed == is_pressed {
+                    continue;
+                }
+
+                server
+                    .route_mouse_button(button, is_pressed, pointer.x, pointer.y)
+                    .map_err(|_| DisplayServerBootError::FramePresent)?;
+
+                if mask != ffi::MOUSE_BUTTON_LEFT {
+                    continue;
+                }
+
+                if is_pressed {
+                    if let Some(app) = shell.launcher_app_at_point(pointer.x, pointer.y) {
+                        activate_shell_app(
+                            app,
+                            &mut shell,
+                            &mut wm,
+                            &mut server,
+                            &mut terminal_surface,
+                            &mut runtime,
+                            display_width,
+                            display_height,
+                            terminal_surface_width,
+                            terminal_surface_height,
+                        )?;
+                        pointer.dragging_window = None;
+                    } else if let Some(window_id) = wm.window_at_point(pointer.x, pointer.y) {
+                        wm.focus_window(&mut server, window_id)
+                            .map_err(|_| DisplayServerBootError::WindowManager)?;
+                        if wm.title_bar_window_at_point(pointer.x, pointer.y) == Some(window_id) {
+                            pointer.dragging_window = Some(window_id);
+                        } else {
+                            pointer.dragging_window = None;
+                        }
+                    } else {
+                        pointer.dragging_window = None;
+                    }
+                } else {
+                    pointer.dragging_window = None;
+                }
+            }
+
+            if mouse_event.wheel != 0 {
+                server
+                    .route_mouse_wheel(mouse_event.wheel as i32, pointer.x, pointer.y)
+                    .map_err(|_| DisplayServerBootError::FramePresent)?;
+            }
+
+            pointer.buttons = mouse_event.buttons;
+        }
+
         clear_dead_bindings(&wm, &mut shell, &mut runtime);
+        if let Some(window_id) = pointer.dragging_window {
+            if wm.window_state(window_id).is_none() {
+                pointer.dragging_window = None;
+            }
+        }
         shell.set_control_mode(wm.is_control_mode());
         shell.sync_from_window_manager(&wm);
         shell.render(&mut server).map_err(|_| DisplayServerBootError::Shell)?;

@@ -225,6 +225,61 @@ impl DesktopShell {
         }
     }
 
+    pub fn launcher_app_at_point(&self, x: i32, y: i32) -> Option<ShellApp> {
+        if !self.launcher_visible {
+            return None;
+        }
+
+        let (launcher_x, launcher_y) = Self::launcher_position(
+            self.workspace_width,
+            self.workspace_height,
+            self.launcher_width,
+            self.launcher_height,
+        );
+        if x < launcher_x || y < launcher_y {
+            return None;
+        }
+
+        let local_x = (x - launcher_x) as u32;
+        let local_y = (y - launcher_y) as u32;
+        if local_x >= self.launcher_width || local_y >= self.launcher_height {
+            return None;
+        }
+
+        let grid_padding_x: u32 = 12;
+        let grid_padding_y: u32 = 36;
+        let grid_gap_x: u32 = 8;
+        let grid_gap_y: u32 = 8;
+        let columns = 3u32;
+        let rows = 2u32;
+        let usable_width = self
+            .launcher_width
+            .saturating_sub(grid_padding_x.saturating_mul(2))
+            .saturating_sub(grid_gap_x.saturating_mul(columns.saturating_sub(1)));
+        let usable_height = self
+            .launcher_height
+            .saturating_sub(grid_padding_y)
+            .saturating_sub(12)
+            .saturating_sub(grid_gap_y.saturating_mul(rows.saturating_sub(1)));
+        let tile_width = (usable_width / columns.max(1)).max(24);
+        let tile_height = (usable_height / rows.max(1)).max(24);
+
+        for (index, app) in ShellApp::ALL.iter().enumerate() {
+            let grid_col = (index as u32) % columns;
+            let grid_row = (index as u32) / columns;
+            let tile_x = grid_padding_x + grid_col.saturating_mul(tile_width + grid_gap_x);
+            let tile_y = grid_padding_y + grid_row.saturating_mul(tile_height + grid_gap_y);
+            let tile_right = tile_x.saturating_add(tile_width);
+            let tile_bottom = tile_y.saturating_add(tile_height);
+
+            if local_x >= tile_x && local_x < tile_right && local_y >= tile_y && local_y < tile_bottom {
+                return Some(*app);
+            }
+        }
+
+        None
+    }
+
     pub fn set_control_mode(&mut self, active: bool) {
         if self.control_mode != active {
             self.control_mode = active;
@@ -1102,6 +1157,52 @@ mod tests {
         fn flush(&mut self) -> Result<(), Self::Error> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn launcher_hit_test_maps_pointer_to_apps() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let mut shell = DesktopShell::bootstrap(&mut server, 640, 480)
+            .expect("shell bootstrap should succeed");
+        let (launcher_x, launcher_y) = DesktopShell::launcher_position(
+            shell.workspace_width,
+            shell.workspace_height,
+            shell.launcher_width,
+            shell.launcher_height,
+        );
+
+        let grid_padding_x: u32 = 12;
+        let grid_padding_y: u32 = 36;
+        let grid_gap_x: u32 = 8;
+        let columns = 3u32;
+        let usable_width = shell
+            .launcher_width
+            .saturating_sub(grid_padding_x.saturating_mul(2))
+            .saturating_sub(grid_gap_x.saturating_mul(columns.saturating_sub(1)));
+        let tile_width = (usable_width / columns.max(1)).max(24);
+
+        let terminal_x = launcher_x + grid_padding_x as i32 + 2;
+        let terminal_y = launcher_y + grid_padding_y as i32 + 2;
+        assert_eq!(
+            shell.launcher_app_at_point(terminal_x, terminal_y),
+            Some(ShellApp::Terminal)
+        );
+
+        let settings_x =
+            launcher_x + (grid_padding_x + tile_width + grid_gap_x) as i32 + 2;
+        assert_eq!(
+            shell.launcher_app_at_point(settings_x, terminal_y),
+            Some(ShellApp::Settings)
+        );
+
+        shell.set_launcher_visible(false);
+        assert_eq!(
+            shell.launcher_app_at_point(terminal_x, terminal_y),
+            None,
+            "hit-test should ignore launcher tiles when hidden"
+        );
     }
 
     #[test]

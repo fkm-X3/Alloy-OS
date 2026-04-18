@@ -40,6 +40,16 @@ extern "C" {
     // Keyboard functions - matches C++ signatures
     pub fn keyboard_has_data() -> bool;
     pub fn keyboard_get_char() -> i8;  // C char is signed
+
+    // Mouse functions - matches C++ signatures
+    pub fn mouse_has_data() -> bool;
+    pub fn mouse_read_event(
+        dx: *mut i8,
+        dy: *mut i8,
+        wheel: *mut i8,
+        buttons: *mut u8,
+        flags: *mut u8,
+    ) -> bool;
     
     // CPU information functions
     pub fn cpu_get_vendor_ffi(vendor: *mut u8);
@@ -189,6 +199,49 @@ pub fn keyboard_read() -> u8 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseEvent {
+    pub dx: i8,
+    pub dy: i8,
+    pub wheel: i8,
+    pub buttons: u8,
+    pub flags: u8,
+}
+
+pub fn mouse_has_event() -> bool {
+    unsafe { mouse_has_data() }
+}
+
+pub fn mouse_read() -> Option<MouseEvent> {
+    let mut dx: i8 = 0;
+    let mut dy: i8 = 0;
+    let mut wheel: i8 = 0;
+    let mut buttons: u8 = 0;
+    let mut flags: u8 = 0;
+
+    let has_event = unsafe {
+        mouse_read_event(
+            &mut dx as *mut i8,
+            &mut dy as *mut i8,
+            &mut wheel as *mut i8,
+            &mut buttons as *mut u8,
+            &mut flags as *mut u8,
+        )
+    };
+
+    if !has_event {
+        return None;
+    }
+
+    Some(MouseEvent {
+        dx,
+        dy,
+        wheel,
+        buttons,
+        flags,
+    })
+}
+
 // Special key codes (match C++ keyboard.h)
 pub const SPECIAL_KEY_UP: u8 = 128;
 pub const SPECIAL_KEY_DOWN: u8 = 129;
@@ -199,6 +252,13 @@ pub const SPECIAL_KEY_END: u8 = 133;
 pub const SPECIAL_KEY_DELETE: u8 = 134;
 pub const SPECIAL_KEY_PGUP: u8 = 135;
 pub const SPECIAL_KEY_PGDN: u8 = 136;
+
+pub const MOUSE_BUTTON_LEFT: u8 = 0x01;
+pub const MOUSE_BUTTON_RIGHT: u8 = 0x02;
+pub const MOUSE_BUTTON_MIDDLE: u8 = 0x04;
+
+pub const MOUSE_EVENT_FLAG_X_OVERFLOW: u8 = 0x01;
+pub const MOUSE_EVENT_FLAG_Y_OVERFLOW: u8 = 0x02;
 
 // Page flags for memory mapping
 pub const PAGE_PRESENT: u32 = 0x001;

@@ -113,6 +113,13 @@ pub enum DisplayResponse {
     Error(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
 /// Events emitted by the display server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayEvent {
@@ -123,6 +130,26 @@ pub enum DisplayEvent {
         surface_id: Option<SurfaceId>,
         key: u8,
         pressed: bool,
+    },
+    PointerMotion {
+        surface_id: Option<SurfaceId>,
+        x: i32,
+        y: i32,
+        dx: i32,
+        dy: i32,
+    },
+    MouseButton {
+        surface_id: Option<SurfaceId>,
+        button: MouseButton,
+        pressed: bool,
+        x: i32,
+        y: i32,
+    },
+    MouseWheel {
+        surface_id: Option<SurfaceId>,
+        delta: i32,
+        x: i32,
+        y: i32,
     },
     SurfaceCreated {
         surface_id: SurfaceId,

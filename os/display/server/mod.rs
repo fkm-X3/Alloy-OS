@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::protocol::{
-    ClientId, DisplayEvent, DisplayRequest, DisplayResponse, PixelFormat, ProtocolError, Rect,
+    ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, ProtocolError, Rect,
     SurfaceId, validate_request,
 };
 
@@ -406,6 +406,53 @@ impl<B: DisplayBackend> DisplayServer<B> {
         Ok(())
     }
 
+    pub fn route_pointer_motion(
+        &mut self,
+        x: i32,
+        y: i32,
+        dx: i32,
+        dy: i32,
+    ) -> Result<(), ServerError> {
+        self.ensure_running()?;
+        self.emit_event(DisplayEvent::PointerMotion {
+            surface_id: self.focused_surface,
+            x,
+            y,
+            dx,
+            dy,
+        });
+        Ok(())
+    }
+
+    pub fn route_mouse_button(
+        &mut self,
+        button: MouseButton,
+        pressed: bool,
+        x: i32,
+        y: i32,
+    ) -> Result<(), ServerError> {
+        self.ensure_running()?;
+        self.emit_event(DisplayEvent::MouseButton {
+            surface_id: self.focused_surface,
+            button,
+            pressed,
+            x,
+            y,
+        });
+        Ok(())
+    }
+
+    pub fn route_mouse_wheel(&mut self, delta: i32, x: i32, y: i32) -> Result<(), ServerError> {
+        self.ensure_running()?;
+        self.emit_event(DisplayEvent::MouseWheel {
+            surface_id: self.focused_surface,
+            delta,
+            x,
+            y,
+        });
+        Ok(())
+    }
+
     /// Present a new frame when the configured frame interval elapses.
     pub fn update_frame(&mut self, now_ms: u64) -> Result<bool, ServerError> {
         self.ensure_running()?;
@@ -488,5 +535,198 @@ impl<B: DisplayBackend> DisplayServer<B> {
 
         self.events.push_back(event);
         self.diagnostics.events_emitted = self.diagnostics.events_emitted.saturating_add(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::collections::BTreeMap;
+
+    use super::*;
+
+    #[derive(Debug, Clone, Copy)]
+    struct MockSurface {
+        width: u32,
+        height: u32,
+    }
+
+    #[derive(Debug, Default)]
+    struct MockBackend {
+        surfaces: BTreeMap<SurfaceId, MockSurface>,
+    }
+
+    impl DisplayBackend for MockBackend {
+        type Error = ();
+
+        fn create_surface(
+            &mut self,
+            surface_id: SurfaceId,
+            width: u32,
+            height: u32,
+            _format: PixelFormat,
+        ) -> Result<(), Self::Error> {
+            self.surfaces.insert(surface_id, MockSurface { width, height });
+            Ok(())
+        }
+
+        fn destroy_surface(&mut self, surface_id: SurfaceId) -> Result<(), Self::Error> {
+            self.surfaces.remove(&surface_id).map(|_| ()).ok_or(())
+        }
+
+        fn set_surface_position(
+            &mut self,
+            surface_id: SurfaceId,
+            _x: i32,
+            _y: i32,
+        ) -> Result<(), Self::Error> {
+            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
+        }
+
+        fn resize_surface(
+            &mut self,
+            surface_id: SurfaceId,
+            width: u32,
+            height: u32,
+        ) -> Result<(), Self::Error> {
+            let surface = self.surfaces.get_mut(&surface_id).ok_or(())?;
+            surface.width = width;
+            surface.height = height;
+            Ok(())
+        }
+
+        fn set_surface_visibility(
+            &mut self,
+            surface_id: SurfaceId,
+            _visible: bool,
+        ) -> Result<(), Self::Error> {
+            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
+        }
+
+        fn set_surface_z_order(
+            &mut self,
+            surface_id: SurfaceId,
+            _z_order: u32,
+        ) -> Result<(), Self::Error> {
+            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
+        }
+
+        fn commit_surface(
+            &mut self,
+            surface_id: SurfaceId,
+            _damage: Option<Rect>,
+        ) -> Result<(), Self::Error> {
+            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
+        }
+
+        fn upload_surface_pixels(
+            &mut self,
+            surface_id: SurfaceId,
+            width: u32,
+            height: u32,
+            pixels: &[u32],
+            _damage: Option<Rect>,
+        ) -> Result<(), Self::Error> {
+            let Some(surface) = self.surfaces.get(&surface_id) else {
+                return Err(());
+            };
+            if surface.width != width || surface.height != height {
+                return Err(());
+            }
+            let required = (width as usize).saturating_mul(height as usize);
+            if pixels.len() < required {
+                return Err(());
+            }
+            Ok(())
+        }
+
+        fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn mouse_routing_emits_events_with_focused_surface() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let owner = ClientId::new(11);
+        let created = server
+            .handle_request(
+                owner,
+                DisplayRequest::CreateSurface {
+                    width: 64,
+                    height: 64,
+                    format: PixelFormat::Argb8888,
+                },
+            )
+            .expect("surface creation should succeed");
+        let surface_id = match created {
+            DisplayResponse::SurfaceCreated { surface_id } => surface_id,
+            _ => panic!("unexpected create response"),
+        };
+        server
+            .handle_request(
+                owner,
+                DisplayRequest::RequestFocus {
+                    surface_id: Some(surface_id),
+                },
+            )
+            .expect("focus request should succeed");
+
+        server
+            .route_pointer_motion(100, 80, 5, -3)
+            .expect("pointer event should route");
+        server
+            .route_mouse_button(MouseButton::Left, true, 100, 80)
+            .expect("button event should route");
+        server
+            .route_mouse_wheel(-1, 100, 80)
+            .expect("wheel event should route");
+
+        let mut saw_motion = false;
+        let mut saw_button = false;
+        let mut saw_wheel = false;
+
+        while let Some(event) = server.poll_event() {
+            match event {
+                DisplayEvent::PointerMotion {
+                    surface_id: Some(id),
+                    x,
+                    y,
+                    dx,
+                    dy,
+                } if id == surface_id => {
+                    assert_eq!((x, y, dx, dy), (100, 80, 5, -3));
+                    saw_motion = true;
+                }
+                DisplayEvent::MouseButton {
+                    surface_id: Some(id),
+                    button,
+                    pressed,
+                    x,
+                    y,
+                } if id == surface_id => {
+                    assert_eq!(button, MouseButton::Left);
+                    assert!(pressed);
+                    assert_eq!((x, y), (100, 80));
+                    saw_button = true;
+                }
+                DisplayEvent::MouseWheel {
+                    surface_id: Some(id),
+                    delta,
+                    x,
+                    y,
+                } if id == surface_id => {
+                    assert_eq!(delta, -1);
+                    assert_eq!((x, y), (100, 80));
+                    saw_wheel = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_motion, "pointer motion event should be emitted");
+        assert!(saw_button, "mouse button event should be emitted");
+        assert!(saw_wheel, "mouse wheel event should be emitted");
     }
 }

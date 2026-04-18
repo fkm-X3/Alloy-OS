@@ -45,6 +45,7 @@ CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(DRIVERS_DIR)/vga.cpp \
               $(DRIVERS_DIR)/vesa.cpp \
               $(DRIVERS_DIR)/keyboard.cpp \
+              $(DRIVERS_DIR)/mouse.cpp \
               $(DRIVERS_DIR)/timer.cpp \
               $(MM_DIR)/pmm.cpp \
               $(MM_DIR)/paging.cpp \
@@ -60,7 +61,7 @@ OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso output screenshot debug
+.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug
 
 all: $(KERNEL_ELF)
 
@@ -113,6 +114,14 @@ output: $(KERNEL_ISO)
 screenshot: $(KERNEL_ISO)
 	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
 
+# Boot headless and run scripted mouse interactions (no screenshot)
+mouse-smoke: $(KERNEL_ISO)
+	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
+
+# Run scripted mouse interactions and capture a screenshot artifact
+mouse-screenshot: $(KERNEL_ISO)
+	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png
+
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)
 	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -s -S
@@ -129,7 +138,7 @@ lazy:
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
 	@echo "Cleaned your shitass code, compiling the iso."
 	make iso
-	@echo "Run 'make run' to test the kernel, bozo really though id do everything for you."
+	@echo "Run 'make run' to test."
 
 # Print variables for debugging
 print-%:

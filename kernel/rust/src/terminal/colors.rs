@@ -89,3 +89,22 @@ pub fn print_banner() {
         ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
     }
 }
+
+/// Print "TeSt 1@3" banner in DOS-style ASCII art
+pub fn print_test_banner() {
+    unsafe {
+        // Print the test banner in yellow/gold (DOS style) with block characters
+        ffi::vga_set_color(COLOR_YELLOW, COLOR_BLACK);
+        ffi::vga_println(b" \0".as_ptr());
+        // Create a nice DOS-era style banner with "TeSt 1@3"
+        // Line 1: ████████████████████████████████████████████████████████████████
+        ffi::vga_println(b"\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\0".as_ptr());
+        // Line 2: ██  TeSt 1@3                                                    ██
+        ffi::vga_println(b"\xDB\xDB  TeSt 1@3                                                    \xDB\xDB\0".as_ptr());
+        // Line 3: ████████████████████████████████████████████████████████████████
+        ffi::vga_println(b"\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\xDB\0".as_ptr());
+        ffi::vga_println(b" \0".as_ptr());
+        
+        ffi::vga_set_color(COLOR_LIGHT_GRAY, COLOR_BLACK);
+    }
+}

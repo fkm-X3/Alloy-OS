@@ -25,7 +25,7 @@ make mouse-screenshot
 ## what does alloy os look like?
 ![Alloy os Desktop shell](assets/desktop-shell-grid.png)
 
-this is what it looks like so far, will receve a makeover at some point
+this is what it looks like so far, currently a tui with ratatui
 
 ## desktop shell (keyboard + mouse)
 the display-server path now boots into a desktop shell (`os/display/apps/desktop_shell.rs`) layered on top of the floating window manager (`os/display/apps/window_manager.rs`).

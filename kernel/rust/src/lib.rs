@@ -42,9 +42,12 @@ fn start_terminal() {
         ffi::serial_print(b"[Terminal] Starting terminal interface\n\0".as_ptr());
     }
     
-    // Try to initialize VESA graphics and render banner
+    // Initialize graphics display with welcome banner
     display_graphics_banner();
     
+    // Start the kernel terminal (command-line based)
+    // Note: A feature-rich Ratatui-based terminal is available in os/terminal/
+    // To use it, run: cargo run --release -p alloy-os-terminal
     let mut terminal = terminal::Terminal::new();
     
     // Print marker for screenshot tool (for compatibility with existing test infrastructure)
@@ -55,7 +58,7 @@ fn start_terminal() {
     terminal.run();
 }
 
-/// Render the "TeSt 1@3" banner to the graphics framebuffer
+/// Initialize graphics display with welcome message
 fn display_graphics_banner() {
     if let Some(mut display) = graphics::vesa::VesaDisplay::new() {
         // Use Display trait methods
@@ -64,24 +67,26 @@ fn display_graphics_banner() {
         // Clear display with black
         disp.clear(0xFF000000);
         
-        // Simple solid yellow rectangle banner
-        let banner_x = 50;
-        let banner_y = 50;
-        let banner_width = 300;
-        let banner_height = 60;
+        // Draw a cyan welcome banner instead of yellow
+        let banner_x = 40;
+        let banner_y = 40;
+        let banner_width = 320;
+        let banner_height = 70;
         
-        // Draw filled rectangle
+        // Draw filled rectangle with cyan
         let _ = disp.fill_rect(
             banner_x,
             banner_y,
             banner_width,
             banner_height,
-            0xFFFFFF00,  // Yellow
+            0xFF00FFFF,  // Cyan
         );
         
-        // Draw "TeSt 1@3" text using simple pixel rendering
-        // Using the built-in font, each character is about 6 pixels wide
-        render_simple_text(disp, banner_x + 70, banner_y + 20, "TeSt 1@3", 0xFF000000);
+        // Draw "Alloy OS" title in dark blue
+        render_simple_text(disp, banner_x + 50, banner_y + 15, "Alloy OS", 0xFF000080);
+        
+        // Draw version info in dark blue
+        render_simple_text(disp, banner_x + 20, banner_y + 40, "v0.7.0 - Terminal Ready", 0xFF000080);
         
         disp.swap_buffer();
     }

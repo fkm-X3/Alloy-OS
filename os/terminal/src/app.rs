@@ -254,43 +254,48 @@ impl App {
             "sysinfo" => self.cmd_sysinfo(),
             "free" => self.cmd_free(),
             "uptime" => self.cmd_uptime(),
+            "date" => self.cmd_date(),
             "meminfo" => self.cmd_meminfo(),
             "cpuinfo" => self.cmd_cpuinfo(),
             "ticks" => self.cmd_ticks(),
             "uname" => self.cmd_uname(),
-            _ => format!("Unknown command: {}", parts[0]),
+            "whoami" => self.cmd_whoami(),
+            _ => format!("Unknown command: '{}'. Type 'help' for available commands.", parts[0]),
         }
     }
     
     /// Command: help
     fn cmd_help(&self, args: &[&str]) -> String {
         let commands = vec![
-            ("help", "Show this help message"),
+            ("help", "Show this help message or help for specific command"),
             ("echo", "Print text"),
             ("clear", "Clear screen"),
-            ("version", "Show OS version"),
+            ("version", "Show OS version and features"),
             ("sysinfo", "Show system information"),
             ("free", "Show memory usage"),
             ("uptime", "Show system uptime"),
-            ("meminfo", "Show memory info"),
-            ("cpuinfo", "Show CPU info"),
-            ("ticks", "Show system ticks"),
+            ("date", "Show current date and time"),
+            ("meminfo", "Show memory statistics"),
+            ("cpuinfo", "Show CPU information"),
+            ("ticks", "Show timer statistics"),
             ("uname", "Show OS name"),
+            ("whoami", "Show current user"),
         ];
         
         if let Some(cmd) = args.first() {
             for (name, help) in commands {
                 if name == *cmd {
-                    return format!("{}: {}", name, help);
+                    return format!("{:<8} - {}", name, help);
                 }
             }
-            return format!("Unknown command: {}", cmd);
+            return format!("Unknown command: '{}'", cmd);
         }
         
         let mut help_text = "Available commands:\n".to_string();
         for (name, help) in commands {
-            help_text.push_str(&format!("  {:8} - {}\n", name, help));
+            help_text.push_str(&format!("  {:<8} - {}\n", name, help));
         }
+        help_text.push_str("\nType 'help <command>' for more info on a specific command.");
         help_text
     }
     
@@ -301,34 +306,42 @@ impl App {
     
     /// Command: version
     fn cmd_version(&self) -> String {
-        let mut output = String::from("Alloy Operating System\n");
-        output.push_str("Version: 0.7.0-dev (Phase 7)\n");
-        output.push_str("Architecture: x86 (32-bit)\n");
-        output.push_str("Language: C++ + Rust\n");
+        use crate::commands::SystemInfo;
+        let info = SystemInfo::default();
+        
+        let mut output = String::new();
+        output.push_str(info.os_name);
+        output.push_str("\n");
+        output.push_str(&format!("Version: {}\n", info.os_version));
+        output.push_str(&format!("Architecture: {}\n", info.os_arch));
+        output.push_str(&format!("Language: {}\n", info.os_language));
         output.push_str("UI: Ratatui (TUI Edition)\n\n");
         output.push_str("Features:\n");
-        output.push_str("  [x] Multiboot2 boot\n");
-        output.push_str("  [x] VGA text mode\n");
-        output.push_str("  [x] PS/2 keyboard\n");
-        output.push_str("  [x] Memory management\n");
-        output.push_str("  [x] Rust integration\n");
-        output.push_str("  [x] Terminal interface\n");
-        output.push_str("  [x] Diagnostic commands");
-        output
+        
+        for feature in SystemInfo::features() {
+            output.push_str(&format!("  {}\n", feature));
+        }
+        
+        output.trim_end().to_string()
     }
     
     /// Command: sysinfo
     fn cmd_sysinfo(&self) -> String {
-        let mut output = String::from("System Summary\n\n");
-        output.push_str("Alloy Operating System\n");
-        output.push_str("Version: 0.7.0-dev (Phase 7)\n");
-        output.push_str("Architecture: x86 (32-bit)\n");
-        output.push_str("\n[Note: Real-time data requires kernel integration]\n");
-        output.push_str("CPU Vendor: (requires kernel FFI)\n");
-        output.push_str("Memory Total: (requires kernel FFI)\n");
-        output.push_str("Memory Used:  (requires kernel FFI)\n");
-        output.push_str("Memory Free:  (requires kernel FFI)\n");
-        output.push_str("Uptime: (requires kernel FFI)");
+        use crate::commands::SystemInfo;
+        let info = SystemInfo::default();
+        
+        let mut output = String::new();
+        output.push_str("System Summary\n\n");
+        output.push_str(info.os_name);
+        output.push_str("\n");
+        output.push_str(&format!("Version: {}\n", info.os_version));
+        output.push_str(&format!("Architecture: {}\n", info.os_arch));
+        output.push_str("\n[Running in Ratatui Terminal - Host Environment]\n");
+        output.push_str("CPU Vendor: (host system)\n");
+        output.push_str("Memory Total: (host system)\n");
+        output.push_str("Memory Used:  (host system)\n");
+        output.push_str("Memory Free:  (host system)\n");
+        output.push_str("Uptime: (host system)");
         output
     }
     
@@ -393,6 +406,35 @@ impl App {
     /// Command: uname
     fn cmd_uname(&self) -> String {
         "AlloyOS".to_string()
+    }
+    
+    /// Command: date
+    fn cmd_date(&self) -> String {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        match SystemTime::now().duration_since(UNIX_EPOCH) {
+            Ok(duration) => {
+                let secs = duration.as_secs();
+                let millis = duration.subsec_millis();
+                
+                // Very basic time formatting (requires proper date/time library for full implementation)
+                let days = secs / 86400;
+                let hours = (secs % 86400) / 3600;
+                let minutes = (secs % 3600) / 60;
+                let seconds = secs % 60;
+                
+                format!(
+                    "System Time: {} days, {:02}:{:02}:{:02}.{:03}\nUnix timestamp: {} seconds",
+                    days, hours, minutes, seconds, millis, secs
+                )
+            }
+            Err(_) => "Unable to get system time".to_string(),
+        }
+    }
+    
+    /// Command: whoami
+    fn cmd_whoami(&self) -> String {
+        "root".to_string()
     }
     
     /// Update app state (called every frame)

@@ -1,0 +1,88 @@
+name: Scheduled Nightly Release
+
+on:
+  schedule:
+
+    - cron: '0 0 */3 * *'
+  workflow_dispatch: # Allows you to trigger it manually for testing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate Version Tag
+      id: vars
+      run: |
+
+        TAG_NAME="nightly-$(date +'%Y.%m.%d')-${{ github.run_number }}"
+        echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential nasm grub-pc-bin grub-common xorriso \
+          mtools wget tar bison flex libgmp3-dev libmpc-dev \
+          libmpfr-dev texinfo
+
+    - name: Cache cross-compiler
+      id: cache-cross-compiler
+      uses: actions/cache@v3
+      with:
+        path: ~/.local/i686-elf
+        key: i686-elf-gcc-${{ runner.os }}-v1
+
+    - name: Build cross-compiler
+      if: steps.cache-cross-compiler.outputs.cache-hit != 'true'
+      run: |
+        chmod +x build-toolchain.sh
+        ./build-toolchain.sh
+
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+
+    - name: Build release
+      run: |
+        make clean
+        make iso
+
+    - name: Prepare Artifacts
+      run: |
+
+        mkdir -p build
+        cp boot/alloy.iso build/alloy.iso
+        echo "Build Date: ${{ steps.vars.outputs.date }}" > build/BUILD_INFO.txt
+        echo "Commit: ${{ github.sha }}" >> build/BUILD_INFO.txt
+        echo "Type: Nightly Pre-release" >> build/BUILD_INFO.txt
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.vars.outputs.tag }}
+        name: "Nightly Build: ${{ steps.vars.outputs.tag }}"
+        body: |
+
+          **Date:** ${{ steps.vars.outputs.date }}
+          **Commit:** ${{ github.sha }}
+
+          This is an automated pre-release build generated every 3 days.
+
+          ```bash
+          qemu-system-i386 -cdrom alloy.iso -serial stdio
+          ```
+        draft: false
+        prerelease: true
+        files: |
+          build/alloy.iso
+          build/BUILD_INFO.txt

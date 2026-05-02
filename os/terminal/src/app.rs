@@ -1,9 +1,10 @@
 /// Application state machine for Alloy OS Terminal
 /// 
-/// Manages terminal state, command history, and input buffer
+/// Manages terminal state, command history, input buffer, and view management
 
 use crossterm::event::KeyEvent;
 use std::collections::VecDeque;
+use crate::ui::views::{ViewManager, TerminalView, MonitorView, HelpView, LogsView};
 
 #[derive(Clone, Copy, Debug)]
 pub enum InputMode {
@@ -29,6 +30,21 @@ pub struct App {
     
     /// Cursor position in input buffer
     pub cursor_pos: usize,
+    
+    /// View manager for tab navigation
+    pub view_manager: ViewManager,
+    
+    /// Terminal view
+    pub terminal_view: TerminalView,
+    
+    /// Monitor view
+    pub monitor_view: MonitorView,
+    
+    /// Help view
+    pub help_view: HelpView,
+    
+    /// Logs view
+    pub logs_view: LogsView,
 }
 
 impl App {
@@ -46,6 +62,11 @@ impl App {
             output: VecDeque::new(),
             input_mode: InputMode::Insert,
             cursor_pos: 0,
+            view_manager: ViewManager::new(),
+            terminal_view: TerminalView::new(),
+            monitor_view: MonitorView::new(),
+            help_view: HelpView::new(),
+            logs_view: LogsView::new(),
         };
         
         app.print_welcome();

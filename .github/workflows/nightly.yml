@@ -51,9 +51,8 @@ jobs:
           components: rust-src
 
       - name: Build release
-        env:
-          PATH: ${{ env.PATH }}:$HOME/.local/i686-elf/bin
         run: |
+          export PATH="$HOME/.local/i686-elf/bin:$PATH"
           make clean
           make iso
 

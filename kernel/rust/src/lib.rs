@@ -20,6 +20,7 @@ pub mod process;
 pub mod syscall;
 pub mod graphics;
 pub mod fusion;
+pub mod display_server;
 
 use core::panic::PanicInfo;
 

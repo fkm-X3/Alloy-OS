@@ -5,9 +5,11 @@
 
 pub mod backend;
 pub mod terminal;
+pub mod framebuffer;
 
 pub use backend::FusionDisplayBackend;
 pub use terminal::TerminalSurface;
+pub use framebuffer::{FramebufferRenderer, Color};
 
 /// Fusion display system marker
 #[derive(Debug, Clone, Copy)]
@@ -17,5 +19,10 @@ impl Fusion {
     /// Create a new Fusion display backend
     pub fn new_backend() -> FusionDisplayBackend {
         FusionDisplayBackend::new()
+    }
+
+    /// Create a new framebuffer renderer
+    pub fn new_renderer(width: u32, height: u32) -> Result<FramebufferRenderer, backend::FusionError> {
+        FramebufferRenderer::new(width, height)
     }
 }

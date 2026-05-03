@@ -327,25 +327,43 @@ impl DisplayBackend for FusionDisplayBackend {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // Composite all surfaces to the framebuffer, sorted by z-order
-        let _ = self.display.clear(0xFFFFFFFF); // White background
+        // Clear framebuffer to white
+        self.display.clear(0xFFFFFFFF);
         
+        // Composite all surfaces to the framebuffer, sorted by z-order
         let surface_ids = self.surfaces_by_z_order();
         
         for surface_id in surface_ids {
             if let Some(surface) = self.surfaces.get(&surface_id) {
-                if surface.visible {
-                    // Blit surface pixels to the framebuffer at (x, y)
-                    for (idx, &pixel) in surface.pixels.iter().enumerate() {
-                        let local_x = (idx as u32) % surface.width;
-                        let local_y = (idx as u32) / surface.width;
+                if surface.visible && surface.x >= 0 && surface.y >= 0 {
+                    // Draw each row of the surface to the framebuffer
+                    let start_x = surface.x as u32;
+                    let start_y = surface.y as u32;
+                    
+                    for row in 0..surface.height {
+                        let fb_y = start_y + row;
                         
-                        let fb_x = surface.x as u32 + local_x;
-                        let fb_y = surface.y as u32 + local_y;
+                        // Skip if row is out of bounds
+                        if fb_y >= self.framebuffer_height {
+                            break;
+                        }
                         
-                        // Only draw if within framebuffer bounds
-                        if fb_x < self.framebuffer_width && fb_y < self.framebuffer_height {
-                            let _ = self.display.pixel_put(fb_x, fb_y, pixel);
+                        for col in 0..surface.width {
+                            let fb_x = start_x + col;
+                            
+                            // Skip if column is out of bounds
+                            if fb_x >= self.framebuffer_width {
+                                continue;
+                            }
+                            
+                            let pixel_idx = (row * surface.width + col) as usize;
+                            if pixel_idx < surface.pixels.len() {
+                                let pixel = surface.pixels[pixel_idx];
+                                // Only write non-transparent pixels (alpha check)
+                                if pixel != 0 {
+                                    let _ = self.display.pixel_put(fb_x, fb_y, pixel);
+                                }
+                            }
                         }
                     }
                 }

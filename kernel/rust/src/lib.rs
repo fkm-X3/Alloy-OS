@@ -19,6 +19,7 @@ pub mod utils;
 pub mod process;
 pub mod syscall;
 pub mod graphics;
+pub mod fusion;
 
 use core::panic::PanicInfo;
 

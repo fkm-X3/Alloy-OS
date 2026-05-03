@@ -66,6 +66,7 @@ impl App {
         app
     }
     
+    
     fn print_welcome(&mut self) {
         self.terminal_output.push_back("╔══════════════════════════════════════════════════════╗".to_string());
         self.terminal_output.push_back("║         Alloy OS Terminal - Iced Edition             ║".to_string());

@@ -8,10 +8,13 @@ name = "alloy-terminal"
 path = "src/main.rs"
 
 [dependencies]
-iced = { version = "0.12", features = ["debug"] }
+iced = { version = "0.12", features = ["debug", "image"] }
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
+image = "0.24"
+usvg = "0.40"
+tiny-skia = "0.11"
 
 [dev-dependencies]

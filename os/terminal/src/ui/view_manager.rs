@@ -2,32 +2,32 @@
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewType {
-    SystemStats,
+    Splash,
     Terminal,
 }
 
 impl ViewType {
     pub fn all() -> [ViewType; 2] {
-        [ViewType::SystemStats, ViewType::Terminal]
+        [ViewType::Splash, ViewType::Terminal]
     }
 
     pub fn next(self) -> ViewType {
         match self {
-            ViewType::SystemStats => ViewType::Terminal,
-            ViewType::Terminal => ViewType::SystemStats,
+            ViewType::Splash => ViewType::Terminal,
+            ViewType::Terminal => ViewType::Splash,
         }
     }
 
     pub fn prev(self) -> ViewType {
         match self {
-            ViewType::SystemStats => ViewType::Terminal,
-            ViewType::Terminal => ViewType::SystemStats,
+            ViewType::Splash => ViewType::Terminal,
+            ViewType::Terminal => ViewType::Splash,
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
-            ViewType::SystemStats => "System Stats",
+            ViewType::Splash => "Splash",
             ViewType::Terminal => "Terminal",
         }
     }
@@ -40,7 +40,7 @@ pub struct ViewManager {
 impl ViewManager {
     pub fn new() -> Self {
         Self {
-            current: ViewType::SystemStats,
+            current: ViewType::Splash,
         }
     }
 

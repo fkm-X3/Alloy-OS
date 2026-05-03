@@ -67,7 +67,7 @@ impl Application for TerminalApp {
 
         // Main content area
         let content = match self.app.view_manager.current_view() {
-            ui::ViewType::SystemStats => ui::views::system_stats_view(&self.app),
+            ui::ViewType::Splash => ui::views::splash_view(&self.app),
             ui::ViewType::Terminal => ui::views::terminal_view(&self.app),
         };
 
@@ -85,3 +85,4 @@ impl Application for TerminalApp {
             .into()
     }
 }
+

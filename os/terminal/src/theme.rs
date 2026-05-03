@@ -1,6 +1,4 @@
 /// Theme system for Alloy OS Terminal
-/// 
-/// Defines colors and styling for the GUI
 
 use iced::Color;
 
@@ -30,8 +28,8 @@ impl Theme {
             bg: Color::from_rgb(25.0 / 255.0, 25.0 / 255.0, 35.0 / 255.0),
             bg_alt: Color::from_rgb(35.0 / 255.0, 35.0 / 255.0, 50.0 / 255.0),
             border: Color::from_rgb(70.0 / 255.0, 70.0 / 255.0, 90.0 / 255.0),
-            accent_primary: Color::from_rgb(0.0, 1.0, 1.0), // Cyan
-            accent_secondary: Color::from_rgb(0.0, 1.0, 0.0), // Green
+            accent_primary: Color::from_rgb(0.0, 1.0, 1.0),
+            accent_secondary: Color::from_rgb(0.0, 1.0, 0.0),
             success: Color::from_rgb(0.0, 1.0, 0.0),
             warning: Color::from_rgb(1.0, 1.0, 0.0),
             error: Color::from_rgb(1.0, 0.0, 0.0),

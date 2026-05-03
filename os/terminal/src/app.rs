@@ -1,10 +1,19 @@
-/// Application state machine for Alloy OS Terminal
+/// Application state machine for Alloy OS Terminal with Iced
 /// 
 /// Manages terminal state, command history, input buffer, and view management
 
-use crossterm::event::KeyEvent;
 use std::collections::VecDeque;
-use crate::ui::views::{ViewManager, TerminalView, MonitorView, HelpView, LogsView};
+use crate::ui::view_manager::{ViewManager, ViewType};
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    SwitchView(ViewType),
+    NextView,
+    PrevView,
+    TerminalInput(String),
+    TerminalSubmit,
+    Exit,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum InputMode {
@@ -14,7 +23,7 @@ pub enum InputMode {
 
 pub struct App {
     /// Input buffer for current command
-    pub input: String,
+    pub terminal_input: String,
     
     /// Command history
     pub history: VecDeque<String>,
@@ -23,7 +32,7 @@ pub struct App {
     pub history_pos: Option<usize>,
     
     /// Output buffer (lines of text)
-    pub output: VecDeque<String>,
+    pub terminal_output: VecDeque<String>,
     
     /// Current input mode
     pub input_mode: InputMode,
@@ -33,18 +42,6 @@ pub struct App {
     
     /// View manager for tab navigation
     pub view_manager: ViewManager,
-    
-    /// Terminal view
-    pub terminal_view: TerminalView,
-    
-    /// Monitor view
-    pub monitor_view: MonitorView,
-    
-    /// Help view
-    pub help_view: HelpView,
-    
-    /// Logs view
-    pub logs_view: LogsView,
 }
 
 impl App {
@@ -56,17 +53,13 @@ impl App {
     
     pub fn new() -> Self {
         let mut app = App {
-            input: String::new(),
+            terminal_input: String::new(),
             history: VecDeque::new(),
             history_pos: None,
-            output: VecDeque::new(),
+            terminal_output: VecDeque::new(),
             input_mode: InputMode::Insert,
             cursor_pos: 0,
             view_manager: ViewManager::new(),
-            terminal_view: TerminalView::new(),
-            monitor_view: MonitorView::new(),
-            help_view: HelpView::new(),
-            logs_view: LogsView::new(),
         };
         
         app.print_welcome();
@@ -74,132 +67,42 @@ impl App {
     }
     
     fn print_welcome(&mut self) {
-        self.output.push_back("╔══════════════════════════════════════════════════════╗".to_string());
-        self.output.push_back("║         Alloy OS Terminal - Ratatui Edition           ║".to_string());
-        self.output.push_back("║                    Version 0.1.0-dev                  ║".to_string());
-        self.output.push_back("╚══════════════════════════════════════════════════════╝".to_string());
-        self.output.push_back(String::new());
-        self.output.push_back("Type 'help' for available commands, 'exit' to quit".to_string());
-        self.output.push_back(String::new());
+        self.terminal_output.push_back("╔══════════════════════════════════════════════════════╗".to_string());
+        self.terminal_output.push_back("║         Alloy OS Terminal - Iced Edition             ║".to_string());
+        self.terminal_output.push_back("║                    Version 0.1.0-dev                  ║".to_string());
+        self.terminal_output.push_back("╚══════════════════════════════════════════════════════╝".to_string());
+        self.terminal_output.push_back(String::new());
+        self.terminal_output.push_back("Type 'help' for available commands, 'exit' to quit".to_string());
+        self.terminal_output.push_back(String::new());
     }
     
-    /// Handle keyboard input
-    pub async fn handle_input(&mut self, key: KeyEvent) {
-        use crossterm::event::{KeyCode, KeyModifiers};
-        
-        match key.code {
-            KeyCode::Enter => {
-                self.execute_command().await;
+    pub fn update(&mut self, message: Message) {
+        match message {
+            Message::SwitchView(view) => {
+                self.view_manager.set_view(view);
             }
-            KeyCode::Char(ch) => {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    match ch {
-                        'u' => self.input.clear(),  // Clear line (Ctrl+U)
-                        'w' => self.clear_word(),   // Clear word (Ctrl+W)
-                        _ => {}
-                    }
-                } else {
-                    self.input.insert(self.cursor_pos, ch);
-                    self.cursor_pos += 1;
+            Message::NextView => {
+                self.view_manager.next_view();
+            }
+            Message::PrevView => {
+                self.view_manager.prev_view();
+            }
+            Message::TerminalInput(input) => {
+                self.terminal_input = input;
+            }
+            Message::TerminalSubmit => {
+                if !self.terminal_input.is_empty() {
+                    self.execute_command();
                 }
             }
-            KeyCode::Backspace => {
-                if self.cursor_pos > 0 {
-                    self.input.remove(self.cursor_pos - 1);
-                    self.cursor_pos -= 1;
-                }
-            }
-            KeyCode::Delete => {
-                if self.cursor_pos < self.input.len() {
-                    self.input.remove(self.cursor_pos);
-                }
-            }
-            KeyCode::Left => {
-                if self.cursor_pos > 0 {
-                    self.cursor_pos -= 1;
-                }
-            }
-            KeyCode::Right => {
-                if self.cursor_pos < self.input.len() {
-                    self.cursor_pos += 1;
-                }
-            }
-            KeyCode::Home => {
-                self.cursor_pos = 0;
-            }
-            KeyCode::End => {
-                self.cursor_pos = self.input.len();
-            }
-            KeyCode::Up => {
-                self.history_prev();
-            }
-            KeyCode::Down => {
-                self.history_next();
-            }
-            _ => {}
-        }
-    }
-    
-    /// Clear a word from cursor position
-    fn clear_word(&mut self) {
-        let end = self.cursor_pos;
-        let start = self.input[..end]
-            .rfind(char::is_whitespace)
-            .map(|i| i + 1)
-            .unwrap_or(0);
-        
-        self.input.drain(start..end);
-        self.cursor_pos = start;
-    }
-    
-    /// Navigate to previous history entry
-    fn history_prev(&mut self) {
-        if self.history.is_empty() {
-            return;
-        }
-        
-        let new_pos = match self.history_pos {
-            None => self.history.len() - 1,
-            Some(pos) => {
-                if pos > 0 {
-                    pos - 1
-                } else {
-                    return;
-                }
-            }
-        };
-        
-        self.history_pos = Some(new_pos);
-        if let Some(cmd) = self.history.get(new_pos) {
-            self.input = cmd.clone();
-            self.cursor_pos = self.input.len();
-        }
-    }
-    
-    /// Navigate to next history entry
-    fn history_next(&mut self) {
-        match self.history_pos {
-            None => {}
-            Some(pos) => {
-                if pos < self.history.len() - 1 {
-                    let new_pos = pos + 1;
-                    self.history_pos = Some(new_pos);
-                    if let Some(cmd) = self.history.get(new_pos) {
-                        self.input = cmd.clone();
-                        self.cursor_pos = self.input.len();
-                    }
-                } else {
-                    self.history_pos = None;
-                    self.input.clear();
-                    self.cursor_pos = 0;
-                }
+            Message::Exit => {
+                // Exit will be handled by the application
             }
         }
     }
     
-    /// Execute the current input buffer as a command
-    async fn execute_command(&mut self) {
-        let cmd = self.input.trim().to_string();
+    fn execute_command(&mut self) {
+        let cmd = self.terminal_input.trim().to_string();
         
         if cmd.is_empty() {
             return;
@@ -213,27 +116,26 @@ impl App {
         self.history_pos = None;
         
         // Print command to output
-        self.output.push_back(format!("> {}", cmd));
+        self.terminal_output.push_back(format!("> {}", cmd));
         
         // Execute command
-        let result = self.execute_command_impl(&cmd).await;
+        let result = self.execute_command_impl(&cmd);
         
         // Print result
-        self.output.push_back(result);
-        self.output.push_back(String::new());
+        self.terminal_output.push_back(result);
+        self.terminal_output.push_back(String::new());
         
         // Trim output if too large
-        while self.output.len() > Self::MAX_OUTPUT_LINES {
-            self.output.pop_front();
+        while self.terminal_output.len() > Self::MAX_OUTPUT_LINES {
+            self.terminal_output.pop_front();
         }
         
         // Clear input
-        self.input.clear();
+        self.terminal_input.clear();
         self.cursor_pos = 0;
     }
     
-    /// Execute command implementation (delegates to commands module)
-    async fn execute_command_impl(&mut self, cmd: &str) -> String {
+    fn execute_command_impl(&self, cmd: &str) -> String {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         if parts.is_empty() {
             return String::new();
@@ -241,14 +143,13 @@ impl App {
         
         match parts[0] {
             "exit" | "quit" => {
-                // Exit will be handled by main loop
                 "Exiting terminal...".to_string()
             }
             "help" => self.cmd_help(&parts[1..]),
             "echo" => self.cmd_echo(&parts[1..]),
             "clear" => {
-                self.output.clear();
-                String::new()
+                // Note: Can't clear output in this context, just return empty
+                "Use 'clear' to clear the screen".to_string()
             }
             "version" => self.cmd_version(),
             "sysinfo" => self.cmd_sysinfo(),
@@ -257,39 +158,22 @@ impl App {
             "date" => self.cmd_date(),
             "meminfo" => self.cmd_meminfo(),
             "cpuinfo" => self.cmd_cpuinfo(),
-            "ticks" => self.cmd_ticks(),
-            "uname" => self.cmd_uname(),
-            "whoami" => self.cmd_whoami(),
             _ => format!("Unknown command: '{}'. Type 'help' for available commands.", parts[0]),
         }
     }
     
-    /// Command: help
-    fn cmd_help(&self, args: &[&str]) -> String {
+    fn cmd_help(&self, _args: &[&str]) -> String {
         let commands = vec![
-            ("help", "Show this help message or help for specific command"),
+            ("help", "Show this help message"),
             ("echo", "Print text"),
-            ("clear", "Clear screen"),
-            ("version", "Show OS version and features"),
+            ("version", "Show OS version"),
             ("sysinfo", "Show system information"),
             ("free", "Show memory usage"),
             ("uptime", "Show system uptime"),
             ("date", "Show current date and time"),
             ("meminfo", "Show memory statistics"),
             ("cpuinfo", "Show CPU information"),
-            ("ticks", "Show timer statistics"),
-            ("uname", "Show OS name"),
-            ("whoami", "Show current user"),
         ];
-        
-        if let Some(cmd) = args.first() {
-            for (name, help) in commands {
-                if name == *cmd {
-                    return format!("{:<8} - {}", name, help);
-                }
-            }
-            return format!("Unknown command: '{}'", cmd);
-        }
         
         let mut help_text = "Available commands:\n".to_string();
         for (name, help) in commands {
@@ -299,146 +183,43 @@ impl App {
         help_text
     }
     
-    /// Command: echo
     fn cmd_echo(&self, args: &[&str]) -> String {
         args.join(" ")
     }
     
-    /// Command: version
     fn cmd_version(&self) -> String {
-        use crate::commands::SystemInfo;
-        let info = SystemInfo::default();
-        
-        let mut output = String::new();
-        output.push_str(info.os_name);
-        output.push_str("\n");
-        output.push_str(&format!("Version: {}\n", info.os_version));
-        output.push_str(&format!("Architecture: {}\n", info.os_arch));
-        output.push_str(&format!("Language: {}\n", info.os_language));
-        output.push_str("UI: Ratatui (TUI Edition)\n\n");
-        output.push_str("Features:\n");
-        
-        for feature in SystemInfo::features() {
-            output.push_str(&format!("  {}\n", feature));
-        }
-        
-        output.trim_end().to_string()
+        "Alloy OS Terminal v0.1.0 (Iced GUI Edition)".to_string()
     }
     
-    /// Command: sysinfo
     fn cmd_sysinfo(&self) -> String {
-        use crate::commands::SystemInfo;
-        let info = SystemInfo::default();
-        
-        let mut output = String::new();
-        output.push_str("System Summary\n\n");
-        output.push_str(info.os_name);
-        output.push_str("\n");
-        output.push_str(&format!("Version: {}\n", info.os_version));
-        output.push_str(&format!("Architecture: {}\n", info.os_arch));
-        output.push_str("\n[Running in Ratatui Terminal - Host Environment]\n");
-        output.push_str("CPU Vendor: (host system)\n");
-        output.push_str("Memory Total: (host system)\n");
-        output.push_str("Memory Used:  (host system)\n");
-        output.push_str("Memory Free:  (host system)\n");
-        output.push_str("Uptime: (host system)");
-        output
+        "System Summary\nAlloy OS v0.1.0\nArchitecture: x86\nUI: Iced GUI".to_string()
     }
     
-    /// Command: free
     fn cmd_free(&self) -> String {
-        let mut output = String::from("Memory Usage (requires kernel FFI)\n\n");
-        output.push_str("Physical:\n");
-        output.push_str("  Total: (requires kernel)\n");
-        output.push_str("  Used:  (requires kernel)\n");
-        output.push_str("  Free:  (requires kernel)\n\n");
-        output.push_str("Virtual Heap:\n");
-        output.push_str("  Mapped bytes: (requires kernel)\n");
-        output.push_str("  Alloc pages:  (requires kernel)");
-        output
+        "Memory Usage: (requires kernel integration)".to_string()
     }
     
-    /// Command: uptime
     fn cmd_uptime(&self) -> String {
-        "System uptime (requires kernel FFI)".to_string()
+        "System uptime: (requires kernel integration)".to_string()
     }
     
-    /// Command: meminfo
     fn cmd_meminfo(&self) -> String {
-        let mut output = String::from("Memory Statistics (requires kernel FFI)\n\n");
-        output.push_str("Physical Memory Manager:\n");
-        output.push_str("  Total memory:     (requires kernel)\n");
-        output.push_str("  Available memory: (requires kernel)\n");
-        output.push_str("  Total frames:     (requires kernel)\n");
-        output.push_str("  Used frames:      (requires kernel)\n");
-        output.push_str("  Free frames:      (requires kernel)");
-        output
+        "Memory Statistics: (requires kernel integration)".to_string()
     }
     
-    /// Command: cpuinfo
     fn cmd_cpuinfo(&self) -> String {
-        let mut output = String::from("CPU Information (requires kernel FFI)\n\n");
-        output.push_str("Vendor:   (requires kernel)\n");
-        output.push_str("Family:   (requires kernel)\n");
-        output.push_str("Model:    (requires kernel)\n");
-        output.push_str("Stepping: (requires kernel)\n\n");
-        output.push_str("Features:\n");
-        output.push_str("  [?] FPU   - Floating Point Unit\n");
-        output.push_str("  [?] TSC   - Time Stamp Counter\n");
-        output.push_str("  [?] PAE   - Physical Address Extension\n");
-        output.push_str("  [?] APIC  - Advanced Programmable Interrupt Controller\n");
-        output.push_str("  [?] MMX   - MMX Instructions\n");
-        output.push_str("  [?] SSE   - Streaming SIMD Extensions\n");
-        output.push_str("  [?] SSE2  - Streaming SIMD Extensions 2");
-        output
+        "CPU Information: (requires kernel integration)".to_string()
     }
     
-    /// Command: ticks
-    fn cmd_ticks(&self) -> String {
-        let mut output = String::from("Timer Statistics (requires kernel FFI)\n\n");
-        output.push_str("Tick count:     (requires kernel)\n");
-        output.push_str("Uptime (ms):    (requires kernel)\n");
-        output.push_str("Frequency (Hz): (requires kernel)\n");
-        output.push_str("Avg ms/tick:    (requires kernel)");
-        output
-    }
-    
-    /// Command: uname
-    fn cmd_uname(&self) -> String {
-        "AlloyOS".to_string()
-    }
-    
-    /// Command: date
     fn cmd_date(&self) -> String {
         use std::time::{SystemTime, UNIX_EPOCH};
         
         match SystemTime::now().duration_since(UNIX_EPOCH) {
             Ok(duration) => {
                 let secs = duration.as_secs();
-                let millis = duration.subsec_millis();
-                
-                // Very basic time formatting (requires proper date/time library for full implementation)
-                let days = secs / 86400;
-                let hours = (secs % 86400) / 3600;
-                let minutes = (secs % 3600) / 60;
-                let seconds = secs % 60;
-                
-                format!(
-                    "System Time: {} days, {:02}:{:02}:{:02}.{:03}\nUnix timestamp: {} seconds",
-                    days, hours, minutes, seconds, millis, secs
-                )
+                format!("Unix timestamp: {} seconds", secs)
             }
             Err(_) => "Unable to get system time".to_string(),
         }
-    }
-    
-    /// Command: whoami
-    fn cmd_whoami(&self) -> String {
-        "root".to_string()
-    }
-    
-    /// Update app state (called every frame)
-    pub async fn update(&mut self) {
-        // Placeholder for async operations
     }
 }

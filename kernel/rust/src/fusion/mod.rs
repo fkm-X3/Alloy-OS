@@ -17,8 +17,8 @@ pub struct Fusion;
 
 impl Fusion {
     /// Create a new Fusion display backend
-    pub fn new_backend() -> FusionDisplayBackend {
-        FusionDisplayBackend::new()
+    pub fn new_backend(display: crate::graphics::vesa::VesaDisplay) -> FusionDisplayBackend {
+        FusionDisplayBackend::new(display)
     }
 
     /// Create a new framebuffer renderer

@@ -1,14 +1,24 @@
 //! Terminal Surface Integration - Wrapper for rendering terminal UI to framebuffer
 //!
-//! Provides a Surface abstraction that allows Iced UI components to render
-//! directly to kernel framebuffer memory.
+//! Provides a Surface abstraction that allows terminal rendering directly
+//! to kernel framebuffer memory. Supports character-based dimensions that
+//! map to pixel coordinates using a 5x7 bitmap font.
 
 use alloc::vec::Vec;
+use crate::terminal::Terminal;
+use super::backend::FusionError;
+
+// Font metrics: 5x7 characters with 9-pixel line height
+const CHAR_WIDTH_PIXELS: u32 = 5;
+const CHAR_HEIGHT_PIXELS: u32 = 7;
+const LINE_HEIGHT_PIXELS: u32 = 9;
 
 /// Simple surface wrapper for pixel buffer
 #[derive(Debug)]
 pub struct Surface {
     pixels: Vec<u32>,
+    width: u32,
+    height: u32,
 }
 
 impl Surface {
@@ -16,47 +26,71 @@ impl Surface {
         let size = (width * height) as usize;
         Surface {
             pixels: alloc::vec![0u32; size],
+            width,
+            height,
         }
     }
 
     pub fn get_buffer(&self) -> &[u32] {
         &self.pixels
     }
+
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            let idx = (y * self.width + x) as usize;
+            if idx < self.pixels.len() {
+                self.pixels[idx] = color;
+            }
+        }
+    }
 }
 
 /// Terminal Surface - framebuffer wrapper for UI rendering
 ///
-/// Provides an interface for rendering Iced UI elements to a fixed framebuffer.
-/// Supports text rendering, rectangles, and color compositing.
+/// Provides an interface for rendering terminal and UI elements to a fixed framebuffer.
+/// Maps character-based coordinates to pixel coordinates using 5x7 bitmap font metrics.
 #[derive(Debug)]
 pub struct TerminalSurface {
-    width: u32,
-    height: u32,
+    width_pixels: u32,
+    height_pixels: u32,
     pixels: Vec<u32>,
     surface: Surface,
+    _terminal: *mut Terminal,
 }
 
 impl TerminalSurface {
-    /// Create a new terminal surface
-    pub fn new(width: u32, height: u32) -> Self {
-        let pixel_count = (width * height) as usize;
-        
-        TerminalSurface {
-            width,
-            height,
-            pixels: alloc::vec![0x000000u32; pixel_count],
-            surface: Surface::new(width, height),
+    /// Create a new terminal surface from character dimensions
+    ///
+    /// Converts character dimensions (e.g., 80x25) to pixel dimensions using
+    /// 5x7 font metrics with 9-pixel line height.
+    pub fn new(terminal: &mut Terminal, width_chars: u32, height_chars: u32) -> Result<Self, FusionError> {
+        // Convert character dimensions to pixels
+        let width_pixels = width_chars * CHAR_WIDTH_PIXELS;
+        let height_pixels = height_chars * LINE_HEIGHT_PIXELS;
+
+        if width_pixels == 0 || height_pixels == 0 {
+            return Err(FusionError::InvalidDimensions);
         }
+
+        let pixel_count = (width_pixels * height_pixels) as usize;
+        
+        Ok(TerminalSurface {
+            width_pixels,
+            height_pixels,
+            pixels: alloc::vec![0x000000u32; pixel_count],
+            surface: Surface::new(width_pixels, height_pixels),
+            _terminal: terminal as *mut Terminal,
+        })
     }
 
-    /// Get surface dimensions
+    /// Get surface dimensions in pixels
     pub fn dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        (self.width_pixels, self.height_pixels)
     }
 
     /// Get surface dimensions (compatibility method)
     pub fn get_surface_dimensions(&self) -> (u32, u32) {
-        (self.width, self.height)
+        (self.width_pixels, self.height_pixels)
     }
 
     /// Get mutable pixel buffer
@@ -69,6 +103,17 @@ impl TerminalSurface {
         &self.pixels
     }
 
+    /// Set a pixel to the given color
+    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        self.surface.set_pixel(x, y, color);
+        if x < self.width_pixels && y < self.height_pixels {
+            let idx = (y * self.width_pixels + x) as usize;
+            if idx < self.pixels.len() {
+                self.pixels[idx] = color;
+            }
+        }
+    }
+
     /// Get underlying surface (compatibility method)
     pub fn surface(&self) -> &Surface {
         &self.surface
@@ -79,10 +124,12 @@ impl TerminalSurface {
         // Placeholder - would normally track dirty regions
     }
 
-    /// Render surface (no-op for now, just syncs pixels)
+    /// Render surface (syncs pixels to display)
     pub fn render(&mut self) -> Result<(), ()> {
         // Sync pixels to surface for display_server compatibility
-        self.surface.pixels.copy_from_slice(&self.pixels);
+        if self.surface.pixels.len() == self.pixels.len() {
+            self.surface.pixels.copy_from_slice(&self.pixels);
+        }
         Ok(())
     }
 
@@ -93,103 +140,33 @@ impl TerminalSurface {
         }
     }
 
-    /// Draw a filled rectangle
+    /// Handle terminal input
+    pub fn handle_input(&mut self, key: u8) -> Result<(), ()> {
+        if !self._terminal.is_null() {
+            unsafe {
+                (*self._terminal).handle_input(key);
+            }
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    /// Fill a rectangle with color
     pub fn fill_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32) {
         for row in 0..height {
-            if y + row >= self.height {
+            if y + row >= self.height_pixels {
                 break;
             }
             for col in 0..width {
-                if x + col >= self.width {
+                if x + col >= self.width_pixels {
                     break;
                 }
-                let idx = ((y + row) * self.width + (x + col)) as usize;
+                let idx = ((y + row) * self.width_pixels + (x + col)) as usize;
                 if idx < self.pixels.len() {
                     self.pixels[idx] = color;
                 }
             }
         }
-    }
-
-    /// Draw a line (simple horizontal or vertical)
-    pub fn draw_line(&mut self, x1: u32, y1: u32, x2: u32, y2: u32, color: u32) {
-        if y1 == y2 {
-            // Horizontal line
-            let start_x = x1.min(x2);
-            let end_x = x1.max(x2);
-            for x in start_x..=end_x {
-                if x < self.width && y1 < self.height {
-                    let idx = (y1 * self.width + x) as usize;
-                    if idx < self.pixels.len() {
-                        self.pixels[idx] = color;
-                    }
-                }
-            }
-        } else if x1 == x2 {
-            // Vertical line
-            let start_y = y1.min(y2);
-            let end_y = y1.max(y2);
-            for y in start_y..=end_y {
-                if x1 < self.width && y < self.height {
-                    let idx = (y * self.width + x1) as usize;
-                    if idx < self.pixels.len() {
-                        self.pixels[idx] = color;
-                    }
-                }
-            }
-        }
-    }
-
-    /// Set a single pixel
-    pub fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
-        if x < self.width && y < self.height {
-            let idx = (y * self.width + x) as usize;
-            if idx < self.pixels.len() {
-                self.pixels[idx] = color;
-            }
-        }
-    }
-
-    /// Blend a color onto the surface (simple alpha blending)
-    pub fn blend_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: u32, alpha: u8) {
-        let alpha = alpha as u32;
-        let inv_alpha = 255 - alpha;
-
-        for row in 0..height {
-            if y + row >= self.height {
-                break;
-            }
-            for col in 0..width {
-                if x + col >= self.width {
-                    break;
-                }
-                let idx = ((y + row) * self.width + (x + col)) as usize;
-                if idx < self.pixels.len() {
-                    let existing = self.pixels[idx];
-                    
-                    // Extract RGB components
-                    let r1 = (existing >> 16) & 0xFF;
-                    let g1 = (existing >> 8) & 0xFF;
-                    let b1 = existing & 0xFF;
-
-                    let r2 = (color >> 16) & 0xFF;
-                    let g2 = (color >> 8) & 0xFF;
-                    let b2 = color & 0xFF;
-
-                    // Blend
-                    let r = ((r1 * inv_alpha + r2 * alpha) / 255) & 0xFF;
-                    let g = ((g1 * inv_alpha + g2 * alpha) / 255) & 0xFF;
-                    let b = ((b1 * inv_alpha + b2 * alpha) / 255) & 0xFF;
-
-                    self.pixels[idx] = (r << 16) | (g << 8) | b;
-                }
-            }
-        }
-    }
-}
-
-impl Default for TerminalSurface {
-    fn default() -> Self {
-        Self::new(1024, 768)
     }
 }

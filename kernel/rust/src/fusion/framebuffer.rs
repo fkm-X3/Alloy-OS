@@ -72,36 +72,71 @@ impl Color {
     }
 }
 
-/// Simple framebuffer renderer for Iced UI
+/// Simple framebuffer renderer for UI drawing
 pub struct FramebufferRenderer {
-    surface: TerminalSurface,
+    width: u32,
+    height: u32,
+    pixels: alloc::vec::Vec<u32>,
 }
 
 impl FramebufferRenderer {
     /// Create a new renderer for a given surface size
     pub fn new(width: u32, height: u32) -> Result<Self, crate::fusion::backend::FusionError> {
-        let surface = TerminalSurface::new(width, height);
-        Ok(FramebufferRenderer { surface })
+        if width == 0 || height == 0 {
+            return Err(crate::fusion::backend::FusionError::InvalidDimensions);
+        }
+        
+        let pixel_count = (width as usize)
+            .checked_mul(height as usize)
+            .ok_or(crate::fusion::backend::FusionError::InvalidDimensions)?;
+
+        Ok(FramebufferRenderer {
+            width,
+            height,
+            pixels: alloc::vec![0u32; pixel_count],
+        })
     }
 
-    /// Get mutable reference to underlying surface
-    pub fn surface_mut(&mut self) -> &mut TerminalSurface {
-        &mut self.surface
+    /// Get surface dimensions
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
-    /// Get reference to underlying surface
-    pub fn surface(&self) -> &TerminalSurface {
-        &self.surface
+    /// Get pixel buffer
+    pub fn pixels(&self) -> &[u32] {
+        &self.pixels
+    }
+
+    /// Get mutable pixel buffer
+    pub fn pixels_mut(&mut self) -> &mut [u32] {
+        &mut self.pixels
     }
 
     /// Clear the entire surface with a color
     pub fn clear(&mut self, color: Color) {
-        self.surface.clear(color.to_pixel());
+        let pixel = color.to_pixel();
+        for p in &mut self.pixels {
+            *p = pixel;
+        }
     }
 
     /// Draw a filled rectangle
     pub fn fill_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: Color) {
-        self.surface.fill_rect(x, y, width, height, color.to_pixel());
+        let pixel = color.to_pixel();
+        for row in 0..height {
+            if y + row >= self.height {
+                break;
+            }
+            for col in 0..width {
+                if x + col >= self.width {
+                    break;
+                }
+                let idx = ((y + row) * self.width + (x + col)) as usize;
+                if idx < self.pixels.len() {
+                    self.pixels[idx] = pixel;
+                }
+            }
+        }
     }
 
     /// Draw a rectangle outline
@@ -111,9 +146,9 @@ impl FramebufferRenderer {
         // Top and bottom edges
         for i in 0..width {
             for t in 0..thickness {
-                self.surface.set_pixel(x + i, y + t, pixel); // Top
+                self.set_pixel(x + i, y + t, pixel); // Top
                 if y + height > t {
-                    self.surface.set_pixel(x + i, y + height - t - 1, pixel); // Bottom
+                    self.set_pixel(x + i, y + height - t - 1, pixel); // Bottom
                 }
             }
         }
@@ -121,10 +156,20 @@ impl FramebufferRenderer {
         // Left and right edges
         for i in 0..height {
             for t in 0..thickness {
-                self.surface.set_pixel(x + t, y + i, pixel); // Left
+                self.set_pixel(x + t, y + i, pixel); // Left
                 if x + width > t {
-                    self.surface.set_pixel(x + width - t - 1, y + i, pixel); // Right
+                    self.set_pixel(x + width - t - 1, y + i, pixel); // Right
                 }
+            }
+        }
+    }
+
+    /// Set a single pixel
+    fn set_pixel(&mut self, x: u32, y: u32, color: u32) {
+        if x < self.width && y < self.height {
+            let idx = (y * self.width + x) as usize;
+            if idx < self.pixels.len() {
+                self.pixels[idx] = color;
             }
         }
     }
@@ -133,7 +178,7 @@ impl FramebufferRenderer {
     pub fn h_line(&mut self, x1: u32, x2: u32, y: u32, color: Color, thickness: u32) {
         for i in x1..=x2 {
             for t in 0..thickness {
-                self.surface.set_pixel(i, y + t, color.to_pixel());
+                self.set_pixel(i, y + t, color.to_pixel());
             }
         }
     }
@@ -142,7 +187,7 @@ impl FramebufferRenderer {
     pub fn v_line(&mut self, x: u32, y1: u32, y2: u32, color: Color, thickness: u32) {
         for i in y1..=y2 {
             for t in 0..thickness {
-                self.surface.set_pixel(x + t, i, color.to_pixel());
+                self.set_pixel(x + t, i, color.to_pixel());
             }
         }
     }
@@ -150,7 +195,6 @@ impl FramebufferRenderer {
     /// Draw a circle (Bresenham's algorithm)
     pub fn circle(&mut self, cx: u32, cy: u32, radius: u32, color: Color, filled: bool) {
         let pixel = color.to_pixel();
-        let (w, h) = self.surface.dimensions();
         
         if filled {
             // Filled circle using scanline
@@ -170,14 +214,14 @@ impl FramebufferRenderer {
                 for x in 0..=dx {
                     let px = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
                     let py = cy.saturating_add(y).saturating_sub(radius);
-                    if px < w && py < h {
-                        self.surface.set_pixel(px, py, color);
+                    if px < self.width && py < self.height {
+                        self.set_pixel(px, py, pixel);
                     }
                     
                     let px2 = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
                     let py2 = cy.saturating_add(radius).saturating_sub(y);
-                    if px2 < w && py2 < h {
-                        self.surface.set_pixel(px2, py2, color);
+                    if px2 < self.width && py2 < self.height {
+                        self.set_pixel(px2, py2, pixel);
                     }
                 }
             }
@@ -201,8 +245,8 @@ impl FramebufferRenderer {
                 ];
 
                 for (px, py) in &points {
-                    if *px >= 0 && (*px as u32) < w && *py >= 0 && (*py as u32) < h {
-                        self.surface.set_pixel(*px as u32, *py as u32, pixel);
+                    if *px >= 0 && (*px as u32) < self.width && *py >= 0 && (*py as u32) < self.height {
+                        self.set_pixel(*px as u32, *py as u32, pixel);
                     }
                 }
 
@@ -215,21 +259,6 @@ impl FramebufferRenderer {
                 y += 1;
             }
         }
-    }
-
-    /// Get framebuffer dimensions
-    pub fn dimensions(&self) -> (u32, u32) {
-        self.surface.dimensions()
-    }
-
-    /// Get pixel buffer
-    pub fn pixels(&self) -> &[u32] {
-        self.surface.pixels()
-    }
-
-    /// Get mutable pixel buffer for direct access
-    pub fn pixels_mut(&mut self) -> &mut [u32] {
-        self.surface.pixels_mut()
     }
 }
 

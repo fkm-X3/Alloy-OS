@@ -193,12 +193,6 @@ impl FusionDisplayBackend {
     }
 }
 
-impl Default for FusionDisplayBackend {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 // Implement DisplayBackend trait for integration with display server
 impl DisplayBackend for FusionDisplayBackend {
     type Error = FusionError;

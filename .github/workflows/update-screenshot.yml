@@ -1,0 +1,103 @@
+name: Update Desktop Shell Screenshot
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  update-screenshot:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history for diff
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          nasm \
+          grub-pc-bin \
+          grub-common \
+          xorriso \
+          qemu-system-x86 \
+          mtools \
+          wget \
+          tar \
+          bison \
+          flex \
+          libgmp3-dev \
+          libmpc-dev \
+          libmpfr-dev \
+          texinfo \
+          python3 \
+          python3-pip
+
+    - name: Cache cross-compiler
+      id: cache-cross-compiler
+      uses: actions/cache@v3
+      with:
+        path: ~/.local/i686-elf
+        key: i686-elf-gcc-${{ runner.os }}-v1
+
+    - name: Build cross-compiler
+      if: steps.cache-cross-compiler.outputs.cache-hit != 'true'
+      run: |
+        echo "Building i686-elf cross-compiler..."
+        chmod +x build-toolchain.sh
+        ./build-toolchain.sh
+
+    - name: Install Rust nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          kernel/rust/target/
+        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+        restore-keys: |
+          rust-${{ runner.os }}-
+
+    - name: Set PATH
+      run: echo "~/.local/i686-elf/bin" >> $GITHUB_PATH
+
+    - name: Clean build
+      run: make clean
+
+    - name: Build kernel
+      run: make
+
+    - name: Build ISO
+      run: make iso
+
+    - name: Capture screenshot
+      run: python3 tools/capture_desktop_screenshot.py --iso build/alloy.iso --output assets/desktop-shell-grid.png --serial-log build/desktop-shell-boot.log --qemu-log build/qemu-screenshot.log --settle-seconds 5
+
+    - name: Check if image changed
+      id: check
+      run: |
+        if git diff --quiet assets/desktop-shell-grid.png; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Commit and push if changed
+      if: steps.check.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add assets/desktop-shell-grid.png
+        git commit -m "Update desktop-shell-grid.png [skip ci]"
+        git push

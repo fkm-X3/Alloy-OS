@@ -81,7 +81,7 @@ pub struct FusionDisplayBackend {
 
 impl FusionDisplayBackend {
     /// Create a new Fusion display backend
-    pub fn new(display: VesaDisplay) -> Self {
+    pub fn new(_display: VesaDisplay) -> Self {
         FusionDisplayBackend {
             surfaces: BTreeMap::new(),
             next_surface_id: 1,

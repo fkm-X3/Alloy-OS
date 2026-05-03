@@ -3,17 +3,26 @@
 /// A modern GUI interface for Alloy OS built on the Iced framework
 /// with System Stats and Terminal Emulator views
 
+#[cfg(feature = "desktop")]
 use iced::widget::{column, container, row, text, button};
+#[cfg(feature = "desktop")]
 use iced::{Application, Command, Element, Settings, Length, executor, window};
 
-mod app;
-mod theme;
-mod ui;
 mod framebuffer_renderer;
 mod splash_renderer;
 
+#[cfg(feature = "desktop")]
+mod app;
+#[cfg(feature = "desktop")]
+mod theme;
+#[cfg(feature = "desktop")]
+mod ui;
+
+#[cfg(feature = "desktop")]
 use app::{App, Message};
 
+/// Desktop build: run Iced application
+#[cfg(feature = "desktop")]
 pub fn main() -> iced::Result {
     TerminalApp::run(Settings {
         window: window::Settings {
@@ -24,10 +33,21 @@ pub fn main() -> iced::Result {
     })
 }
 
+/// Kernel headless build: render splash to framebuffer
+#[cfg(feature = "kernel-headless")]
+pub fn main() {
+    // Render splash screen to framebuffer for kernel display server
+    let mut fb = framebuffer_renderer::Framebuffer::new(1024, 768);
+    splash_renderer::render_splash_to_framebuffer(&mut fb, 0.0);
+    // Pixels are available via fb.pixels() for kernel to upload to display server
+}
+
+#[cfg(feature = "desktop")]
 struct TerminalApp {
     app: App,
 }
 
+#[cfg(feature = "desktop")]
 impl Application for TerminalApp {
     type Executor = executor::Default;
     type Message = Message;
@@ -87,4 +107,3 @@ impl Application for TerminalApp {
             .into()
     }
 }
-

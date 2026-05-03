@@ -4,6 +4,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   update-screenshot:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
@@ -100,4 +103,4 @@ jobs:
         git config --local user.name "GitHub Action"
         git add assets/desktop-shell-grid.png
         git commit -m "Update desktop-shell-grid.png [skip ci]"
-        git push
+        git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}

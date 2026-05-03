@@ -8,6 +8,7 @@ use alloc::collections::BTreeMap;
 use alloy_os_display::server::DisplayBackend;
 use alloy_os_display::protocol::{SurfaceId, PixelFormat, Rect};
 use crate::graphics::vesa::VesaDisplay;
+use crate::graphics::Display;
 
 /// Error type for Fusion display operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,20 +73,38 @@ impl SurfaceData {
 /// Manages framebuffer surfaces for the display server. Each surface represents
 /// a renderable area that can be positioned, resized, and composited onto the
 /// main framebuffer.
-#[derive(Debug)]
 pub struct FusionDisplayBackend {
     surfaces: BTreeMap<u32, SurfaceData>,
     next_surface_id: u32,
-    display: Option<()>, // VesaDisplay reference (stored as unit for now due to lifetimes)
+    display: VesaDisplay,
+    framebuffer_width: u32,
+    framebuffer_height: u32,
+}
+
+impl core::fmt::Debug for FusionDisplayBackend {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("FusionDisplayBackend")
+            .field("surfaces", &self.surfaces.len())
+            .field("framebuffer_width", &self.framebuffer_width)
+            .field("framebuffer_height", &self.framebuffer_height)
+            .finish()
+    }
 }
 
 impl FusionDisplayBackend {
     /// Create a new Fusion display backend
-    pub fn new(_display: VesaDisplay) -> Self {
+    pub fn new(mut display: VesaDisplay) -> Self {
+        let (width, height) = display.get_resolution();
+        // Clear the display on startup
+        let _ = display.clear(0xFFFFFFFF); // White background
+        display.swap_buffer();
+        
         FusionDisplayBackend {
             surfaces: BTreeMap::new(),
             next_surface_id: 1,
-            display: Some(()), // Note: VesaDisplay is owned, we're just noting it exists
+            display,
+            framebuffer_width: width,
+            framebuffer_height: height,
         }
     }
 
@@ -308,7 +327,32 @@ impl DisplayBackend for FusionDisplayBackend {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // No-op for now - compositing would happen here
+        // Composite all surfaces to the framebuffer, sorted by z-order
+        let _ = self.display.clear(0xFFFFFFFF); // White background
+        
+        let surface_ids = self.surfaces_by_z_order();
+        
+        for surface_id in surface_ids {
+            if let Some(surface) = self.surfaces.get(&surface_id) {
+                if surface.visible {
+                    // Blit surface pixels to the framebuffer at (x, y)
+                    for (idx, &pixel) in surface.pixels.iter().enumerate() {
+                        let local_x = (idx as u32) % surface.width;
+                        let local_y = (idx as u32) / surface.width;
+                        
+                        let fb_x = surface.x as u32 + local_x;
+                        let fb_y = surface.y as u32 + local_y;
+                        
+                        // Only draw if within framebuffer bounds
+                        if fb_x < self.framebuffer_width && fb_y < self.framebuffer_height {
+                            let _ = self.display.pixel_put(fb_x, fb_y, pixel);
+                        }
+                    }
+                }
+            }
+        }
+        
+        self.display.swap_buffer();
         Ok(())
     }
 }

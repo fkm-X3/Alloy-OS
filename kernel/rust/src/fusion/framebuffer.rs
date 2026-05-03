@@ -150,6 +150,7 @@ impl FramebufferRenderer {
     /// Draw a circle (Bresenham's algorithm)
     pub fn circle(&mut self, cx: u32, cy: u32, radius: u32, color: Color, filled: bool) {
         let pixel = color.to_pixel();
+        let (w, h) = self.surface.dimensions();
         
         if filled {
             // Filled circle using scanline
@@ -158,14 +159,25 @@ impl FramebufferRenderer {
                 if dy > radius as i32 {
                     continue;
                 }
-                let dx = ((radius as i32 * radius as i32 - dy * dy) as f32).sqrt() as u32;
+                
+                // Integer square root approximation (no_std compatible)
+                let dy2 = dy as u32;
+                let r2 = radius * radius;
+                let dy2_sq = dy2 * dy2;
+                let dx_sq = r2.saturating_sub(dy2_sq);
+                let dx = integer_sqrt(dx_sq);
                 
                 for x in 0..=dx {
-                    if cx + radius + x < 2048 && cy + y < 2048 {
-                        self.surface.set_pixel(cx + radius - dx + x, cy + y - radius, pixel);
+                    let px = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
+                    let py = cy.saturating_add(y).saturating_sub(radius);
+                    if px < w && py < h {
+                        self.surface.set_pixel(px, py, color);
                     }
-                    if cx + radius + x < 2048 && cy + radius > y {
-                        self.surface.set_pixel(cx + radius - dx + x, cy + radius - y, pixel);
+                    
+                    let px2 = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
+                    let py2 = cy.saturating_add(radius).saturating_sub(y);
+                    if px2 < w && py2 < h {
+                        self.surface.set_pixel(px2, py2, color);
                     }
                 }
             }
@@ -177,29 +189,21 @@ impl FramebufferRenderer {
 
             while x >= y {
                 // Draw 8 symmetric points
-                if cx + x as u32 < 2048 && cy + y as u32 < 2048 {
-                    self.surface.set_pixel(cx + x as u32, cy + y as u32, pixel);
-                }
-                if cx + y as u32 < 2048 && cy + x as u32 < 2048 {
-                    self.surface.set_pixel(cx + y as u32, cy + x as u32, pixel);
-                }
-                if cy + x as u32 < 2048 && x >= 0 {
-                    self.surface.set_pixel(cx - x as u32, cy + y as u32, pixel);
-                }
-                if cy + y as u32 < 2048 && y >= 0 {
-                    self.surface.set_pixel(cx - y as u32, cy + x as u32, pixel);
-                }
-                if cy + x as u32 < 2048 && x >= 0 {
-                    self.surface.set_pixel(cx + x as u32, cy - y as u32, pixel);
-                }
-                if cy + y as u32 < 2048 && y >= 0 {
-                    self.surface.set_pixel(cx + y as u32, cy - x as u32, pixel);
-                }
-                if cy + x as u32 < 2048 && x >= 0 {
-                    self.surface.set_pixel(cx - x as u32, cy - y as u32, pixel);
-                }
-                if cy + y as u32 < 2048 && y >= 0 {
-                    self.surface.set_pixel(cx - y as u32, cy - x as u32, pixel);
+                let points = [
+                    (cx as i32 + x, cy as i32 + y),
+                    (cx as i32 + y, cy as i32 + x),
+                    (cx as i32 - y, cy as i32 + x),
+                    (cx as i32 - x, cy as i32 + y),
+                    (cx as i32 - x, cy as i32 - y),
+                    (cx as i32 - y, cy as i32 - x),
+                    (cx as i32 + y, cy as i32 - x),
+                    (cx as i32 + x, cy as i32 - y),
+                ];
+
+                for (px, py) in &points {
+                    if *px >= 0 && (*px as u32) < w && *py >= 0 && (*py as u32) < h {
+                        self.surface.set_pixel(*px as u32, *py as u32, pixel);
+                    }
                 }
 
                 if d < 0 {
@@ -227,6 +231,21 @@ impl FramebufferRenderer {
     pub fn pixels_mut(&mut self) -> &mut [u32] {
         self.surface.pixels_mut()
     }
+}
+
+/// Integer square root for no_std compatibility
+#[inline]
+fn integer_sqrt(n: u32) -> u32 {
+    if n == 0 {
+        return 0;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
 }
 
 impl Default for FramebufferRenderer {

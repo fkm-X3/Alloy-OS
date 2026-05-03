@@ -5,6 +5,25 @@
 
 use alloc::vec::Vec;
 
+/// Simple surface wrapper for pixel buffer
+#[derive(Debug)]
+pub struct Surface {
+    pixels: Vec<u32>,
+}
+
+impl Surface {
+    fn new(width: u32, height: u32) -> Self {
+        let size = (width * height) as usize;
+        Surface {
+            pixels: alloc::vec![0u32; size],
+        }
+    }
+
+    pub fn get_buffer(&self) -> &[u32] {
+        &self.pixels
+    }
+}
+
 /// Terminal Surface - framebuffer wrapper for UI rendering
 ///
 /// Provides an interface for rendering Iced UI elements to a fixed framebuffer.
@@ -14,6 +33,7 @@ pub struct TerminalSurface {
     width: u32,
     height: u32,
     pixels: Vec<u32>,
+    surface: Surface,
 }
 
 impl TerminalSurface {
@@ -25,11 +45,17 @@ impl TerminalSurface {
             width,
             height,
             pixels: alloc::vec![0x000000u32; pixel_count],
+            surface: Surface::new(width, height),
         }
     }
 
     /// Get surface dimensions
     pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    /// Get surface dimensions (compatibility method)
+    pub fn get_surface_dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
     }
 
@@ -41,6 +67,23 @@ impl TerminalSurface {
     /// Get pixel buffer
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
+    }
+
+    /// Get underlying surface (compatibility method)
+    pub fn surface(&self) -> &Surface {
+        &self.surface
+    }
+
+    /// Mark surface as dirty (no-op for now)
+    pub fn mark_full_dirty(&mut self) {
+        // Placeholder - would normally track dirty regions
+    }
+
+    /// Render surface (no-op for now, just syncs pixels)
+    pub fn render(&mut self) -> Result<(), ()> {
+        // Sync pixels to surface for display_server compatibility
+        self.surface.pixels.copy_from_slice(&self.pixels);
+        Ok(())
     }
 
     /// Clear surface with color

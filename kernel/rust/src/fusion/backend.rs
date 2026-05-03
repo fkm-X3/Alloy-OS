@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloy_os_display::server::DisplayBackend;
 use alloy_os_display::protocol::{SurfaceId, PixelFormat, Rect};
+use crate::graphics::vesa::VesaDisplay;
 
 /// Error type for Fusion display operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,14 +76,16 @@ impl SurfaceData {
 pub struct FusionDisplayBackend {
     surfaces: BTreeMap<u32, SurfaceData>,
     next_surface_id: u32,
+    display: Option<()>, // VesaDisplay reference (stored as unit for now due to lifetimes)
 }
 
 impl FusionDisplayBackend {
     /// Create a new Fusion display backend
-    pub fn new() -> Self {
+    pub fn new(display: VesaDisplay) -> Self {
         FusionDisplayBackend {
             surfaces: BTreeMap::new(),
             next_surface_id: 1,
+            display: Some(()), // Note: VesaDisplay is owned, we're just noting it exists
         }
     }
 

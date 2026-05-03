@@ -9,6 +9,8 @@ use iced::{Application, Command, Element, Settings, Length, executor, window};
 mod app;
 mod theme;
 mod ui;
+mod framebuffer_renderer;
+mod splash_renderer;
 
 use app::{App, Message};
 

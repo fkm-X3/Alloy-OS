@@ -18,3 +18,7 @@ usvg = "0.40"
 tiny-skia = "0.11"
 
 [dev-dependencies]
+
+[[bin]]
+name = "test-splash-renderer"
+path = "src/bin/test_splash_renderer.rs"

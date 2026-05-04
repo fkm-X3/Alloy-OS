@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 use alloy_os_display::apps::desktop_shell::{
     DesktopShell, ShellAction, ShellApp, ShellInputOutcome, default_window_options_for_app,
 };
@@ -146,13 +148,40 @@ struct IcedUiState {
     accent_bright: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
 struct IcedUiRuntime {
     binding: IcedWindowBinding,
     state: IcedUiState,
     surface_width: u32,
     surface_height: u32,
+    frame_source: Box<dyn IcedFrameSource>,
     dirty: bool,
+}
+
+/// Source of Iced frame pixels uploaded to Fusion surfaces.
+///
+/// This keeps Fusion as a compositor-only layer and allows future backends
+/// (e.g. Vulkan-driven frame producers) without changing display-server flow.
+trait IcedFrameSource {
+    fn render_frame(
+        &mut self,
+        width: u32,
+        height: u32,
+        state: IcedUiState,
+    ) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError>;
+}
+
+#[derive(Debug, Default)]
+struct SoftwareIcedFrameSource;
+
+impl IcedFrameSource for SoftwareIcedFrameSource {
+    fn render_frame(
+        &mut self,
+        width: u32,
+        height: u32,
+        state: IcedUiState,
+    ) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError> {
+        build_iced_primary_pixels(width, height, state)
+    }
 }
 
 impl AppRuntime {
@@ -260,12 +289,18 @@ impl IcedUiState {
 }
 
 impl IcedUiRuntime {
-    fn new(binding: IcedWindowBinding, surface_width: u32, surface_height: u32) -> Self {
+    fn new(
+        binding: IcedWindowBinding,
+        surface_width: u32,
+        surface_height: u32,
+        frame_source: Box<dyn IcedFrameSource>,
+    ) -> Self {
         Self {
             binding,
             state: IcedUiState::new(),
             surface_width,
             surface_height,
+            frame_source,
             dirty: true,
         }
     }
@@ -301,8 +336,9 @@ impl IcedUiRuntime {
             return Ok(());
         }
 
-        let pixels =
-            build_iced_primary_pixels(self.surface_width, self.surface_height, self.state)?;
+        let pixels = self
+            .frame_source
+            .render_frame(self.surface_width, self.surface_height, self.state)?;
         server
             .upload_surface_pixels(
                 self.binding.client_id,
@@ -331,16 +367,16 @@ fn build_iced_primary_pixels(
 ) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError> {
     let mut renderer =
         FramebufferRenderer::new(width, height).map_err(|_| DisplayServerBootError::SurfaceUpload)?;
-    renderer.clear(Color::from_rgb(17, 20, 28));
+    renderer.clear(Color::from_rgb(13, 17, 24));
 
-    let header_h = (height / 10).clamp(34, 56);
-    renderer.fill_rect(0, 0, width, header_h, Color::from_rgb(27, 39, 56));
-    renderer.stroke_rect(0, 0, width, header_h, Color::from_rgb(99, 161, 255), 1);
+    let header_h = (height / 12).clamp(30, 48);
+    renderer.fill_rect(0, 0, width, header_h, Color::from_rgb(24, 32, 46));
+    renderer.stroke_rect(0, 0, width, header_h, Color::from_rgb(86, 145, 230), 1);
 
     let tabs = 4u32;
-    let tab_gap = 10u32;
-    let available_tabs_width = width.saturating_sub(20).saturating_sub(tab_gap * (tabs - 1));
-    let tab_width = (available_tabs_width / tabs.max(1)).max(32);
+    let tab_gap = 8u32;
+    let tab_area_w = width.saturating_sub(20);
+    let tab_width = (tab_area_w.saturating_sub(tab_gap * tabs.saturating_sub(1)) / tabs.max(1)).max(24);
     for tab in 0..tabs {
         let tab_x = 10 + tab * (tab_width + tab_gap);
         let active = tab as u8 == state.active_tab;
@@ -348,108 +384,127 @@ fn build_iced_primary_pixels(
             if state.accent_bright {
                 Color::from_rgb(79, 168, 255)
             } else {
-                Color::from_rgb(62, 130, 201)
+                Color::from_rgb(60, 126, 194)
             }
         } else {
-            Color::from_rgb(52, 60, 74)
+            Color::from_rgb(45, 54, 67)
         };
-        renderer.fill_rect(tab_x, 8, tab_width, header_h.saturating_sub(16), tab_color);
+        renderer.fill_rect(tab_x, 6, tab_width, header_h.saturating_sub(12), tab_color);
         renderer.stroke_rect(
             tab_x,
-            8,
+            6,
             tab_width,
-            header_h.saturating_sub(16),
+            header_h.saturating_sub(12),
             Color::from_rgb(170, 210, 255),
             1,
         );
     }
 
-    let content_y = header_h.saturating_add(10);
-    let content_h = height.saturating_sub(content_y.saturating_add(10));
-    renderer.fill_rect(
-        10,
-        content_y,
-        width.saturating_sub(20),
-        content_h,
-        Color::from_rgb(22, 26, 35),
-    );
+    let content_x = 12u32;
+    let content_y = header_h.saturating_add(8);
+    let content_w = width.saturating_sub(content_x.saturating_mul(2)).max(1);
+    let content_h = height
+        .saturating_sub(content_y)
+        .saturating_sub(12)
+        .max(1);
+    renderer.fill_rect(content_x, content_y, content_w, content_h, Color::from_rgb(20, 24, 33));
     renderer.stroke_rect(
-        10,
+        content_x,
         content_y,
-        width.saturating_sub(20),
+        content_w,
         content_h,
-        Color::from_rgb(74, 88, 110),
+        Color::from_rgb(67, 85, 110),
         1,
     );
 
-    let card_gap = 12u32;
-    let card_w = ((width.saturating_sub(20)).saturating_sub(card_gap * 3) / 2).max(48);
-    let card_h = (content_h.saturating_sub(card_gap * 3) / 2).max(48);
-    for row in 0..2u32 {
-        for col in 0..2u32 {
-            let card_x = 10 + card_gap + col * (card_w + card_gap);
-            let card_y = content_y + card_gap + row * (card_h + card_gap);
-            let accent = if state.active_tab as u32 == row * 2 + col {
-                if state.accent_bright {
-                    Color::from_rgb(94, 184, 255)
-                } else {
-                    Color::from_rgb(67, 132, 191)
-                }
+    let line_left = content_x.saturating_add(12);
+    let line_top = content_y.saturating_add(16);
+    let line_right = content_x.saturating_add(content_w.saturating_sub(12));
+    let line_count = 10u32;
+    for idx in 0..line_count {
+        let y = line_top.saturating_add(idx.saturating_mul(16));
+        if y >= content_y.saturating_add(content_h.saturating_sub(30)) {
+            break;
+        }
+        let shortening = (idx % 4).saturating_mul(24);
+        let end = line_right.saturating_sub(shortening);
+        if end > line_left {
+            let shade = if idx % 2 == 0 {
+                Color::from_rgb(154, 176, 205)
             } else {
-                Color::from_rgb(50, 60, 79)
+                Color::from_rgb(115, 138, 170)
             };
-            renderer.fill_rect(card_x, card_y, card_w, card_h, Color::from_rgb(29, 35, 48));
-            renderer.stroke_rect(card_x, card_y, card_w, card_h, accent, 2);
-            renderer.fill_rect(card_x + 10, card_y + 10, 22, 22, accent);
-            renderer.h_line(
-                card_x + 40,
-                card_x + card_w.saturating_sub(12),
-                card_y + 16,
-                Color::light_gray(),
-                2,
-            );
-            renderer.h_line(
-                card_x + 40,
-                card_x + card_w.saturating_sub(24),
-                card_y + 26,
-                Color::dark_gray(),
-                2,
-            );
+            renderer.h_line(line_left, end, y, shade, 2);
         }
     }
 
+    let prompt_h = 30u32.min(content_h);
+    let prompt_y = content_y.saturating_add(content_h.saturating_sub(prompt_h));
+    renderer.fill_rect(content_x, prompt_y, content_w, prompt_h, Color::from_rgb(17, 21, 30));
+    renderer.stroke_rect(
+        content_x,
+        prompt_y,
+        content_w,
+        prompt_h,
+        Color::from_rgb(53, 70, 92),
+        1,
+    );
+    renderer.fill_rect(
+        content_x.saturating_add(10),
+        prompt_y.saturating_add(8),
+        6,
+        14,
+        Color::from_rgb(120, 215, 140),
+    );
+    let command_end = content_x
+        .saturating_add(content_w)
+        .saturating_sub(14);
+    let command_start = content_x.saturating_add(24);
+    if command_end > command_start {
+        renderer.h_line(
+            command_start,
+            command_end,
+            prompt_y.saturating_add(15),
+            Color::from_rgb(146, 165, 191),
+            1,
+        );
+    }
+
     if state.show_palette {
-        let overlay_w = width.saturating_sub(120).max(80);
-        let overlay_h = height.saturating_sub(140).max(80);
-        let overlay_x = (width.saturating_sub(overlay_w)) / 2;
+        let overlay_w = width.saturating_sub(90).clamp(120, 260);
+        let overlay_h = height.saturating_sub(110).clamp(100, 220);
+        let overlay_x = width.saturating_sub(overlay_w.saturating_add(14));
         let overlay_y = (height.saturating_sub(overlay_h)) / 2;
         renderer.fill_rect(
             overlay_x,
             overlay_y,
             overlay_w,
             overlay_h,
-            Color::from_argb(220, 10, 14, 22),
+            Color::from_rgb(18, 24, 34),
         );
         renderer.stroke_rect(
             overlay_x,
             overlay_y,
             overlay_w,
             overlay_h,
-            Color::from_rgb(119, 176, 255),
+            Color::from_rgb(118, 172, 247),
             2,
         );
-        let swatch_gap = 12u32;
-        let swatch_w = ((overlay_w.saturating_sub(30)).saturating_sub(swatch_gap * 2) / 3).max(14);
-        let swatch_h = overlay_h.saturating_sub(44);
         let swatches = [
             Color::from_rgb(74, 138, 224),
             Color::from_rgb(84, 196, 128),
             Color::from_rgb(224, 164, 89),
         ];
+        let swatch_h = ((overlay_h.saturating_sub(32)) / swatches.len() as u32).max(12);
         for (index, swatch) in swatches.iter().enumerate() {
-            let x = overlay_x + 15 + (index as u32) * (swatch_w + swatch_gap);
-            let y = overlay_y + 20;
-            renderer.fill_rect(x, y, swatch_w, swatch_h, *swatch);
+            let y = overlay_y + 16 + (index as u32) * swatch_h;
+            renderer.fill_rect(
+                overlay_x.saturating_add(16),
+                y,
+                overlay_w.saturating_sub(32),
+                swatch_h.saturating_sub(6).max(4),
+                *swatch,
+            );
         }
     }
 
@@ -829,7 +884,12 @@ fn spawn_iced_runtime<B: DisplayBackend>(
         window_id,
         surface_id,
     };
-    let mut runtime = IcedUiRuntime::new(binding, surface_width, surface_height);
+    let mut runtime = IcedUiRuntime::new(
+        binding,
+        surface_width,
+        surface_height,
+        Box::new(SoftwareIcedFrameSource),
+    );
     runtime.render_if_dirty(server)?;
     Ok(runtime)
 }
@@ -1378,4 +1438,43 @@ fn run_desktop_shell(display: VesaDisplay) -> Result<(), DisplayServerBootError>
     let _ = server.stop();
     serial_log(b"[DisplayServer] Runtime stopped\n\0");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn software_frame_source_renders_expected_buffer_size() {
+        let mut source = SoftwareIcedFrameSource;
+        let pixels = source
+            .render_frame(320, 200, IcedUiState::new())
+            .expect("software frame source should render");
+        assert_eq!(pixels.len(), 320 * 200);
+    }
+
+    #[test]
+    fn software_frame_source_background_is_not_white() {
+        let mut source = SoftwareIcedFrameSource;
+        let pixels = source
+            .render_frame(320, 200, IcedUiState::new())
+            .expect("software frame source should render");
+        assert_eq!(pixels[0], 0x000D1118, "background should use iced-owned dark tone");
+    }
+
+    #[test]
+    fn software_frame_source_reacts_to_palette_toggle() {
+        let mut source = SoftwareIcedFrameSource;
+        let mut with_palette = IcedUiState::new();
+        with_palette.show_palette = true;
+
+        let base = source
+            .render_frame(320, 200, IcedUiState::new())
+            .expect("base frame should render");
+        let palette = source
+            .render_frame(320, 200, with_palette)
+            .expect("palette frame should render");
+
+        assert_ne!(base, palette, "palette toggle should alter output pixels");
+    }
 }

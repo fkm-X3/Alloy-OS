@@ -32,11 +32,10 @@ make mouse-screenshot
 this is what it looks like so far.
 
 ## display modes (keyboard + mouse)
-the kernel now boots the display-server in **Iced-primary mode** first. in this mode, shell launcher/grid surfaces are not created, so the old desktop-shell grid no longer competes with the primary GUI window.
+the kernel boots the display-server in **Iced-primary mode** only. Fusion now composites Iced-fed surfaces without desktop-shell fallback at boot.
 
-- primary boot mode: `BootUiMode::IcedPrimary`
-- fallback mode (on primary init failure): `BootUiMode::DesktopShell`
-- desktop-shell source remains in `os/display/apps/desktop_shell.rs`
+- boot mode: `BootUiMode::IcedPrimary`
+- desktop-shell source still exists in `os/display/apps/desktop_shell.rs` for development, but it is not used as a boot fallback
 
 ### controls
 - **ESC**: exit display mode
@@ -70,4 +69,4 @@ the display-server + window-manager path should stay gated until all are true:
 - wm + shell unit tests pass in `os/display` (focus/state/bounds + shell behavior)
 - kernel builds cleanly with the display-server path integrated (`make`)
 - headless runtime smoke (`make output`) exercises primary window focus/move/resize/close/respawn without lockups
-- desktop-shell + terminal fallback remain intact if primary boot initialization fails
+- Iced-primary boot path remains stable under `make output` without fallback handoff

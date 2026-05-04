@@ -63,27 +63,11 @@ pub extern "C" fn rust_main() {
             }
             Err(err) => {
                 log_display_server_error(err);
-
-                if PRIMARY_BOOT_UI_MODE == display_server::BootUiMode::IcedPrimary {
-                    unsafe {
-                        ffi::serial_print(
-                            b"[Rust] Iced-primary boot failed; attempting desktop-shell fallback\n\0"
-                                .as_ptr(),
-                        );
-                    }
-                    if let Some(fallback_display) = graphics::vesa::VesaDisplay::new() {
-                        if let Err(fallback_err) =
-                            display_server::run(fallback_display, display_server::BootUiMode::DesktopShell)
-                        {
-                            log_display_server_error(fallback_err);
-                        }
-                    } else {
-                        unsafe {
-                            ffi::serial_print(
-                                b"[Rust] Failed to initialize fallback VESA display\n\0".as_ptr(),
-                            );
-                        }
-                    }
+                unsafe {
+                    ffi::serial_print(
+                        b"[Rust] Iced-primary boot failed; desktop-shell fallback is disabled\n\0"
+                            .as_ptr(),
+                    );
                 }
             }
         }

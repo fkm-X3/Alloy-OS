@@ -10,6 +10,8 @@ use alloy_os_display::protocol::{SurfaceId, PixelFormat, Rect};
 use crate::graphics::vesa::VesaDisplay;
 use crate::graphics::Display;
 
+const COMPOSITOR_CLEAR_COLOR: u32 = 0x0011141C;
+
 /// Error type for Fusion display operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FusionError {
@@ -95,8 +97,7 @@ impl FusionDisplayBackend {
     /// Create a new Fusion display backend
     pub fn new(mut display: VesaDisplay) -> Self {
         let (width, height) = display.get_resolution();
-        // Clear the display on startup
-        let _ = display.clear(0xFFFFFFFF); // White background
+        let _ = display.clear(COMPOSITOR_CLEAR_COLOR);
         display.swap_buffer();
         
         FusionDisplayBackend {
@@ -327,8 +328,7 @@ impl DisplayBackend for FusionDisplayBackend {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        // Clear framebuffer to white
-        self.display.clear(0xFFFFFFFF);
+        self.display.clear(COMPOSITOR_CLEAR_COLOR);
         
         // Composite all surfaces to the framebuffer, sorted by z-order
         let surface_ids = self.surfaces_by_z_order();

@@ -1,6 +1,4 @@
-<div style="text-align: center; font-size: 60px; font-weight: bold;">
-  Alloy OS
-</div>
+<div style="text-align: center; font-size: 60px; font-weight: bold;">Alloy OS</div>
 
 <table align="center">
   <tr>
@@ -9,9 +7,7 @@
   </tr>
 </table>
 
-<div style="text-align: center; font-size: 30px; font-weight: bold;">
-  An os made in Rust, C/C++, and Assembly
-</div>
+<div style="text-align: center; font-size: 30px; font-weight: bold;">An os made in Rust, C/C++, and Assembly</div>
 
 ## fucking information
 ```bash

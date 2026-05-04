@@ -1,13 +1,9 @@
-<div style="text-align: center; font-size: 60px; font-weight: bold;">Alloy OS</div>
-
-<table align="center">
-  <tr>
-    <td><img src="assets/alloy-os-light.svg" width="300px"></td>
-    <td><img src="assets/alloy-os-dark.svg" width="300px"></td>
-  </tr>
-</table>
-
-<div style="text-align: center; font-size: 30px; font-weight: bold;">An os made in Rust, C/C++, and Assembly</div>
+<div align="center">
+  <h1>Alloy OS</h1>
+  <img src="assets/alloy-os-light.svg" width="300" />
+  <img src="assets/alloy-os-dark.svg" width="300" />
+  <p><strong>An OS made in Rust, C/C++, and Assembly</strong></p>
+</div>
 
 ## fucking information
 ```bash

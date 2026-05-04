@@ -1,5 +1,17 @@
-# Alloy OS
-An os built in c/c++ and rust
+<div style="text-align: center; font-size: 60px; font-weight: bold;">
+  Alloy OS
+</div>
+
+<table align="center">
+  <tr>
+    <td><img src="assets/alloy-os-light.svg" width="300px"></td>
+    <td><img src="assets/alloy-os-dark.svg" width="300px"></td>
+  </tr>
+</table>
+
+<div style="text-align: center; font-size: 30px; font-weight: bold;">
+  An os made in Rust, C/C++, and Assembly
+</div>
 
 ## fucking information
 ```bash
@@ -25,24 +37,23 @@ make mouse-screenshot
 ## what does alloy os look like?
 ![Alloy os Desktop shell](assets/desktop-shell-grid.png)
 
-this is what it looks like so far, currently a tui with ratatui
+this is what it looks like so far.
 
-## desktop shell (keyboard + mouse)
-the display-server path now boots into a desktop shell (`os/display/apps/desktop_shell.rs`) layered on top of the floating window manager (`os/display/apps/window_manager.rs`).
+## display modes (keyboard + mouse)
+the kernel now boots the display-server in **Iced-primary mode** first. in this mode, shell launcher/grid surfaces are not created, so the old desktop-shell grid no longer competes with the primary GUI window.
 
-- desktop background + panel/taskbar + launcher + window switcher
-- default boot path while `ENABLE_OS_DISPLAY_SERVER` is `true`
-- disable it by setting `ENABLE_OS_DISPLAY_SERVER` to `false` in `kernel/rust/src/lib.rs`
+- primary boot mode: `BootUiMode::IcedPrimary`
+- fallback mode (on primary init failure): `BootUiMode::DesktopShell`
+- desktop-shell source remains in `os/display/apps/desktop_shell.rs`
 
 ### controls
 - **ESC**: exit display mode
 - **`**: toggle keyboard window-control mode
-- **L** (control mode): toggle launcher
-- **1 / 2 / 3 / 4 / 5** (control mode): quick-launch terminal/settings/file explorer/text editor/calculator
-- **Arrow keys / Tab** (launcher open): move launcher selection
-- **Enter / Space** (launcher open): activate selected launcher app
+- **1 / 2 / 3 / 4** (normal mode): switch active Iced panel
+- **P** (normal mode): toggle palette overlay
+- **T / Space** (normal mode): toggle accent brightness
 - **PgUp / PgDn**: cycle focused window
-- **Arrow keys** (control mode, launcher closed): move focused window
+- **Arrow keys** (control mode): move focused window
 - **+ / -** (control mode): resize focused window
 - **M** (control mode): minimize focused window
 - **H** (control mode): hide focused window
@@ -50,7 +61,6 @@ the display-server path now boots into a desktop shell (`os/display/apps/desktop
 - **C / X** (control mode): close focused window
 - **Mouse move**: moves on-screen pointer
 - **Left click**: focus top-most window under pointer
-- **Left click (launcher tile)**: activate clicked launcher app
 - **Left-drag (title bar)**: drag focused window
 - Mouse input is relative PS/2 input; click inside the QEMU window to grab pointer input.
 - `make output` is headless and cannot capture live host mouse input (use `make run` or `make mouse-smoke`).
@@ -67,5 +77,5 @@ when Alloy falls back to terminal mode, these built-in commands are available:
 the display-server + window-manager path should stay gated until all are true:
 - wm + shell unit tests pass in `os/display` (focus/state/bounds + shell behavior)
 - kernel builds cleanly with the display-server path integrated (`make`)
-- headless runtime smoke (`make output`) exercises launcher/toolbox app activation + focus/move/resize/minimize/hide/restore/close without lockups
-- terminal fallback remains intact if display-server startup fails
+- headless runtime smoke (`make output`) exercises primary window focus/move/resize/close/respawn without lockups
+- desktop-shell + terminal fallback remain intact if primary boot initialization fails

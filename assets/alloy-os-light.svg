@@ -1,0 +1,21 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="alloy-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8e9eab;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#eef2f3;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="accent-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4facfe;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00f2fe;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <path d="M100 20 L170 60 V140 L100 180 L30 140 V60 Z" fill="url(#alloy-grad)" stroke="#2c3e50" stroke-width="4"/>
+
+  <path d="M70 150 L100 50 L130 150" stroke="#2c3e50" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <path d="M60 110 H140" stroke="url(#accent-grad)" stroke-width="12" stroke-linecap="round"/>
+  
+  <circle cx="100" status="center" cy="110" r="8" fill="#2c3e50" />
+</svg>

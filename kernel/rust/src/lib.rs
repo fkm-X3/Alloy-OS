@@ -24,6 +24,21 @@ pub mod display_server;
 
 use core::panic::PanicInfo;
 
+const PRIMARY_BOOT_UI_MODE: display_server::BootUiMode = display_server::BootUiMode::IcedPrimary;
+
+fn log_display_server_error(err: display_server::DisplayServerBootError) {
+    unsafe {
+        let msg = err.serial_message();
+        ffi::serial_print(msg.as_ptr());
+        let code = err.code();
+        ffi::serial_print(b" (code: \0".as_ptr());
+        for &byte in code.as_bytes() {
+            ffi::vga_putchar(byte);
+        }
+        ffi::serial_print(b")\n\0".as_ptr());
+    }
+}
+
 /// Rust kernel entry point called from C++
 #[no_mangle]
 pub extern "C" fn rust_main() {
@@ -40,24 +55,35 @@ pub extern "C" fn rust_main() {
             ffi::serial_print(b"[Rust] VESA display initialized, booting display server\n\0".as_ptr());
         }
         
-        match display_server::run(display) {
+        match display_server::run(display, PRIMARY_BOOT_UI_MODE) {
             Ok(()) => {
                 unsafe {
                     ffi::serial_print(b"[Rust] Display server exited normally\n\0".as_ptr());
                 }
             }
             Err(err) => {
-                unsafe {
-                    let msg = err.serial_message();
-                    ffi::serial_print(msg.as_ptr());
-                    let code = err.code();
-                    // Print error code
-                    ffi::serial_print(b" (code: \0".as_ptr());
-                    // Note: We don't have a full printf implementation here, so just print the code bytes
-                    for &byte in code.as_bytes() {
-                        ffi::vga_putchar(byte);
+                log_display_server_error(err);
+
+                if PRIMARY_BOOT_UI_MODE == display_server::BootUiMode::IcedPrimary {
+                    unsafe {
+                        ffi::serial_print(
+                            b"[Rust] Iced-primary boot failed; attempting desktop-shell fallback\n\0"
+                                .as_ptr(),
+                        );
                     }
-                    ffi::serial_print(b")\n\0".as_ptr());
+                    if let Some(fallback_display) = graphics::vesa::VesaDisplay::new() {
+                        if let Err(fallback_err) =
+                            display_server::run(fallback_display, display_server::BootUiMode::DesktopShell)
+                        {
+                            log_display_server_error(fallback_err);
+                        }
+                    } else {
+                        unsafe {
+                            ffi::serial_print(
+                                b"[Rust] Failed to initialize fallback VESA display\n\0".as_ptr(),
+                            );
+                        }
+                    }
                 }
             }
         }

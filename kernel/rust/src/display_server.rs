@@ -10,6 +10,7 @@ use alloy_os_display::server::{DisplayBackend, DisplayServer};
 
 use crate::ffi;
 use crate::fusion::backend::FusionDisplayBackend;
+use crate::fusion::framebuffer::{Color, FramebufferRenderer};
 use crate::fusion::terminal::TerminalSurface;
 use crate::graphics::Display;
 use crate::graphics::vesa::VesaDisplay;
@@ -24,6 +25,14 @@ const DEFAULT_FRAME_INTERVAL_MS: u32 = 16;
 const CURSOR_WIDTH: u32 = 12;
 const CURSOR_HEIGHT: u32 = 18;
 const CURSOR_Z_ORDER: u32 = 65535;
+const ICED_CLIENT_ID: ClientId = ClientId::new(32);
+const ICED_WINDOW_Z_ORDER: u32 = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BootUiMode {
+    IcedPrimary,
+    DesktopShell,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayServerBootError {
@@ -123,6 +132,29 @@ struct PointerState {
     dragging_window: Option<WindowId>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct IcedWindowBinding {
+    client_id: ClientId,
+    window_id: WindowId,
+    surface_id: SurfaceId,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IcedUiState {
+    active_tab: u8,
+    show_palette: bool,
+    accent_bright: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct IcedUiRuntime {
+    binding: IcedWindowBinding,
+    state: IcedUiState,
+    surface_width: u32,
+    surface_height: u32,
+    dirty: bool,
+}
+
 impl AppRuntime {
     fn new() -> Self {
         Self {
@@ -187,10 +219,241 @@ impl AppRuntime {
     }
 }
 
+impl IcedUiState {
+    fn new() -> Self {
+        Self {
+            active_tab: 0,
+            show_palette: false,
+            accent_bright: true,
+        }
+    }
+
+    fn handle_key(&mut self, key: u8) -> bool {
+        match key {
+            b'1' => {
+                self.active_tab = 0;
+                true
+            }
+            b'2' => {
+                self.active_tab = 1;
+                true
+            }
+            b'3' => {
+                self.active_tab = 2;
+                true
+            }
+            b'4' => {
+                self.active_tab = 3;
+                true
+            }
+            b'p' | b'P' => {
+                self.show_palette = !self.show_palette;
+                true
+            }
+            b't' | b'T' | b' ' => {
+                self.accent_bright = !self.accent_bright;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+impl IcedUiRuntime {
+    fn new(binding: IcedWindowBinding, surface_width: u32, surface_height: u32) -> Self {
+        Self {
+            binding,
+            state: IcedUiState::new(),
+            surface_width,
+            surface_height,
+            dirty: true,
+        }
+    }
+
+    fn handle_key(&mut self, key: u8) -> bool {
+        if self.state.handle_key(key) {
+            self.dirty = true;
+            return true;
+        }
+        false
+    }
+
+    fn sync_surface_dimensions<B: DisplayBackend>(
+        &mut self,
+        server: &DisplayServer<B>,
+    ) -> Result<(), DisplayServerBootError> {
+        let surface = server
+            .surface(self.binding.surface_id)
+            .ok_or(DisplayServerBootError::SurfaceUpload)?;
+        if surface.width != self.surface_width || surface.height != self.surface_height {
+            self.surface_width = surface.width;
+            self.surface_height = surface.height;
+            self.dirty = true;
+        }
+        Ok(())
+    }
+
+    fn render_if_dirty<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), DisplayServerBootError> {
+        if !self.dirty {
+            return Ok(());
+        }
+
+        let pixels =
+            build_iced_primary_pixels(self.surface_width, self.surface_height, self.state)?;
+        server
+            .upload_surface_pixels(
+                self.binding.client_id,
+                self.binding.surface_id,
+                self.surface_width,
+                self.surface_height,
+                &pixels,
+                None,
+            )
+            .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+        self.dirty = false;
+        Ok(())
+    }
+}
+
 fn serial_log(message: &'static [u8]) {
     unsafe {
         ffi::serial_print(message.as_ptr());
     }
+}
+
+fn build_iced_primary_pixels(
+    width: u32,
+    height: u32,
+    state: IcedUiState,
+) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError> {
+    let mut renderer =
+        FramebufferRenderer::new(width, height).map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+    renderer.clear(Color::from_rgb(17, 20, 28));
+
+    let header_h = (height / 10).clamp(34, 56);
+    renderer.fill_rect(0, 0, width, header_h, Color::from_rgb(27, 39, 56));
+    renderer.stroke_rect(0, 0, width, header_h, Color::from_rgb(99, 161, 255), 1);
+
+    let tabs = 4u32;
+    let tab_gap = 10u32;
+    let available_tabs_width = width.saturating_sub(20).saturating_sub(tab_gap * (tabs - 1));
+    let tab_width = (available_tabs_width / tabs.max(1)).max(32);
+    for tab in 0..tabs {
+        let tab_x = 10 + tab * (tab_width + tab_gap);
+        let active = tab as u8 == state.active_tab;
+        let tab_color = if active {
+            if state.accent_bright {
+                Color::from_rgb(79, 168, 255)
+            } else {
+                Color::from_rgb(62, 130, 201)
+            }
+        } else {
+            Color::from_rgb(52, 60, 74)
+        };
+        renderer.fill_rect(tab_x, 8, tab_width, header_h.saturating_sub(16), tab_color);
+        renderer.stroke_rect(
+            tab_x,
+            8,
+            tab_width,
+            header_h.saturating_sub(16),
+            Color::from_rgb(170, 210, 255),
+            1,
+        );
+    }
+
+    let content_y = header_h.saturating_add(10);
+    let content_h = height.saturating_sub(content_y.saturating_add(10));
+    renderer.fill_rect(
+        10,
+        content_y,
+        width.saturating_sub(20),
+        content_h,
+        Color::from_rgb(22, 26, 35),
+    );
+    renderer.stroke_rect(
+        10,
+        content_y,
+        width.saturating_sub(20),
+        content_h,
+        Color::from_rgb(74, 88, 110),
+        1,
+    );
+
+    let card_gap = 12u32;
+    let card_w = ((width.saturating_sub(20)).saturating_sub(card_gap * 3) / 2).max(48);
+    let card_h = (content_h.saturating_sub(card_gap * 3) / 2).max(48);
+    for row in 0..2u32 {
+        for col in 0..2u32 {
+            let card_x = 10 + card_gap + col * (card_w + card_gap);
+            let card_y = content_y + card_gap + row * (card_h + card_gap);
+            let accent = if state.active_tab as u32 == row * 2 + col {
+                if state.accent_bright {
+                    Color::from_rgb(94, 184, 255)
+                } else {
+                    Color::from_rgb(67, 132, 191)
+                }
+            } else {
+                Color::from_rgb(50, 60, 79)
+            };
+            renderer.fill_rect(card_x, card_y, card_w, card_h, Color::from_rgb(29, 35, 48));
+            renderer.stroke_rect(card_x, card_y, card_w, card_h, accent, 2);
+            renderer.fill_rect(card_x + 10, card_y + 10, 22, 22, accent);
+            renderer.h_line(
+                card_x + 40,
+                card_x + card_w.saturating_sub(12),
+                card_y + 16,
+                Color::light_gray(),
+                2,
+            );
+            renderer.h_line(
+                card_x + 40,
+                card_x + card_w.saturating_sub(24),
+                card_y + 26,
+                Color::dark_gray(),
+                2,
+            );
+        }
+    }
+
+    if state.show_palette {
+        let overlay_w = width.saturating_sub(120).max(80);
+        let overlay_h = height.saturating_sub(140).max(80);
+        let overlay_x = (width.saturating_sub(overlay_w)) / 2;
+        let overlay_y = (height.saturating_sub(overlay_h)) / 2;
+        renderer.fill_rect(
+            overlay_x,
+            overlay_y,
+            overlay_w,
+            overlay_h,
+            Color::from_argb(220, 10, 14, 22),
+        );
+        renderer.stroke_rect(
+            overlay_x,
+            overlay_y,
+            overlay_w,
+            overlay_h,
+            Color::from_rgb(119, 176, 255),
+            2,
+        );
+        let swatch_gap = 12u32;
+        let swatch_w = ((overlay_w.saturating_sub(30)).saturating_sub(swatch_gap * 2) / 3).max(14);
+        let swatch_h = overlay_h.saturating_sub(44);
+        let swatches = [
+            Color::from_rgb(74, 138, 224),
+            Color::from_rgb(84, 196, 128),
+            Color::from_rgb(224, 164, 89),
+        ];
+        for (index, swatch) in swatches.iter().enumerate() {
+            let x = overlay_x + 15 + (index as u32) * (swatch_w + swatch_gap);
+            let y = overlay_y + 20;
+            renderer.fill_rect(x, y, swatch_w, swatch_h, *swatch);
+        }
+    }
+
+    Ok(renderer.pixels().to_vec())
 }
 
 fn create_window_binding<B: DisplayBackend>(
@@ -532,8 +795,274 @@ fn set_cursor_visibility<B: DisplayBackend>(
     )
 }
 
-pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
-    serial_log(b"[DisplayServer] Bootstrapping desktop shell runtime\n\0");
+fn spawn_iced_runtime<B: DisplayBackend>(
+    wm: &mut WindowManager,
+    server: &mut DisplayServer<B>,
+    display_width: u32,
+    display_height: u32,
+) -> Result<IcedUiRuntime, DisplayServerBootError> {
+    let content_width = display_width.saturating_sub(200).max(260);
+    let content_height = display_height.saturating_sub(180).max(180);
+    let frame_width = content_width.saturating_add(4);
+    let frame_height = content_height.saturating_add(22);
+    let pos_x = (display_width.saturating_sub(frame_width) / 2) as i32;
+    let pos_y = (display_height.saturating_sub(frame_height) / 2) as i32;
+
+    let options = WindowOptions::new(ICED_CLIENT_ID, content_width, content_height)
+        .with_position(pos_x, pos_y)
+        .with_z_order(ICED_WINDOW_Z_ORDER)
+        .with_focused(true);
+    let window_id = wm
+        .create_window(server, options)
+        .map_err(|_| DisplayServerBootError::WindowManager)?;
+    let surface_id = wm
+        .content_surface(window_id)
+        .ok_or(DisplayServerBootError::WindowManager)?;
+    let (surface_width, surface_height) = {
+        let surface = server
+            .surface(surface_id)
+            .ok_or(DisplayServerBootError::SurfaceUpload)?;
+        (surface.width, surface.height)
+    };
+    let binding = IcedWindowBinding {
+        client_id: ICED_CLIENT_ID,
+        window_id,
+        surface_id,
+    };
+    let mut runtime = IcedUiRuntime::new(binding, surface_width, surface_height);
+    runtime.render_if_dirty(server)?;
+    Ok(runtime)
+}
+
+pub fn run(display: VesaDisplay, mode: BootUiMode) -> Result<(), DisplayServerBootError> {
+    match mode {
+        BootUiMode::IcedPrimary => run_iced_primary(display),
+        BootUiMode::DesktopShell => run_desktop_shell(display),
+    }
+}
+
+fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
+    serial_log(b"[DisplayServer] Bootstrapping Iced-primary runtime\n\0");
+    let (display_width, display_height) = display.get_resolution();
+
+    let backend = FusionDisplayBackend::new(display);
+    let mut server = DisplayServer::new(backend);
+    server
+        .start()
+        .map_err(|_| DisplayServerBootError::ServerStart)?;
+    server
+        .handle_request(
+            ICED_CLIENT_ID,
+            DisplayRequest::SetFrameIntervalMs {
+                interval_ms: DEFAULT_FRAME_INTERVAL_MS,
+            },
+        )
+        .map_err(|_| DisplayServerBootError::ServerStart)?;
+
+    let mut wm = WindowManager::new();
+    wm.set_workspace_bounds(display_width, display_height)
+        .map_err(|_| DisplayServerBootError::WindowManager)?;
+    let mut runtime = spawn_iced_runtime(&mut wm, &mut server, display_width, display_height)?;
+
+    let cursor_surface = create_cursor_surface(&mut server)?;
+    let mut pointer = PointerState {
+        x: (display_width / 2) as i32,
+        y: (display_height / 2) as i32,
+        buttons: 0,
+        dragging_window: None,
+    };
+    let mouse_ready = ffi::mouse_ready();
+    if mouse_ready {
+        set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+    } else {
+        set_cursor_visibility(&mut server, cursor_surface, false)?;
+        serial_log(b"[DisplayServer] Mouse unavailable; cursor hidden until mouse input is ready\n\0");
+    }
+    let max_pointer_x = display_width.saturating_sub(1) as i32;
+    let max_pointer_y = display_height.saturating_sub(1) as i32;
+
+    let boot_uptime = unsafe { ffi::timer_get_uptime_ms_ffi() };
+    let first_present_time = boot_uptime.saturating_add(server.frame_interval_ms() as u64);
+    let first_presented = server
+        .update_frame(first_present_time)
+        .map_err(|_| DisplayServerBootError::FramePresent)?;
+    if !first_presented {
+        return Err(DisplayServerBootError::FramePresent);
+    }
+
+    serial_log(b"[DisplayServer] First frame presented\n\0");
+    serial_log(
+        b"[DisplayServer] Iced-primary window ready - use ` for control mode, PgUp/PgDn for focus cycle, ESC exits\n\0",
+    );
+
+    loop {
+        if ffi::keyboard_has_key() {
+            let key = ffi::keyboard_read();
+            if key != 0 {
+                match wm
+                    .handle_key(&mut server, key)
+                    .map_err(|_| DisplayServerBootError::WindowManager)?
+                {
+                    InputOutcome::ExitDisplay => break,
+                    InputOutcome::Consumed => {}
+                    InputOutcome::ForwardToWindow(window_id) => {
+                        server
+                            .route_key_input(key, true)
+                            .map_err(|_| DisplayServerBootError::FramePresent)?;
+                        if window_id == runtime.binding.window_id {
+                            runtime.handle_key(key);
+                        }
+                    }
+                }
+            }
+        }
+
+        while ffi::mouse_has_event() {
+            let Some(mouse_event) = ffi::mouse_read() else {
+                break;
+            };
+
+            let mut delta_x = mouse_event.dx as i32;
+            let mut delta_y = -(mouse_event.dy as i32);
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_X_OVERFLOW) != 0 {
+                delta_x = 0;
+            }
+            if (mouse_event.flags & ffi::MOUSE_EVENT_FLAG_Y_OVERFLOW) != 0 {
+                delta_y = 0;
+            }
+
+            if delta_x != 0 || delta_y != 0 {
+                let movement = pointer::apply_relative_motion(
+                    pointer.x,
+                    pointer.y,
+                    delta_x,
+                    delta_y,
+                    max_pointer_x,
+                    max_pointer_y,
+                );
+
+                if movement.actual_dx != 0 || movement.actual_dy != 0 {
+                    pointer.x = movement.next_x;
+                    pointer.y = movement.next_y;
+                    set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+                    server
+                        .route_pointer_motion(pointer.x, pointer.y, movement.actual_dx, movement.actual_dy)
+                        .map_err(|_| DisplayServerBootError::FramePresent)?;
+
+                    if pointer.dragging_window.is_some()
+                        && (mouse_event.buttons & ffi::MOUSE_BUTTON_LEFT) != 0
+                    {
+                        wm.move_focused_by(&mut server, movement.actual_dx, movement.actual_dy)
+                            .map_err(|_| DisplayServerBootError::WindowManager)?;
+                    }
+                }
+            }
+
+            for (mask, button) in [
+                (ffi::MOUSE_BUTTON_LEFT, MouseButton::Left),
+                (ffi::MOUSE_BUTTON_RIGHT, MouseButton::Right),
+                (ffi::MOUSE_BUTTON_MIDDLE, MouseButton::Middle),
+            ] {
+                let Some(is_pressed) =
+                    pointer::button_state_changed(pointer.buttons, mouse_event.buttons, mask)
+                else {
+                    continue;
+                };
+
+                server
+                    .route_mouse_button(button, is_pressed, pointer.x, pointer.y)
+                    .map_err(|_| DisplayServerBootError::FramePresent)?;
+
+                if mask != ffi::MOUSE_BUTTON_LEFT {
+                    continue;
+                }
+
+                if is_pressed {
+                    if let Some(window_id) = wm.window_at_point(pointer.x, pointer.y) {
+                        wm.focus_window(&mut server, window_id)
+                            .map_err(|_| DisplayServerBootError::WindowManager)?;
+                        if wm.title_bar_window_at_point(pointer.x, pointer.y) == Some(window_id) {
+                            pointer.dragging_window = Some(window_id);
+                        } else {
+                            pointer.dragging_window = None;
+                        }
+                    } else {
+                        pointer.dragging_window = None;
+                    }
+                } else {
+                    pointer.dragging_window = None;
+                }
+            }
+
+            if mouse_event.wheel != 0 {
+                server
+                    .route_mouse_wheel(mouse_event.wheel as i32, pointer.x, pointer.y)
+                    .map_err(|_| DisplayServerBootError::FramePresent)?;
+            }
+
+            pointer.buttons = mouse_event.buttons;
+        }
+
+        if wm.window_state(runtime.binding.window_id).is_none() {
+            runtime = spawn_iced_runtime(&mut wm, &mut server, display_width, display_height)?;
+        }
+        if let Some(window_id) = pointer.dragging_window {
+            if wm.window_state(window_id).is_none() {
+                pointer.dragging_window = None;
+            }
+        }
+
+        runtime.sync_surface_dimensions(&server)?;
+        runtime.render_if_dirty(&mut server)?;
+
+        let uptime_ms = unsafe { ffi::timer_get_uptime_ms_ffi() };
+        server
+            .update_frame(uptime_ms)
+            .map_err(|_| DisplayServerBootError::FramePresent)?;
+
+        while let Some(event) = server.poll_event() {
+            match event {
+                DisplayEvent::FocusChanged {
+                    surface_id: Some(surface_id),
+                } => {
+                    if surface_id == runtime.binding.surface_id {
+                        serial_log(b"[DisplayServer] Focus changed -> iced primary window\n\0");
+                    } else {
+                        serial_log(b"[DisplayServer] Focus changed -> unmanaged surface\n\0");
+                    }
+                }
+                DisplayEvent::FocusChanged { surface_id: None } => {
+                    serial_log(b"[DisplayServer] Focus cleared\n\0");
+                }
+                DisplayEvent::SurfaceDestroyed { surface_id } => {
+                    if surface_id == runtime.binding.surface_id {
+                        serial_log(b"[DisplayServer] Iced primary surface destroyed\n\0");
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        unsafe {
+            core::arch::asm!("hlt");
+        }
+    }
+
+    let diagnostics = server.diagnostics();
+    if diagnostics.dropped_events > 0 {
+        serial_log(b"[DisplayServer] Warning: event queue overflow detected\n\0");
+    }
+    if diagnostics.backend_errors > 0 {
+        serial_log(b"[DisplayServer] Warning: backend errors detected during runtime\n\0");
+    }
+
+    let _ = server.stop();
+    serial_log(b"[DisplayServer] Runtime stopped\n\0");
+    Ok(())
+}
+
+fn run_desktop_shell(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
+    serial_log(b"[DisplayServer] Bootstrapping desktop shell fallback runtime\n\0");
     let (display_width, display_height) = display.get_resolution();
 
     let backend = FusionDisplayBackend::new(display);

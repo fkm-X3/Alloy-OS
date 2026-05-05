@@ -120,19 +120,7 @@ mouse-smoke: $(KERNEL_ISO)
 
 # Run scripted mouse interactions and capture a screenshot artifact
 mouse-screenshot: $(KERNEL_ISO)
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png
-
-g4f-reviewer: $(KERNEL_ISO)
-	python3 tools/g4f-reviewer.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/g4f-reviewer-boot.log --qemu-log $(BUILD_DIR)/g4f-reviewer.log
-
-g4f-reviwer: g4f-reviewer
-
-review-install:
-	python3 -m pip install --upgrade pip
-	python3 -m pip install -r requirements-review.txt
-
-review:
-	python3 tools/g4f-reviewer.py --root .
+	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)

@@ -8,12 +8,9 @@ import textwrap
 from pathlib import Path
 from typing import Optional
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-
 GITHUB_TOKEN      = os.getenv("GITHUB_TOKEN", "")
-GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")  # owner/repo
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")  
+
 MAX_CHARS         = int(os.getenv("REVIEW_MAX_TOKENS", "80000"))
 ISSUE_LABEL       = os.getenv("REVIEW_LABEL", "ai-review")
 
@@ -47,11 +44,6 @@ Return [] if there is nothing to report.
 Return ONLY the JSON array, no prose, no markdown fences.
 """).strip()
 
-
-# ---------------------------------------------------------------------------
-# Codebase collection
-# ---------------------------------------------------------------------------
-
 def collect_files(root: Path, extensions: set[str]) -> list[Path]:
     files = []
     for path in sorted(root.rglob("*")):
@@ -63,7 +55,6 @@ def collect_files(root: Path, extensions: set[str]) -> list[Path]:
         if suffix in extensions or path.name in extensions:
             files.append(path)
     return files
-
 
 def build_codebase_dump(root: Path, extensions: set[str]) -> str:
     files = collect_files(root, extensions)
@@ -89,18 +80,14 @@ def build_codebase_dump(root: Path, extensions: set[str]) -> str:
         header += f"> {skipped} file(s) omitted due to size limit.\n\n"
     return header + "\n".join(parts)
 
-
-# ---------------------------------------------------------------------------
-# g4f call
-# ---------------------------------------------------------------------------
-
 def call_g4f(codebase: str) -> str:
     """
     Call g4f with auto provider selection.
     Falls back through a priority list if the default auto fails.
     """
     try:
-        import g4f                                    # pip install g4f
+        import g4f
+
         from g4f.client import Client
     except ImportError:
         sys.exit(
@@ -111,6 +98,14 @@ def call_g4f(codebase: str) -> str:
 
     client = Client()
 
+    # Allow the user to supply a G4F API key via environment variables.
+    # Common names supported: G4F_API_KEY, G4F_KEY, OPENAI_API_KEY
+    api_key = os.getenv("G4F_API_KEY") or os.getenv("G4F_KEY") or os.getenv("OPENAI_API_KEY")
+    extra_kwargs = {}
+    if api_key:
+        extra_kwargs["api_key"] = api_key
+        print("Using G4F API key from environment.", flush=True)
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": f"Review this codebase:\n\n{codebase}"},
@@ -119,14 +114,16 @@ def call_g4f(codebase: str) -> str:
     print("Sending codebase to g4f (auto provider) ...", flush=True)
     try:
         response = client.chat.completions.create(
-            model    = "gpt-4o",       # g4f will map to the best available provider
+            model    = "gpt-4o",
+
             messages = messages,
             stream   = False,
+            **extra_kwargs,
         )
         return response.choices[0].message.content
     except Exception as exc:
         print(f"  Auto provider failed ({exc}), trying fallback providers …", flush=True)
-        # Try a few concrete providers as fallback
+
         fallback_providers = ["Blackbox", "DeepInfra", "Liaobots", "Copilot"]
         for pname in fallback_providers:
             try:
@@ -138,6 +135,7 @@ def call_g4f(codebase: str) -> str:
                     messages = messages,
                     provider = provider_cls,
                     stream   = False,
+                    **extra_kwargs,
                 )
                 print(f"  Used fallback provider: {pname}", flush=True)
                 return response.choices[0].message.content
@@ -145,13 +143,8 @@ def call_g4f(codebase: str) -> str:
                 print(f"  {pname}: {ferr}", flush=True)
         sys.exit("ERROR: All g4f providers failed. Cannot continue.")
 
-
-# ---------------------------------------------------------------------------
-# Parse AI response
-# ---------------------------------------------------------------------------
-
 def parse_issues(raw: str) -> list[dict]:
-    # Strip accidental markdown fences
+
     raw = re.sub(r"^```[a-z]*\s*", "", raw.strip(), flags=re.MULTILINE)
     raw = re.sub(r"```\s*$", "", raw.strip(), flags=re.MULTILINE)
     raw = raw.strip()
@@ -159,7 +152,7 @@ def parse_issues(raw: str) -> list[dict]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        # Try to extract the first [...] block
+
         m = re.search(r"\[.*\]", raw, re.DOTALL)
         if m:
             try:
@@ -175,11 +168,6 @@ def parse_issues(raw: str) -> list[dict]:
     if not isinstance(data, list):
         return []
     return [i for i in data if isinstance(i, dict)]
-
-
-# ---------------------------------------------------------------------------
-# GitHub Issues API
-# ---------------------------------------------------------------------------
 
 def gh_api(method: str, path: str, payload: Optional[dict] = None) -> dict:
     """Thin wrapper around the GitHub REST API."""
@@ -203,7 +191,6 @@ def gh_api(method: str, path: str, payload: Optional[dict] = None) -> dict:
         print(f"GitHub API error {e.code}: {err}", file=sys.stderr)
         raise
 
-
 def ensure_label(repo: str) -> None:
     """Create the review label if it doesn't exist yet."""
     try:
@@ -216,8 +203,7 @@ def ensure_label(repo: str) -> None:
                 "description": "Created by ai_review.py automated scan",
             })
         except Exception:
-            pass  # Label may already exist from a concurrent run
-
+            pass  
 
 def get_open_issue_titles(repo: str) -> set[str]:
     """Return titles of currently open issues with our label to avoid duplicates."""
@@ -234,7 +220,6 @@ def get_open_issue_titles(repo: str) -> set[str]:
         page += 1
     return titles
 
-
 def create_issue(repo: str, issue: dict, commit_sha: str) -> str:
     severity = issue.get("severity", "info").upper()
     category = issue.get("category", "general")
@@ -250,11 +235,6 @@ def create_issue(repo: str, issue: dict, commit_sha: str) -> str:
     })
     return result.get("html_url", "")
 
-
-# ---------------------------------------------------------------------------
-# Git helpers
-# ---------------------------------------------------------------------------
-
 def current_commit_sha() -> str:
     try:
         return subprocess.check_output(
@@ -262,11 +242,6 @@ def current_commit_sha() -> str:
         ).strip()
     except Exception:
         return "unknown"
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI code review - GitHub Issues")
@@ -280,7 +255,6 @@ def main() -> None:
                         help="Root directory to scan (default: current dir)")
     args = parser.parse_args()
 
-    # Validate environment
     if not args.dry_run:
         if not GITHUB_TOKEN:
             sys.exit("ERROR: GITHUB_TOKEN env var is not set.")
@@ -294,13 +268,12 @@ def main() -> None:
     print(f"Scanning: {root}")
     print(f"Commit:   {commit_sha[:12]}")
 
-    # Collect codebase
     codebase = build_codebase_dump(root, extensions)
     file_count = codebase.count("### ")
     print(f"Files included: {file_count}  ({len(codebase):,} chars)")
 
     if args.max_files:
-        # Re-collect with a hard file limit
+
         files = collect_files(root, extensions)[: args.max_files]
         parts = []
         total = 0
@@ -315,7 +288,6 @@ def main() -> None:
             total += len(chunk)
         codebase = f"# Codebase snapshot ({len(parts)} files)\n\n" + "\n".join(parts)
 
-    # AI review
     raw_response = call_g4f(codebase)
     issues       = parse_issues(raw_response)
 
@@ -323,7 +295,6 @@ def main() -> None:
         print("No issues found.")
         return
 
-    # Severity order for display
     SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     issues.sort(key=lambda i: SEV_ORDER.get(i.get("severity", "info"), 99))
 
@@ -341,7 +312,6 @@ def main() -> None:
             print(json.dumps(issue, indent=2))
         return
 
-    # Create GitHub issues (skip duplicates)
     ensure_label(GITHUB_REPOSITORY)
     existing = get_open_issue_titles(GITHUB_REPOSITORY)
     created  = 0
@@ -362,7 +332,6 @@ def main() -> None:
         created += 1
 
     print(f"\nDone — {created} issue(s) created, {skipped} duplicate(s) skipped.")
-
 
 if __name__ == "__main__":
     main()

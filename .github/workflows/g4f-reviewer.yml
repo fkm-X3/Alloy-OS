@@ -1,0 +1,36 @@
+name: AI Code Review
+
+on:
+  push:
+    branches: ["**"]          # every branch; narrow to [main, master] if preferred
+  workflow_dispatch:           # allow manual trigger from the Actions tab
+
+permissions:
+  contents: read
+  issues:   write              # needed to create GitHub Issues
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: make review-install
+
+      - name: Run AI review
+        env:
+          GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REVIEW_LABEL:      ai-review
+        run: make review

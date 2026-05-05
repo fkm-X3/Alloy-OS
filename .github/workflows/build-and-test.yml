@@ -142,24 +142,24 @@ jobs:
         
         # Check for key boot messages
         if grep -q "Alloy" serial.log; then
-          echo "✓ Kernel name found"
+          echo "Kernel name found"
         else
-          echo "✗ Kernel name not found"
+          echo "Kernel name not found"
           exit 1
         fi
         
         if grep -q "GDT\|IDT\|PMM\|VMM" serial.log; then
-          echo "✓ Initialization messages found"
+          echo "Initialization messages found"
         else
-          echo "✗ Initialization messages not found"
+          echo "Initialization messages not found"
           exit 1
         fi
         
         # Check for Rust entry
         if grep -q "rust_main\|Rust" serial.log; then
-          echo "✓ Rust layer initialized"
+          echo "Rust layer initialized"
         else
-          echo "⚠ Rust layer not detected (may be normal)"
+          echo "Rust layer not detected (may be normal)"
         fi
         
         echo "Boot verification passed!"

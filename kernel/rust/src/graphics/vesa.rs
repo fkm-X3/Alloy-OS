@@ -3,6 +3,8 @@
 //! Provides a Display implementation for VESA VBE graphics modes,
 //! allowing the graphics layer to work with hardware-accelerated displays.
 
+use alloc::vec;
+use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::fmt::Debug;
 
@@ -87,6 +89,7 @@ impl FramebufferBufferTrait for VesaBuffer {
 pub struct VesaDisplay {
     framebuffer: Framebuffer,
     buffer: VesaBuffer,
+    back_buffer: Vec<u32>,
     dirty: bool,
 }
 
@@ -94,6 +97,7 @@ impl Debug for VesaDisplay {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("VesaDisplay")
             .field("framebuffer", &self.framebuffer)
+            .field("back_buffer_pixels", &self.back_buffer.len())
             .field("dirty", &self.dirty)
             .finish()
     }
@@ -156,9 +160,13 @@ impl VesaDisplay {
             size: mapped_size,
         };
 
+        let pixel_count = (width as usize).checked_mul(height as usize)?;
+        let back_buffer = vec![0u32; pixel_count];
+
         Some(VesaDisplay {
             framebuffer,
             buffer,
+            back_buffer,
             dirty: true,
         })
     }
@@ -167,6 +175,78 @@ impl VesaDisplay {
     pub fn framebuffer(&self) -> &Framebuffer {
         &self.framebuffer
     }
+
+    #[inline]
+    fn back_index(&self, x: u32, y: u32) -> Option<usize> {
+        let width = self.framebuffer.width();
+        let height = self.framebuffer.height();
+        if x >= width || y >= height {
+            return None;
+        }
+
+        let row_start = (y as usize).checked_mul(width as usize)?;
+        row_start.checked_add(x as usize)
+    }
+
+    fn present_back_buffer(&mut self) -> Result<(), VesaError> {
+        let width = self.framebuffer.width() as usize;
+        let height = self.framebuffer.height() as usize;
+        let pitch = self.framebuffer.pitch() as usize;
+        let bpp = self.framebuffer.bits_per_pixel();
+        let base = self.framebuffer.as_raw_ptr();
+
+        unsafe {
+            match bpp {
+                32 => {
+                    for row in 0..height {
+                        let dst = base.add(row.saturating_mul(pitch)) as *mut u32;
+                        let src_offset = row.saturating_mul(width);
+                        let src = &self.back_buffer[src_offset..src_offset.saturating_add(width)];
+                        core::ptr::copy_nonoverlapping(src.as_ptr(), dst, width);
+                    }
+                }
+                24 => {
+                    for row in 0..height {
+                        let row_dst = base.add(row.saturating_mul(pitch));
+                        let src_offset = row.saturating_mul(width);
+                        for col in 0..width {
+                            let color = self.back_buffer[src_offset + col];
+                            let native = self.framebuffer.convert_color(color);
+                            let pixel_dst = row_dst.add(col.saturating_mul(3));
+                            *pixel_dst = (native & 0xFF) as u8;
+                            *pixel_dst.add(1) = ((native >> 8) & 0xFF) as u8;
+                            *pixel_dst.add(2) = ((native >> 16) & 0xFF) as u8;
+                        }
+                    }
+                }
+                16 => {
+                    for row in 0..height {
+                        let dst = base.add(row.saturating_mul(pitch)) as *mut u16;
+                        let src_offset = row.saturating_mul(width);
+                        for col in 0..width {
+                            let color = self.back_buffer[src_offset + col];
+                            let native = self.framebuffer.convert_color(color);
+                            *dst.add(col) = (native & 0xFFFF) as u16;
+                        }
+                    }
+                }
+                8 => {
+                    for row in 0..height {
+                        let dst = base.add(row.saturating_mul(pitch));
+                        let src_offset = row.saturating_mul(width);
+                        for col in 0..width {
+                            let color = self.back_buffer[src_offset + col];
+                            let native = self.framebuffer.convert_color(color);
+                            *dst.add(col) = (native & 0xFF) as u8;
+                        }
+                    }
+                }
+                _ => return Err(VesaError::InvalidOperation),
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Display for VesaDisplay {
@@ -174,18 +254,21 @@ impl Display for VesaDisplay {
     type Buffer = VesaBuffer;
 
     fn pixel_put(&mut self, x: u32, y: u32, color: u32) {
-        if self.framebuffer.put_pixel(x, y, color).is_ok() {
+        if let Some(index) = self.back_index(x, y) {
+            self.back_buffer[index] = color;
             self.dirty = true;
         }
     }
 
     fn clear(&mut self, color: u32) {
-        if self.framebuffer.clear(color).is_ok() {
-            self.dirty = true;
-        }
+        self.back_buffer.fill(color);
+        self.dirty = true;
     }
 
     fn swap_buffer(&mut self) {
+        if self.dirty {
+            let _ = self.present_back_buffer();
+        }
         self.dirty = false;
     }
 
@@ -209,9 +292,26 @@ impl Display for VesaDisplay {
         height: u32,
         color: u32,
     ) -> Result<(), Self::Error> {
-        self.framebuffer
-            .write_rect(x, y, width, height, color)
-            .map_err(|_| VesaError::InvalidOperation)?;
+        let fb_width = self.framebuffer.width();
+        let fb_height = self.framebuffer.height();
+        if x >= fb_width || y >= fb_height {
+            return Err(VesaError::InvalidOperation);
+        }
+
+        let x_end = x.saturating_add(width).min(fb_width);
+        let y_end = y.saturating_add(height).min(fb_height);
+        let row_width = (x_end.saturating_sub(x)) as usize;
+
+        for row in y..y_end {
+            let row_start = (row as usize)
+                .saturating_mul(fb_width as usize)
+                .saturating_add(x as usize);
+            let row_end = row_start.saturating_add(row_width);
+            if row_end <= self.back_buffer.len() {
+                self.back_buffer[row_start..row_end].fill(color);
+            }
+        }
+
         self.dirty = true;
         Ok(())
     }

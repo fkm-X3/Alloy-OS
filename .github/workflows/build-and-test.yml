@@ -16,7 +16,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     - name: Install system dependencies
       run: |
@@ -40,7 +40,7 @@ jobs:
     
     - name: Cache cross-compiler
       id: cache-cross-compiler
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/.local/i686-elf
         key: i686-elf-gcc-${{ runner.os }}-v1
@@ -58,7 +58,7 @@ jobs:
         components: rust-src
     
     - name: Cache Rust dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/bin/
@@ -166,7 +166,7 @@ jobs:
     
     - name: Upload build artifacts
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: kernel-build
         path: |
@@ -178,7 +178,7 @@ jobs:
     
     - name: Upload logs on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: failure-logs
         path: |

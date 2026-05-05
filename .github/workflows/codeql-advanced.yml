@@ -34,10 +34,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -66,7 +66,7 @@ jobs:
       - name: Cache cross-compiler
         if: matrix.language == 'cpp'
         id: cache-cross-compiler
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/i686-elf
           key: i686-elf-gcc-${{ runner.os }}-codeql-v1
@@ -85,7 +85,7 @@ jobs:
 
       - name: Cache Rust dependencies
         if: matrix.language == 'cpp'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -108,6 +108,6 @@ jobs:
           make
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"

@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0  # Need full history for diff
 
@@ -42,7 +42,7 @@ jobs:
 
     - name: Cache cross-compiler
       id: cache-cross-compiler
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/.local/i686-elf
         key: i686-elf-gcc-${{ runner.os }}-v1
@@ -60,7 +60,7 @@ jobs:
         components: rust-src
 
     - name: Cache Rust dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cargo/bin/

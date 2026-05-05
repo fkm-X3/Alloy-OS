@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -34,7 +34,7 @@ jobs:
 
       - name: Cache cross-compiler
         id: cache-cross-compiler
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: ~/.local/i686-elf
           key: i686-elf-gcc-${{ runner.os }}-v1
@@ -65,7 +65,7 @@ jobs:
           echo "Type: Nightly Pre-release" >> build-artifacts/BUILD_INFO.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.vars.outputs.tag }}

@@ -12,7 +12,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     
     - name: Install dependencies
       run: |
@@ -35,7 +35,7 @@ jobs:
     
     - name: Cache cross-compiler
       id: cache-cross-compiler
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/.local/i686-elf
         key: i686-elf-gcc-${{ runner.os }}-v1
@@ -70,7 +70,7 @@ jobs:
         sha256sum alloy-os-${{ github.ref_name }}.tar.gz > alloy-os-${{ github.ref_name }}.tar.gz.sha256
     
     - name: Upload release artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: alloy-os-release
         path: |
@@ -83,7 +83,7 @@ jobs:
     
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         files: |
           build/alloy.iso

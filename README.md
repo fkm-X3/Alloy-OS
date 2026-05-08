@@ -1,14 +1,11 @@
-# IMPORTENT: alloy os is being archived but it shall live on in alloy linux (im grinding my balls against a cheese grater trying to display stuff) it was fun working on this project and i will eventually come back to it as display environments branch out to be non-linux based
-
-
-
-
 <div align="center">
   <h1>Alloy OS</h1>
   <img src="assets/alloy-os-light.svg" width="300" />
   <img src="assets/alloy-os-dark.svg" width="300" />
   <p><strong>An OS made in Rust, C/C++, and Assembly</strong></p>
 </div>
+
+# WE ARE SO BACK
 
 ## fucking information
 ```bash

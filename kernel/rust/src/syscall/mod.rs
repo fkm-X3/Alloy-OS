@@ -293,10 +293,15 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
     match crate::elf::load_elf_from_bytes(&image) {
         Ok((entry, phdr_vaddr)) => {
             unsafe { ffi::serial_print(b"[Syscall] ELF loaded successfully\n\0".as_ptr()); }
-            // Allocate stack at a fixed low address BEFORE switching
+            // Switch to the new page directory BEFORE mapping the user stack so mappings go into the new PD
+            let switched = unsafe { ffi::paging_switch_to_directory(pd_phys) };
+            if !switched { return core::u32::MAX; }
+            unsafe { ffi::serial_print(b"[Syscall] Switched to user directory\n\0".as_ptr()); }
+
+            // Allocate stack at a fixed low address in the new address space
             const STACK_BASE: u32 = 0x00C00000;
             const STACK_SIZE: u32 = 0x4000; // 16KB
-            
+
             let stack_flags = (ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER) as u32;
             let mut page_addr = STACK_BASE;
             while page_addr < STACK_BASE + STACK_SIZE {
@@ -308,11 +313,6 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
             }
             let stack_ptr = STACK_BASE;
             unsafe { ffi::serial_print(b"[Syscall] Stack allocated\n\0".as_ptr()); }
-
-            // Switch to the new page directory
-            let switched = unsafe { ffi::paging_switch_to_directory(pd_phys) };
-            if !switched { return core::u32::MAX; }
-            unsafe { ffi::serial_print(b"[Syscall] Switched to user directory\n\0".as_ptr()); }
 
             // Prepare minimal argv (argv[0] = basename, envp empty)
             unsafe { ffi::serial_print(b"[Syscall] Preparing argv\n\0".as_ptr()); }

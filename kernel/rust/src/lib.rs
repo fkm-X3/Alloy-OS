@@ -15,9 +15,12 @@ pub mod sync;
 pub mod ffi;
 pub mod panic;
 pub mod terminal;
-pub mod utils;
+pub mod utils_rs;
+pub use utils_rs as utils;
+pub mod fs;
 pub mod process;
 pub mod syscall;
+pub mod elf;
 pub mod graphics;
 pub mod fusion;
 pub mod display_server;
@@ -48,6 +51,46 @@ pub extern "C" fn rust_main() {
         // Clear screen
         ffi::vga_clear();
     }
+
+    // Initialize VFS early so userland can use files
+    crate::fs::vfs_init();
+    unsafe { ffi::serial_print(b"[VFS] initialized\n\0".as_ptr()); }
+    
+    // Quick test: verify /hello exists in VFS by trying to open and read it
+    if let Ok(hello_id) = crate::fs::vfs_open("/hello", 0, 0) {
+        if let Some(hello_data) = crate::fs::vfs_read_all(hello_id) {
+            unsafe {
+                ffi::serial_print(b"[Test] SUCCESS: /hello found in VFS, size=\0".as_ptr());
+                ffi::serial_print(b"\0".as_ptr());
+                // Print size via serial (easier than VGA in headless mode)
+                let sz = hello_data.len();
+                let sz_str = alloc::format!("{}", sz);
+                let sz_bytes = sz_str.as_bytes();
+                for &b in sz_bytes {
+                    ffi::vga_putchar(b);
+                }
+                ffi::serial_print(b" bytes\n\0".as_ptr());
+            }
+        }
+    }
+    
+    // TEST: Execute /hello to verify userland execution works
+    unsafe {
+        ffi::serial_print(b"[Rust] TESTING: Executing /hello via execve...\n\0".as_ptr());
+    }
+    let hello_path = "/hello";
+    let path_bytes = hello_path.as_bytes();
+    let mut path_buf = [0u8; 256];
+    path_buf[..path_bytes.len()].copy_from_slice(path_bytes);
+    let path_ptr = &path_buf as *const _ as u32;
+    let exec_result = crate::syscall::rust_sys_execve(path_ptr);
+    unsafe {
+        if exec_result != core::u32::MAX {
+            ffi::serial_print(b"[Rust] EXECVE TEST COMPLETE\n\0".as_ptr());
+        } else {
+            ffi::serial_print(b"[Rust] EXECVE TEST FAILED\n\0".as_ptr());
+        }
+    }
     
     // Initialize and run the desktop display server
     if let Some(display) = graphics::vesa::VesaDisplay::new() {
@@ -73,7 +116,7 @@ pub extern "C" fn rust_main() {
         }
     } else {
         unsafe {
-            ffi::serial_print(b"[Rust] Failed to initialize VESA display\n\0".as_ptr());
+            ffi::serial_print(b"[Rust] Failed to initialize VESA display (headless mode)\n\0".as_ptr());
         }
     }
 }

@@ -54,24 +54,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "cargo"
-    directory: "/os/terminal"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "05:00"
-      timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "rust"
-    commit-message:
-      prefix: "deps(os-terminal)"
-    groups:
-      os-terminal:
-        patterns:
-          - "*"
-
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -89,3 +71,4 @@ updates:
       python:
         patterns:
           - "*"
+

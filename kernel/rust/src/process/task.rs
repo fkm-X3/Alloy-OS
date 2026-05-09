@@ -58,11 +58,16 @@ pub struct CpuContext {
     
     // EFLAGS register
     pub eflags: u32,
+    // CR3 - page directory physical address
+    pub cr3: u32,
 }
 
 impl CpuContext {
     /// Create a zeroed context
     pub fn new() -> Self {
+        // Default CR3 to kernel page directory
+        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() } as u32;
+
         CpuContext {
             eax: 0, ebx: 0, ecx: 0, edx: 0,
             esi: 0, edi: 0, ebp: 0, esp: 0,
@@ -74,6 +79,7 @@ impl CpuContext {
             gs: 0x10,
             ss: 0x10,  // Kernel stack segment
             eflags: 0x202,  // IF (interrupt enable) flag set
+            cr3: kernel_cr3,
         }
     }
 }
@@ -85,7 +91,10 @@ pub struct Task {
     context: Box<CpuContext>,
     stack: Option<Box<[u8; 4096]>>,  // 4KB kernel stack
     name: String,
+    // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
+    fds: [Option<(u64, usize)>; 32],
 }
+
 
 impl Task {
     /// Create a new task with the given entry point
@@ -112,12 +121,75 @@ impl Task {
             ffi::serial_print(b"...\n\0".as_ptr());
         }
         
-        Task {
+        let mut task = Task {
             id,
             state: TaskState::Ready,
             context,
             stack: Some(stack),
             name: String::from(name),
+            fds: [None; 32],
+        };
+
+        // Try to open /dev/console for stdout/stderr (fd 1 and 2) if available
+        if let Ok(vnode_id) = crate::fs::vfs_open("/dev/console", 0, 0) {
+            // allocate fd 1
+            if let Some(fd1) = task.alloc_fd(vnode_id) {
+                // If fd1 != 1, swap into slot 1
+                if fd1 != 1 {
+                    task.fds[1] = task.fds[fd1 as usize];
+                    task.fds[fd1 as usize] = None;
+                }
+                // allocate fd 2 as duplicate
+                if let Some(fd2) = task.alloc_fd(vnode_id) {
+                    if fd2 != 2 {
+                        task.fds[2] = task.fds[fd2 as usize];
+                        task.fds[fd2 as usize] = None;
+                    }
+                }
+            }
+        }
+
+        task
+    }
+
+    /// Allocate a file descriptor for the current task. Returns fd or None.
+    pub fn alloc_fd(&mut self, vnode_id: u64) -> Option<u32> {
+        for (i, slot) in self.fds.iter_mut().enumerate() {
+            if slot.is_none() {
+                *slot = Some((vnode_id, 0usize));
+                return Some(i as u32);
+            }
+        }
+        None
+    }
+
+    /// Get vnode id for a fd
+    pub fn get_fd(&self, fd: u32) -> Option<u64> {
+        if (fd as usize) < self.fds.len() {
+            if let Some((vid, _off)) = self.fds[fd as usize] {
+                Some(vid)
+            } else { None }
+        } else {
+            None
+        }
+    }
+
+    /// Get mutable reference to fd entry (vnode_id, offset)
+    pub fn get_fd_entry_mut(&mut self, fd: u32) -> Option<&mut (u64, usize)> {
+        if (fd as usize) < self.fds.len() {
+            self.fds[fd as usize].as_mut()
+        } else {
+            None
+        }
+    }
+
+    /// Close a file descriptor
+    pub fn close_fd(&mut self, fd: u32) -> Result<(), ()> {
+        if (fd as usize) < self.fds.len() {
+            self.fds[fd as usize] = None;
+            Ok(())
+        } else {
+            Err(())
         }
     }
     
@@ -161,6 +233,17 @@ impl Drop for Task {
     fn drop(&mut self) {
         unsafe {
             ffi::serial_print(b"[Task] Dropping task\n\0".as_ptr());
+        }
+
+        // If this task has its own page directory (CR3) different from the kernel's,
+        // destroy it and free all user pages and page tables.
+        let pd = self.context.cr3;
+        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() as u32 };
+        if pd != 0 && pd != kernel_pd {
+            unsafe {
+                ffi::serial_print(b"[Task] Destroying task page directory\n\0".as_ptr());
+                ffi::paging_destroy_directory(pd);
+            }
         }
     }
 }

@@ -127,6 +127,122 @@ page_directory* Paging::get_kernel_directory() {
     return kernel_directory;
 }
 
+// Create a new page directory and initialize it with kernel mappings for the first 4 PDEs
+uint32_t Paging::create_page_directory_phys() {
+    // Allocate a physical frame for the new page directory
+    void* pd_phys = g_pmm.alloc_frame();
+    if (!pd_phys) {
+        serial_print("Paging: ERROR - Failed to allocate page directory frame\n");
+        return 0;
+    }
+
+    // Map the new page-directory frame into the stable PT window at a safe index (e.g., 100)
+    const uint32_t TEMP_INDEX = 100;
+    page_table* tmp = map_page_table_window(TEMP_INDEX, (uint32_t)pd_phys);
+    if (!tmp) {
+        serial_print("Paging: ERROR - Failed to map temporary page directory frame\n");
+        g_pmm.free_frame(pd_phys);
+        return 0;
+    }
+
+    // Zero the new directory
+    page_directory* new_pd = (page_directory*)((uint32_t)PT_VIRT_BASE + (TEMP_INDEX * PAGE_SIZE));
+    for (int i = 0; i < 1024; i++) {
+        new_pd->entries[i] = 0;
+    }
+
+    // Copy kernel mappings for the first 4 entries (identity mapped region)
+    for (int i = 0; i < 4; i++) {
+        new_pd->entries[i] = kernel_directory->entries[i];
+    }
+
+    // leave the temporary mapping in place so the kernel can reference this page directory via a stable virtual address
+    return (uint32_t)pd_phys;
+}
+
+void Paging::destroy_page_directory(uint32_t pd_phys) {
+    if (!pd_phys) return;
+
+    serial_print("Paging: Destroying page directory\n");
+
+    // Map the page-directory frame into the stable PT window at a temporary index
+    const uint32_t TEMP_INDEX = 101;
+    page_table* tmp_pd_map = map_page_table_window(TEMP_INDEX, pd_phys);
+    page_directory* pd = (page_directory*)((uint32_t)PT_VIRT_BASE + (TEMP_INDEX * PAGE_SIZE));
+
+    // Iterate PDEs (skip first 4 kernel identity-mapped entries)
+    for (int dir = 4; dir < 1024; dir++) {
+        uint32_t pde = pd->entries[dir];
+        if (!(pde & PAGE_PRESENT)) continue;
+
+        uint32_t pt_phys = pde & 0xFFFFF000;
+        // Map the page-table frame into the PT window at this dir index
+        page_table* pt = map_page_table_window(dir, pt_phys);
+        if (!pt) continue; // should not happen
+
+        // Iterate PTEs and free referenced physical frames
+        for (int i = 0; i < 1024; i++) {
+            uint32_t pte = pt->entries[i];
+            if (!(pte & PAGE_PRESENT)) continue;
+            uint32_t frame_phys = pte & 0xFFFFF000;
+            // Free the physical frame mapped by this PTE
+            g_pmm.free_frame((void*)frame_phys);
+            // Clear entry
+            pt->entries[i] = 0;
+        }
+
+        // Free the page-table frame itself
+        g_pmm.free_frame((void*)pt_phys);
+        // Clear PDE
+        pd->entries[dir] = 0;
+    }
+
+    // Finally free the page-directory frame
+    g_pmm.free_frame((void*)pd_phys);
+}
+
+bool Paging::switch_to_page_directory(uint32_t pd_phys) {
+    if (!pd_phys) return false;
+
+    // Map the page-directory frame into the stable PT window at a reserved index
+    const uint32_t SWITCH_INDEX = 200;
+    page_table* mapped = map_page_table_window(SWITCH_INDEX, pd_phys);
+    if (!mapped) {
+        serial_print("Paging: ERROR - Failed to map page directory for switch\n");
+        return false;
+    }
+
+    // Update internal kernel_directory pointer to the new virtual mapping
+    kernel_directory = (page_directory*)((uint32_t)PT_VIRT_BASE + (SWITCH_INDEX * PAGE_SIZE));
+    kernel_tables[SWITCH_INDEX] = mapped;
+
+    // Load CR3 to switch to this page directory
+    asm volatile ("mov %0, %%cr3" :: "r"(pd_phys));
+
+    return true;
+}
+
+// C-compatible wrappers for Rust
+extern "C" uint32_t paging_create_directory_phys() {
+    return g_paging.create_page_directory_phys();
+}
+
+extern "C" bool paging_switch_to_directory(uint32_t pd_phys) {
+    return g_paging.switch_to_page_directory(pd_phys);
+}
+
+extern "C" void paging_destroy_directory(uint32_t pd_phys) {
+    g_paging.destroy_page_directory(pd_phys);
+}
+
+extern "C" uint32_t paging_get_kernel_directory_phys() {
+    return (uint32_t)g_paging.get_kernel_directory();
+}
+
+extern "C" uint32_t paging_get_physical_address(uint32_t virt) {
+    return g_paging.get_physical_address(virt);
+}
+
 uint32_t* Paging::get_page_entry(uint32_t virt_addr, bool create) {
     uint32_t dir_index = virt_addr >> 22;
     uint32_t table_index = (virt_addr >> 12) & 0x3FF;

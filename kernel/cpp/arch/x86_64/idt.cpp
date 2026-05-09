@@ -261,9 +261,32 @@ extern "C" void serial_print(const char* str);
 extern "C" void serial_print_hex(uint32_t value);
 
 // Common exception handler
+extern "C" void rust_handle_page_fault(uint32_t addr, uint32_t err_code); 
+
 extern "C" void exception_handler(interrupt_frame* frame) {
     uint32_t int_no = frame->int_no;
     uint32_t err_code = frame->err_code;
+
+    // If this is a page fault, try to handle gracefully for user-mode faults
+    if (int_no == 14) {
+        uint32_t fault_addr = 0;
+        asm volatile ("mov %%cr2, %0" : "=r"(fault_addr));
+
+        serial_print("\n!!! PAGE FAULT at 0x");
+        serial_print_hex(fault_addr);
+        serial_print(" Error Code: ");
+        serial_print_hex(err_code);
+        serial_print("\n");
+
+        // If fault originated from user mode (error code bit 2 set), notify Rust scheduler to kill the task
+        if (err_code & 0x4) {
+            serial_print("User-mode page fault, terminating current task...\n");
+            rust_handle_page_fault(fault_addr, err_code);
+            return; // Return to iret path; scheduler should have switched tasks
+        }
+
+        // Kernel-mode page fault: fall through to halt
+    }
 
     // Print exception info to serial
     serial_print("\n!!! EXCEPTION: ");

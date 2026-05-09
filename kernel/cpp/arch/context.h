@@ -29,6 +29,9 @@ struct cpu_context {
     
     // EFLAGS register
     uint32_t eflags;
+
+    // CR3 (page directory physical address)
+    uint32_t cr3;
 };
 
 // Context switch function (implemented in assembly)

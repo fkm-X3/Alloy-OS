@@ -1,11 +1,7 @@
-/// Utility functions for Alloy OS kernel
-/// 
-/// This module provides helper functions for common tasks in a no_std environment
-
 pub mod format;
 pub mod pointer;
 
-// Core helpers (merged from utils.rs)
+// Utility helpers for kernel (moved from utils.rs)
 
 const USER_SPACE_LIMIT: usize = 0xC0000000usize; // conservative user-space upper bound (3GB)
 const USER_MAX_COPY: usize = 1024 * 1024; // 1MB max per copy to avoid large accidental copies
@@ -13,7 +9,7 @@ const USER_MAX_COPY: usize = 1024 * 1024; // 1MB max per copy to avoid large acc
 use crate::ffi;
 
 /// Helper to check that a user range is plausibly valid by comparing against VMM's next virt addr.
-pub fn user_range_check(start: usize, len: usize) -> bool {
+fn user_range_check(start: usize, len: usize) -> bool {
     if start >= USER_SPACE_LIMIT { return false; }
     if len == 0 { return true; }
     if len > USER_MAX_COPY { return false; }

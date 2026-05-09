@@ -8,6 +8,14 @@
 #define SYS_YIELD   1
 #define SYS_GETPID  2
 #define SYS_SLEEP   3
+#define SYS_OPEN    4
+#define SYS_READ    5
+#define SYS_WRITE   6
+#define SYS_CLOSE   7
+#define SYS_DUP     8
+#define SYS_LSEEK   9
+#define SYS_PIPE    10
+#define SYS_EXECVE  11
 
 // Syscall dispatcher (called from assembly stub)
 extern "C" uint32_t syscall_dispatcher(uint32_t syscall_no, 

@@ -63,6 +63,13 @@ extern "C" {
     
     // Context switching (from context_switch.asm)
     pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
+
+    // Paging helpers
+    pub fn paging_create_directory_phys() -> u32;
+    pub fn paging_switch_to_directory(pd_phys: u32) -> bool;
+    pub fn paging_get_kernel_directory_phys() -> u32;
+    pub fn paging_get_physical_address(virt: u32) -> u32;
+    pub fn paging_destroy_directory(pd_phys: u32);
     
     // Timer functions (from timer.cpp)
     pub fn timer_init_ffi(frequency: u32);

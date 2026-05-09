@@ -48,6 +48,10 @@ context_switch:
     pushfd
     pop ecx
     mov [eax+60], ecx
+
+    ; Save CR3
+    mov ecx, cr3
+    mov [eax+64], ecx
     
     ; Load new context from new_ctx
     mov eax, edx            ; eax = new_ctx pointer
@@ -56,6 +60,10 @@ context_switch:
     mov ecx, [eax+60]
     push ecx
     popfd
+    
+    ; Load new CR3 (switch page directory) BEFORE restoring stack pointer
+    mov ecx, [eax+64]
+    mov cr3, ecx
     
     ; Restore segment registers (DS, ES, FS, GS)
     ; Note: We don't restore CS and SS as they're set by the CPU

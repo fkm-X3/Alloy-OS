@@ -55,41 +55,84 @@ impl Scheduler {
     
     /// Schedule next task (round-robin)
     pub fn schedule() {
-        let mut scheduler = SCHEDULER.lock();
-        if let Some(ref mut sched) = *scheduler {
-            // Put current task back in ready queue if it's still runnable
-            if let Some(mut current) = sched.current_task.take() {
-                match current.state() {
-                    TaskState::Running => {
-                        // Task is still runnable, put it back in ready queue
-                        current.set_state(TaskState::Ready);
-                        sched.ready_queue.push_back(current);
-                    }
-                    TaskState::Terminated => {
-                        // Task is done, drop it
-                        unsafe {
-                            ffi::serial_print(b"[Scheduler] Task terminated\n\0".as_ptr());
-                        }
-                        drop(current);
-                    }
-                    _ => {
-                        // Blocked or other state - for now, just put back in queue
-                        current.set_state(TaskState::Ready);
-                        sched.ready_queue.push_back(current);
-                    }
-                }
-            }
-            
+        // Attempt to perform a proper context switch between current and next task.
+        // Strategy:
+        // 1. Take current task out of scheduler (old_opt).
+        // 2. Pick next task from ready queue (next_opt).
+        // 3. If next exists, set it as current in scheduler and obtain raw context pointers.
+        // 4. Drop scheduler lock and call context_switch(old_ctx, new_ctx) if old existed.
+        // 5. After context_switch returns (we are back in old context), re-acquire lock and push old back if runnable.
+
+        let mut scheduler_lock = SCHEDULER.lock();
+        if let Some(ref mut sched) = *scheduler_lock {
+            // Take current task out
+            let old_opt: Option<Box<Task>> = sched.current_task.take();
+
             // Pick next task
-            if let Some(next_task) = sched.pick_next() {
-                unsafe {
-                    ffi::serial_print(b"[Scheduler] Switching to next task\n\0".as_ptr());
+            let next_opt: Option<Box<Task>> = sched.pick_next();
+            if next_opt.is_none() {
+                // No next task - put old back if present
+                if let Some(old) = old_opt {
+                    sched.current_task = Some(old);
                 }
-                sched.current_task = Some(next_task);
+                return;
+            }
+
+            // We have a next task
+            let mut next = next_opt.unwrap();
+            next.set_state(TaskState::Running);
+
+            // Obtain raw pointer to new context before placing into scheduler
+            let new_ctx_ptr: *mut crate::process::task::CpuContext = next.context_mut() as *mut _;
+
+            // Place next into scheduler as current
+            sched.current_task = Some(next);
+
+            // Prepare old boxed task to be used for context switching
+            let mut old_box_opt = old_opt; // may be None for first run
+
+            unsafe {
+                ffi::serial_print(b"[Scheduler] Preparing context switch\n\0".as_ptr());
+            }
+
+            // Drop lock before performing context switch
+            drop(scheduler_lock);
+
+            // If there is an old context, perform context switch
+            if let Some(mut old_box) = old_box_opt {
+                // Get pointer to old context
+                let old_ctx_ptr: *mut crate::process::task::CpuContext = old_box.context_mut() as *mut _;
+
+                unsafe {
+                    ffi::serial_print(b"[Scheduler] Calling context_switch\n\0".as_ptr());
+                    // This will save registers into old_ctx and restore new_ctx, jumping to new task.
+                    ffi::context_switch(old_ctx_ptr, new_ctx_ptr);
+                    // When we return here, we are back in the old context.
+                    ffi::serial_print(b"[Scheduler] Returned from context_switch (old context)\n\0".as_ptr());
+                }
+
+                // After returning, re-acquire scheduler lock and push old task back if runnable
+                let mut scheduler_lock = SCHEDULER.lock();
+                if let Some(ref mut sched) = *scheduler_lock {
+                    match old_box.state() {
+                        TaskState::Running => {
+                            old_box.set_state(TaskState::Ready);
+                            sched.ready_queue.push_back(old_box);
+                        }
+                        TaskState::Terminated => {
+                            unsafe { ffi::serial_print(b"[Scheduler] Old task terminated after switch\n\0".as_ptr()); }
+                            drop(old_box);
+                        }
+                        _ => {
+                            old_box.set_state(TaskState::Ready);
+                            sched.ready_queue.push_back(old_box);
+                        }
+                    }
+                }
             } else {
-                unsafe {
-                    ffi::serial_print(b"[Scheduler] No more tasks in queue\n\0".as_ptr());
-                }
+                // No old context: this is the initial switch into first task. Simply return and let the new task execute.
+                // Control flow: caller should arrange to jump into the new task. For simplicity, do nothing here.
+                unsafe { ffi::serial_print(b"[Scheduler] No old task, initial run\n\0".as_ptr()); }
             }
         }
     }
@@ -99,25 +142,44 @@ impl Scheduler {
         unsafe {
             ffi::serial_print(b"[Scheduler] Task yielding CPU\n\0".as_ptr());
         }
-        
-        // For now, we just schedule without context switching
+
+        // Use schedule() which performs proper context switching between tasks
         Self::schedule();
-        
-        // Execute the next task directly (simplified - no real context switching yet)
+    }
+
+    /// Convenience helper to operate on the current task under the scheduler lock.
+    /// The closure receives a mutable reference to the current Task if present.
+    pub fn with_current_task_mut<F, R>(f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Task) -> R,
+    {
         let mut scheduler = SCHEDULER.lock();
         if let Some(ref mut sched) = *scheduler {
-            if let Some(ref task) = sched.current_task {
-                let entry = task.context().eip;
-                drop(scheduler); // Release lock
-                
-                unsafe {
-                    ffi::serial_print(b"[Scheduler] Executing task\n\0".as_ptr());
-                }
-                
-                let entry_fn: extern "C" fn() = unsafe { core::mem::transmute(entry) };
-                entry_fn();
+            if let Some(ref mut task) = sched.current_task {
+                return Some(f(task));
             }
         }
+        None
+    }
+
+    /// External hook for page fault handling from C++
+    #[no_mangle]
+    pub extern "C" fn rust_handle_page_fault(addr: u32, err: u32) {
+        unsafe {
+            crate::ffi::serial_print(b"[Scheduler] rust_handle_page_fault invoked\n\0".as_ptr());
+        }
+
+        // Mark current task as terminated
+        let mut scheduler = SCHEDULER.lock();
+        if let Some(ref mut sched) = *scheduler {
+            if let Some(ref mut task) = sched.current_task {
+                task.set_state(TaskState::Terminated);
+                unsafe { crate::ffi::serial_print(b"[Scheduler] Marked current task as Terminated\n\0".as_ptr()); }
+            }
+        }
+
+        // Schedule next task
+        Self::schedule();
     }
     
     /// Start the scheduler (never returns)
@@ -152,27 +214,44 @@ impl Scheduler {
             }
         }
         
-        // Schedule and run first task
+        // Schedule and prepare first task
         Self::schedule();
-        
-        // Execute first task
+
+        // For the initial run, perform a context switch from a kernel-stored context into the first task
         let mut scheduler = SCHEDULER.lock();
         if let Some(ref mut sched) = *scheduler {
-            if let Some(ref task) = sched.current_task {
-                let entry = task.context().eip;
-                drop(scheduler); // Release lock before jumping
-                
+            if let Some(ref mut task) = sched.current_task {
+                // Prepare a local kernel context to save current CPU state
+                let mut kernel_ctx = crate::process::task::CpuContext::new();
+
+                // Get pointer to the new task context
+                let new_ctx_ptr: *mut crate::process::task::CpuContext = task.context_mut() as *mut _;
+
+                // Drop scheduler lock before switching
+                drop(scheduler);
+
                 unsafe {
-                    ffi::serial_print(b"[Scheduler] Jumping to first task\n\0".as_ptr());
+                    ffi::serial_print(b"[Scheduler] Performing initial context_switch to first task\n\0".as_ptr());
+                    ffi::context_switch(&mut kernel_ctx as *mut _, new_ctx_ptr);
+                    // When we return here, the task has finished or yielded back to kernel_ctx
+                    ffi::serial_print(b"[Scheduler] Returned from initial context_switch\n\0".as_ptr());
                 }
-                
-                // Jump to first task (direct call for now, no context switching)
-                let entry_fn: extern "C" fn() = unsafe { core::mem::transmute(entry) };
-                entry_fn();
+
+                // Re-acquire scheduler and continue scheduling loop
+                let mut scheduler = SCHEDULER.lock();
+                if let Some(ref mut sched) = *scheduler {
+                    // If kernel_ctx indicates the task returned, treat it as terminated
+                    // For simplicity, mark current task terminated and schedule next
+                    if let Some(mut current) = sched.current_task.take() {
+                        current.set_state(TaskState::Terminated);
+                        drop(current);
+                    }
+                    Self::schedule();
+                }
             }
         }
-        
-        // Should never reach here
+
+        // Should never reach here; if it does, halt
         unsafe {
             ffi::serial_print(b"[Scheduler] ERROR: Scheduler returned!\n\0".as_ptr());
         }

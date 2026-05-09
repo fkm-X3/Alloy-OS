@@ -46,7 +46,19 @@ public:
     
     // Get kernel page directory
     page_directory* get_kernel_directory();
-    
+
+    // Create a new empty page directory (initialized with kernel mappings for low addresses)
+    // Create a new page directory and return its physical address
+    uint32_t create_page_directory_phys();
+
+    // Destroy a page directory previously created with create_page_directory_phys.
+    // This will free all mapped page frames, page tables, and the page directory frame itself.
+    void destroy_page_directory(uint32_t pd_phys);
+
+    // Switch current page directory used by Paging to the given physical page directory.
+    // This will map the page-directory frame into a stable virtual window and update internal pointers.
+    bool switch_to_page_directory(uint32_t pd_phys);
+
 private:
     page_directory* kernel_directory;
     page_table* kernel_tables[1024];
@@ -54,6 +66,8 @@ private:
     uint32_t* get_page_entry(uint32_t virt_addr, bool create);
     void invalidate_page(uint32_t virt_addr);
 };
+
+extern "C" uint32_t paging_get_physical_address(uint32_t virt_addr);
 
 extern Paging g_paging;
 

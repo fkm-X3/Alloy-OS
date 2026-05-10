@@ -12,6 +12,7 @@ debug-alloc = []  # Enable verbose allocation logging
 
 [dependencies]
 alloy-os-display = { path = "../../os/display" }
+alloy-os-cosmos-de = { path = "../../os/cosmos-de" }
 
 [profile.dev]
 panic = "abort"

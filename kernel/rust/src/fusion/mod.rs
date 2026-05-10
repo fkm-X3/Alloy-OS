@@ -1,15 +1,17 @@
 //! Fusion Display System Integration
 //!
 //! Provides a display backend that bridges kernel graphics and the display server.
-//! Manages framebuffer-based rendering for kernel applications.
+//! Manages framebuffer-based rendering for kernel applications, and Wayland protocol support.
 
 pub mod backend;
 pub mod terminal;
 pub mod framebuffer;
+pub mod wayland;
 
 pub use backend::FusionDisplayBackend;
 pub use terminal::TerminalSurface;
 pub use framebuffer::{FramebufferRenderer, Color};
+pub use wayland::WaylandServer;
 
 /// Fusion display system marker
 #[derive(Debug, Clone, Copy)]

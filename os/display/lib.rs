@@ -1,4 +1,7 @@
-#![no_std]
+#![cfg_attr(not(feature = "host"), no_std)]
+
+#[cfg(feature = "host")]
+extern crate std;
 
 extern crate alloc;
 

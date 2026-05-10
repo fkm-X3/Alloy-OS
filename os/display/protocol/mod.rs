@@ -8,7 +8,7 @@ pub const PROTOCOL_VERSION_MINOR: u16 = 1;
 /// Minimum frame interval accepted by the server.
 pub const MIN_FRAME_INTERVAL_MS: u32 = 1;
 /// Maximum frame interval accepted by the server.
-pub const MAX_FRAME_INTERVAL_MS: u32 = 1000;
+pub const MAX_FRAME_INTERVAL_MS: u32 = 10000;
 /// Maximum supported width/height for a single surface.
 pub const MAX_SURFACE_DIMENSION: u32 = 8192;
 
@@ -101,6 +101,16 @@ pub enum DisplayRequest {
     SetFrameIntervalMs {
         interval_ms: u32,
     },
+    /// New: clients announce compositor integration (Wayland/Cosmos)
+    AnnounceCompositor {
+        name: String,
+        version_major: u16,
+        version_minor: u16,
+    },
+    /// New: client sets capability flags indicating integrations supported
+    SetClientCapabilities {
+        capabilities: u32,
+    },
 }
 
 /// Response values for successful request execution.
@@ -109,6 +119,14 @@ pub enum DisplayResponse {
     Ack,
     SurfaceCreated {
         surface_id: SurfaceId,
+    },
+    /// Acknowledgement returning the accepted capabilities
+    CapabilitiesAck {
+        capabilities: u32,
+    },
+    /// A compositor announce acknowledgement
+    CompositorAnnounced {
+        name: String,
     },
     Error(String),
 }
@@ -169,6 +187,8 @@ pub enum ProtocolError {
     InvalidDimensions,
     InvalidFrameInterval,
     EmptyDamageRect,
+    InvalidCapability,
+    UnsupportedCompositorName,
 }
 
 impl fmt::Display for ProtocolError {
@@ -177,9 +197,17 @@ impl fmt::Display for ProtocolError {
             ProtocolError::InvalidDimensions => write!(f, "invalid dimensions"),
             ProtocolError::InvalidFrameInterval => write!(f, "invalid frame interval"),
             ProtocolError::EmptyDamageRect => write!(f, "damage rect must be non-empty"),
+            ProtocolError::InvalidCapability => write!(f, "invalid capability flags"),
+            ProtocolError::UnsupportedCompositorName => write!(f, "unsupported compositor name"),
         }
     }
 }
+
+/// Capability flags for clients (bitmask).
+pub type CapabilityFlags = u32;
+pub const CAPABILITY_NONE: CapabilityFlags = 0;
+pub const CAPABILITY_WAYLAND: CapabilityFlags = 1 << 0;
+pub const CAPABILITY_COSMOS: CapabilityFlags = 1 << 1;
 
 /// Validate request shape before stateful execution.
 pub fn validate_request(request: &DisplayRequest) -> Result<(), ProtocolError> {
@@ -209,6 +237,18 @@ pub fn validate_request(request: &DisplayRequest) -> Result<(), ProtocolError> {
         DisplayRequest::SetFrameIntervalMs { interval_ms } => {
             if *interval_ms < MIN_FRAME_INTERVAL_MS || *interval_ms > MAX_FRAME_INTERVAL_MS {
                 return Err(ProtocolError::InvalidFrameInterval);
+            }
+        }
+        DisplayRequest::SetClientCapabilities { capabilities } => {
+            // Only allow known capability bits for now
+            let allowed = CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_NONE;
+            if (*capabilities & !allowed) != 0 {
+                return Err(ProtocolError::InvalidCapability);
+            }
+        }
+        DisplayRequest::AnnounceCompositor { name, .. } => {
+            if name.is_empty() || name.len() > 64 {
+                return Err(ProtocolError::UnsupportedCompositorName);
             }
         }
         _ => {}

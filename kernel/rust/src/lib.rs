@@ -55,6 +55,8 @@ pub extern "C" fn rust_main() {
     // Initialize VFS early so userland can use files
     crate::fs::vfs_init();
     unsafe { ffi::serial_print(b"[VFS] initialized\n\0".as_ptr()); }
+
+    alloy_os_cosmos_de::bootstrap();
     
     // Quick test: verify /hello exists in VFS by trying to open and read it
     if let Ok(hello_id) = crate::fs::vfs_open("/hello", 0, 0) {

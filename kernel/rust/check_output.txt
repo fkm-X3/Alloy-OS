@@ -1,0 +1,273 @@
+    Checking alloy-kernel-rust v0.1.0 (C:\Users\Fkm\Documents\GitHub\Alloy OS\kernel\rust)
+error[E0554]: `#![feature]` may not be used on the stable release channel
+ --> src\lib.rs:2:1
+  |
+2 | #![feature(alloc_error_handler)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::ffi`
+ --> src\slab.rs:7:5
+  |
+7 | use crate::ffi;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `VnodeType` and `Vnode`
+ --> src\fs\tmpfs.rs:3:24
+  |
+3 | use crate::fs::vnode::{Vnode, VnodeType};
+  |                        ^^^^^  ^^^^^^^^^
+
+warning: unnecessary trailing semicolon
+  --> src\elf\mod.rs:57:66
+   |
+57 |     struct LoadSeg { p_offset: u32, p_vaddr: u32, p_filesz: u32 };
+   |                                                                  ^ help: remove this semicolon
+   |
+   = note: `#[warn(redundant_semicolons)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::fusion::terminal::TerminalSurface`
+ --> src\fusion\framebuffer.rs:6:5
+  |
+6 | use crate::fusion::terminal::TerminalSurface;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+ --> src\fusion\wayland\compositor_integration.rs:7:5
+  |
+7 | use alloc::vec::Vec;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `button_codes`
+  --> src\fusion\wayland\input_routing.rs:11:60
+   |
+11 | use super::seat::{SeatManager, ButtonState, ModifierState, button_codes};
+   |                                                            ^^^^^^^^^^^^
+
+warning: formatting may not be suitable for sub-register argument
+   --> src\sync.rs:120:22
+    |
+120 |                 "pop {0}",
+    |                      ^^^
+121 |                 out(reg) flags
+    |                          ----- for this argument
+    |
+    = help: use `{0:e}` to have the register formatted as `eax` (for 32-bit values)
+    = help: or use `{0:r}` to keep the default formatting of `rax` (for 64-bit values)
+    = note: `#[warn(asm_sub_register)]` on by default
+
+warning: formatting may not be suitable for sub-register argument
+  --> src\panic.rs:52:18
+   |
+52 |             "mov {0}, esp",
+   |                  ^^^
+53 |             "mov {1}, ebp",
+54 |             out(reg) esp,
+   |                      --- for this argument
+   |
+   = help: use `{0:e}` to have the register formatted as `eax` (for 32-bit values)
+   = help: or use `{0:r}` to keep the default formatting of `rax` (for 64-bit values)
+
+warning: formatting may not be suitable for sub-register argument
+  --> src\panic.rs:53:18
+   |
+53 |             "mov {1}, ebp",
+   |                  ^^^
+54 |             out(reg) esp,
+55 |             out(reg) ebp,
+   |                      --- for this argument
+   |
+   = help: use `{1:e}` to have the register formatted as `eax` (for 32-bit values)
+   = help: or use `{1:r}` to keep the default formatting of `rax` (for 64-bit values)
+
+warning: formatting may not be suitable for sub-register argument
+  --> src\panic.rs:61:18
+   |
+61 |             "pop {0}",
+   |                  ^^^
+62 |             out(reg) eflags,
+   |                      ------ for this argument
+   |
+   = help: use `{0:e}` to have the register formatted as `eax` (for 32-bit values)
+   = help: or use `{0:r}` to keep the default formatting of `rax` (for 64-bit values)
+
+error: cannot use register `bx`: rbx is used internally by LLVM and cannot be used as an operand for inline asm
+   --> src\syscall\mod.rs:463:13
+    |
+463 |             in("ebx") arg0,
+    |             ^^^^^^^^^^^^^^
+
+warning: unused variable: `slab_alloc`
+  --> src\allocator.rs:93:11
+   |
+93 |     let ((slab_alloc, slab_free), (heap_alloc, heap_free)) = get_stats();
+   |           ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_slab_alloc`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `slab_free`
+  --> src\allocator.rs:93:23
+   |
+93 |     let ((slab_alloc, slab_free), (heap_alloc, heap_free)) = get_stats();
+   |                       ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_slab_free`
+
+warning: unused variable: `heap_alloc`
+  --> src\allocator.rs:93:36
+   |
+93 |     let ((slab_alloc, slab_free), (heap_alloc, heap_free)) = get_stats();
+   |                                    ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_heap_alloc`
+
+warning: unused variable: `heap_free`
+  --> src\allocator.rs:93:48
+   |
+93 |     let ((slab_alloc, slab_free), (heap_alloc, heap_free)) = get_stats();
+   |                                                ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_heap_free`
+
+warning: unused variable: `location`
+  --> src\panic.rs:75:21
+   |
+75 |         if let Some(location) = info.location() {
+   |                     ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_location`
+
+warning: unused variable: `save_x`
+  --> src\terminal\mod.rs:73:17
+   |
+73 |             let save_x = ffi::vga_get_cursor_x();
+   |                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_save_x`
+
+warning: unused variable: `i`
+  --> src\terminal\mod.rs:80:18
+   |
+80 |             for (i, ch) in line[cursor_pos..].chars().enumerate() {
+   |                  ^ help: if this is intentional, prefix it with an underscore: `_i`
+
+warning: unused variable: `current_x`
+  --> src\terminal\mod.rs:85:17
+   |
+85 |             let current_x = ffi::vga_get_cursor_x();
+   |                 ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_current_x`
+
+warning: unused variable: `final_x`
+  --> src\terminal\mod.rs:91:17
+   |
+91 |             let final_x = start_x + (self.buffer.len() - cursor_pos) as u8;
+   |                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_final_x`
+
+warning: variable does not need to be mutable
+  --> src\process\scheduler.rs:92:17
+   |
+92 |             let mut old_box_opt = old_opt; // may be None for first run
+   |                 ----^^^^^^^^^^^
+   |                 |
+   |                 help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `addr`
+   --> src\process\scheduler.rs:167:46
+    |
+167 |     pub extern "C" fn rust_handle_page_fault(addr: u32, err: u32) {
+    |                                              ^^^^ help: if this is intentional, prefix it with an underscore: `_addr`
+
+warning: unused variable: `err`
+   --> src\process\scheduler.rs:167:57
+    |
+167 |     pub extern "C" fn rust_handle_page_fault(addr: u32, err: u32) {
+    |                                                         ^^^ help: if this is intentional, prefix it with an underscore: `_err`
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:11:45
+   |
+11 |         Some(table::SyscallNumber::Exit) => unsafe { crate::syscall::rust_sys_exit(ebx) },
+   |                                             ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:12:46
+   |
+12 |         Some(table::SyscallNumber::Yield) => unsafe { crate::syscall::rust_sys_yield() },
+   |                                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:13:47
+   |
+13 |         Some(table::SyscallNumber::GetPid) => unsafe { crate::syscall::rust_sys_getpid() },
+   |                                               ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:14:46
+   |
+14 |         Some(table::SyscallNumber::Sleep) => unsafe { crate::syscall::rust_sys_sleep(ebx) },
+   |                                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:15:45
+   |
+15 |         Some(table::SyscallNumber::Open) => unsafe { crate::syscall::rust_sys_open(ebx, ecx, edx) },
+   |                                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:16:45
+   |
+16 |         Some(table::SyscallNumber::Read) => unsafe { crate::syscall::rust_sys_read(ebx, ecx, edx) },
+   |                                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:17:46
+   |
+17 |         Some(table::SyscallNumber::Write) => unsafe { crate::syscall::rust_sys_write(ebx, ecx, edx) },
+   |                                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:18:46
+   |
+18 |         Some(table::SyscallNumber::Close) => unsafe { crate::syscall::rust_sys_close(ebx) },
+   |                                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:19:44
+   |
+19 |         Some(table::SyscallNumber::Dup) => unsafe { crate::syscall::rust_sys_dup(ebx) },
+   |                                            ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:20:46
+   |
+20 |         Some(table::SyscallNumber::Lseek) => unsafe { crate::syscall::rust_sys_lseek(ebx, ecx, edx) },
+   |                                              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:21:45
+   |
+21 |         Some(table::SyscallNumber::Pipe) => unsafe { crate::syscall::rust_sys_pipe(ebx) },
+   |                                             ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> src\syscall\dispatcher.rs:22:47
+   |
+22 |         Some(table::SyscallNumber::Execve) => unsafe { crate::syscall::rust_sys_execve(ebx) },
+   |                                               ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `auxv_entries`
+   --> src\syscall\mod.rs:335:17
+    |
+335 |             let auxv_entries = 6; // we'll create up to 6 u32 pairs (but only use some); compute realistically below
+    |                 ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_auxv_entries`
+
+warning: unused variable: `auxv_size`
+   --> src\syscall\mod.rs:336:17
+    |
+336 |             let auxv_size = 6 * 8; // allocate room for up to 6 pairs (48 bytes)
+    |                 ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_auxv_size`
+
+warning: unused variable: `bytes_per_pixel`
+  --> src\fusion\wayland\shm.rs:84:13
+   |
+84 |         let bytes_per_pixel = self.format.bytes_per_pixel() as u32;
+   |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bytes_per_pixel`
+
+For more information about this error, try `rustc --explain E0554`.
+warning: `alloy-kernel-rust` (lib) generated 37 warnings
+error: could not compile `alloy-kernel-rust` (lib) due to 2 previous errors; 37 warnings emitted

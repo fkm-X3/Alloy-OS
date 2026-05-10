@@ -1,5 +1,6 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
+use alloc::string::String;
 use core::fmt;
 
 use crate::protocol::{
@@ -135,6 +136,8 @@ pub struct DisplayServer<B: DisplayBackend> {
     state: ServerState,
     next_surface_id: u32,
     surfaces: BTreeMap<SurfaceId, SurfaceEntry>,
+    // Per-client capability flags (bitmask) for compositor integrations
+    client_capabilities: BTreeMap<ClientId, u32>,
     focused_surface: Option<SurfaceId>,
     events: VecDeque<DisplayEvent>,
     frame_interval_ms: u32,
@@ -151,6 +154,7 @@ impl<B: DisplayBackend> DisplayServer<B> {
             state: ServerState::Stopped,
             next_surface_id: 1,
             surfaces: BTreeMap::new(),
+            client_capabilities: BTreeMap::new(),
             focused_surface: None,
             events: VecDeque::new(),
             frame_interval_ms: DEFAULT_FRAME_INTERVAL_MS,
@@ -358,6 +362,16 @@ impl<B: DisplayBackend> DisplayServer<B> {
                     self.emit_event(DisplayEvent::FocusChanged { surface_id });
                 }
                 Ok(DisplayResponse::Ack)
+            }
+            DisplayRequest::SetClientCapabilities { capabilities } => {
+                // Store per-client capability flags for later use by compositor integrations
+                self.client_capabilities.insert(client_id, capabilities);
+                Ok(DisplayResponse::CapabilitiesAck { capabilities })
+            }
+            DisplayRequest::AnnounceCompositor { name, version_major: _, version_minor: _ } => {
+                // For now simply acknowledge the compositor announcement. Higher-level
+                // integration will use the capability flags set by the client.
+                Ok(DisplayResponse::CompositorAnnounced { name })
             }
             DisplayRequest::SetFrameIntervalMs { interval_ms } => {
                 self.frame_interval_ms = interval_ms;

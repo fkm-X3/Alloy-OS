@@ -1,5 +1,5 @@
 [package]
-name = "alloy-os-display"
+name = "alloy-os-cosmos-de"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,3 +11,4 @@ default = []
 host = []
 
 [dependencies]
+alloy-os-display = { path = "../display" }

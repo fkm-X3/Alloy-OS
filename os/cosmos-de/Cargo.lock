@@ -3,14 +3,6 @@
 version = 4
 
 [[package]]
-name = "alloy-kernel-rust"
-version = "0.1.0"
-dependencies = [
- "alloy-os-cosmos-de",
- "alloy-os-display",
-]
-
-[[package]]
 name = "alloy-os-cosmos-de"
 version = "0.1.0"
 dependencies = [

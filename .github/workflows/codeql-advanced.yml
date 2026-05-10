@@ -69,7 +69,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.local/i686-elf
-          key: i686-elf-gcc-${{ runner.os }}-codeql-v1
+          key: i686-elf-gcc-${{ runner.os }}-v1
 
       - name: Build cross-compiler
         if: matrix.language == 'cpp' && steps.cache-cross-compiler.outputs.cache-hit != 'true'

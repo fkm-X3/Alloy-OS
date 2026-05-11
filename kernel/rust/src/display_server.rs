@@ -32,8 +32,8 @@ const ICED_WINDOW_Z_ORDER: u32 = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootUiMode {
+    Cosmos,
     IcedPrimary,
-    DesktopShell,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +76,7 @@ impl DisplayServerBootError {
                 b"[DisplayServer][DS-005] Window manager operation failed\n\0"
             }
             DisplayServerBootError::Shell => {
-                b"[DisplayServer][DS-006] Desktop shell operation failed\n\0"
+                b"[DisplayServer][DS-006] Cosmos shell operation failed\n\0"
             }
         }
     }
@@ -99,7 +99,7 @@ impl DisplayServerBootError {
                 b"[DisplayServer][DS-005] Window manager failure\n\0"
             }
             DisplayServerBootError::Shell => {
-                b"[DisplayServer][DS-006] Desktop shell failure\n\0"
+                b"[DisplayServer][DS-006] Cosmos shell failure\n\0"
             }
         }
     }
@@ -896,8 +896,8 @@ fn spawn_iced_runtime<B: DisplayBackend>(
 
 pub fn run(display: VesaDisplay, mode: BootUiMode) -> Result<(), DisplayServerBootError> {
     match mode {
+        BootUiMode::Cosmos => run_cosmos(display),
         BootUiMode::IcedPrimary => run_iced_primary(display),
-        BootUiMode::DesktopShell => run_desktop_shell(display),
     }
 }
 
@@ -1121,8 +1121,8 @@ fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> 
     Ok(())
 }
 
-fn run_desktop_shell(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
-    serial_log(b"[DisplayServer] Bootstrapping desktop shell fallback runtime\n\0");
+fn run_cosmos(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
+    serial_log(b"[DisplayServer] Bootstrapping Cosmos DE runtime\n\0");
     let (display_width, display_height) = display.get_resolution();
 
     let backend = FusionDisplayBackend::new(display);
@@ -1185,7 +1185,7 @@ fn run_desktop_shell(display: VesaDisplay) -> Result<(), DisplayServerBootError>
     }
     serial_log(b"[DisplayServer] First frame presented\n\0");
     serial_log(
-        b"[DisplayServer] Desktop shell ready - launcher starts open, Arrow/Tab selects tile, Enter/Space activates tile, ` toggles control mode, 1-5 quick-launch toolbox apps\n\0",
+        b"[DisplayServer] Cosmos DE ready - launcher starts open, Arrow/Tab selects tile, Enter/Space activates tile, ` toggles control mode, 1-5 quick-launch toolbox apps\n\0",
     );
 
     loop {
@@ -1333,6 +1333,7 @@ fn run_desktop_shell(display: VesaDisplay) -> Result<(), DisplayServerBootError>
 
                 if is_pressed {
                     if let Some(app) = shell.launcher_app_at_point(pointer.x, pointer.y) {
+                        shell.set_launcher_visible(false);
                         activate_shell_app(
                             app,
                             &mut shell,

@@ -167,7 +167,7 @@ def run_smoke(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Boot QEMU headless, run scripted mouse interactions through QMP, "
+            "Boot QEMU headless, wait for the first Cosmos frame marker, run scripted mouse interactions through QMP, "
             "and optionally capture a screenshot."
         )
     )
@@ -194,7 +194,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--marker",
         default="[DisplayServer] First frame presented",
-        help="Serial marker to wait for before running mouse scenario",
+        help="Serial marker to wait for before running mouse scenario (default is DisplayServer first-frame)",
     )
     parser.add_argument(
         "--settle-seconds",

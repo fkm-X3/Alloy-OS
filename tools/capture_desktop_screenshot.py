@@ -230,7 +230,7 @@ def run_capture(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Boot QEMU, wait for first displayed desktop frame marker, "
+            "Boot QEMU, wait for the first presented Cosmos desktop frame marker, "
             "then capture screenshot to PNG."
         )
     )
@@ -258,7 +258,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--marker",
         default="[DisplayServer] First frame presented",
-        help="Serial log marker to wait for before capture",
+        help="Serial log marker to wait for before capture (default is DisplayServer first-frame)",
     )
     parser.add_argument(
         "--settle-seconds",

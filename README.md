@@ -6,17 +6,17 @@
 </div>
 
 <p align="center">
-  <em>Kernel boot, Fusion display, Wayland support, and the first desktop shell all live in this repo.</em>
+  <em>Kernel boot, Fusion display, Wayland support, and the Cosmos-default desktop runtime all live in this repo.</em>
 </p>
 
 <h2>Current state</h2>
 
 <p>
-Alloy OS boots the Rust display server in <code>BootUiMode::IcedPrimary</code>. Fusion is used as the compositor/backend layer, and the desktop-shell fallback path is intentionally disabled at boot.
+Alloy OS boots the Rust display server in <code>BootUiMode::Cosmos</code> by default. Fusion is the compositor/backend layer, and <code>BootUiMode::IcedPrimary</code> remains available for non-default runtime testing.
 </p>
 
 <p>
-Cosmos DE is now being introduced as a local path dependency under <code>os/cosmos-de</code>. That crate builds on the shared <code>alloy-os-display</code> library and the Wayland surface already present in Fusion.
+Cosmos DE lives under <code>os/cosmos-de</code> as a local path dependency. It builds on the shared <code>alloy-os-display</code> library and Fusion Wayland support.
 </p>
 
 <h2>Build and run</h2>
@@ -40,7 +40,7 @@ make clean</code></pre>
     <li><code>make lazy</code> does a clean rebuild and then produces the ISO.</li>
     <li><code>make run</code> boots QEMU with a visible display.</li>
     <li><code>make output</code> boots headless and prints serial output only.</li>
-    <li><code>make screenshot</code> boots headless and captures the first desktop frame.</li>
+    <li><code>make screenshot</code> boots headless and captures the first Cosmos desktop frame.</li>
     <li><code>make mouse-smoke</code> runs scripted mouse interactions against the boot image.</li>
     <li><code>make mouse-screenshot</code> runs the mouse flow and saves a proof screenshot.</li>
     <li><code>make clean</code> removes build outputs.</li>
@@ -57,7 +57,7 @@ make clean</code></pre>
   <li>The kernel enters Rust through <code>kernel/rust/src/lib.rs::rust_main()</code>.</li>
   <li>VFS is initialized early.</li>
   <li>The display server boots from <code>kernel/rust/src/display_server.rs</code>.</li>
-  <li>Fusion composites Iced-fed surfaces without falling back to the desktop shell.</li>
+  <li>Fusion composites Cosmos DE shell surfaces by default; Iced-primary remains available as a non-default mode.</li>
   <li>Wayland support lives under <code>kernel/rust/src/fusion/wayland</code>.</li>
 </ul>
 
@@ -121,6 +121,6 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
 
 <ul>
   <li>The display-server + window-manager path is still gated behind the existing boot flow.</li>
-  <li>Cosmos DE is present as a dependency boundary, but the actual desktop environment work is still incremental.</li>
+  <li>Cosmos is the default runtime path, while desktop-environment work under <code>os/cosmos-de</code> remains incremental.</li>
   <li>The repo currently builds around the kernel + shared display library split instead of a Cargo workspace root.</li>
 </ul>

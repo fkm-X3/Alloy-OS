@@ -27,7 +27,38 @@ pub mod display_server;
 
 use core::panic::PanicInfo;
 
-const PRIMARY_BOOT_UI_MODE: display_server::BootUiMode = display_server::BootUiMode::IcedPrimary;
+fn mode_from_cosmos_runtime(runtime: alloy_os_cosmos_de::CosmosRuntime) -> display_server::BootUiMode {
+    match runtime {
+        alloy_os_cosmos_de::CosmosRuntime::Cosmos => display_server::BootUiMode::Cosmos,
+        alloy_os_cosmos_de::CosmosRuntime::IcedPrimary => display_server::BootUiMode::IcedPrimary,
+    }
+}
+
+fn log_selected_boot_mode(mode: display_server::BootUiMode) {
+    unsafe {
+        match mode {
+            display_server::BootUiMode::Cosmos => {
+                ffi::serial_print(b"[Rust] Boot mode selected: Cosmos\n\0".as_ptr())
+            }
+            display_server::BootUiMode::IcedPrimary => {
+                ffi::serial_print(b"[Rust] Boot mode selected: Iced-primary\n\0".as_ptr())
+            }
+        }
+    }
+}
+
+fn log_fallback_boot_mode(mode: display_server::BootUiMode) {
+    unsafe {
+        match mode {
+            display_server::BootUiMode::Cosmos => {
+                ffi::serial_print(b"[Rust] Retrying display server with Cosmos mode\n\0".as_ptr())
+            }
+            display_server::BootUiMode::IcedPrimary => {
+                ffi::serial_print(b"[Rust] Retrying display server with Iced-primary mode\n\0".as_ptr())
+            }
+        }
+    }
+}
 
 fn log_display_server_error(err: display_server::DisplayServerBootError) {
     unsafe {
@@ -56,42 +87,18 @@ pub extern "C" fn rust_main() {
     crate::fs::vfs_init();
     unsafe { ffi::serial_print(b"[VFS] initialized\n\0".as_ptr()); }
 
-    alloy_os_cosmos_de::bootstrap();
-    
-    // Quick test: verify /hello exists in VFS by trying to open and read it
-    if let Ok(hello_id) = crate::fs::vfs_open("/hello", 0, 0) {
-        if let Some(hello_data) = crate::fs::vfs_read_all(hello_id) {
-            unsafe {
-                ffi::serial_print(b"[Test] SUCCESS: /hello found in VFS, size=\0".as_ptr());
-                ffi::serial_print(b"\0".as_ptr());
-                // Print size via serial (easier than VGA in headless mode)
-                let sz = hello_data.len();
-                let sz_str = alloc::format!("{}", sz);
-                let sz_bytes = sz_str.as_bytes();
-                for &b in sz_bytes {
-                    ffi::vga_putchar(b);
-                }
-                ffi::serial_print(b" bytes\n\0".as_ptr());
-            }
-        }
-    }
-    
-    // TEST: Execute /hello to verify userland execution works
+    let cosmos_bootstrap = alloy_os_cosmos_de::bootstrap();
     unsafe {
-        ffi::serial_print(b"[Rust] TESTING: Executing /hello via execve...\n\0".as_ptr());
+        ffi::serial_print(cosmos_bootstrap.summary_serial_line().as_ptr());
     }
-    let hello_path = "/hello";
-    let path_bytes = hello_path.as_bytes();
-    let mut path_buf = [0u8; 256];
-    path_buf[..path_bytes.len()].copy_from_slice(path_bytes);
-    let path_ptr = &path_buf as *const _ as u32;
-    let exec_result = crate::syscall::rust_sys_execve(path_ptr);
+    let primary_boot_ui_mode = mode_from_cosmos_runtime(cosmos_bootstrap.profile.primary_runtime);
+    let fallback_boot_ui_mode = mode_from_cosmos_runtime(cosmos_bootstrap.profile.fallback_runtime);
+    log_selected_boot_mode(primary_boot_ui_mode);
+    
     unsafe {
-        if exec_result != core::u32::MAX {
-            ffi::serial_print(b"[Rust] EXECVE TEST COMPLETE\n\0".as_ptr());
-        } else {
-            ffi::serial_print(b"[Rust] EXECVE TEST FAILED\n\0".as_ptr());
-        }
+        ffi::serial_print(
+            b"[Rust] Skipping preboot /hello smoke checks before display server startup\n\0".as_ptr(),
+        );
     }
     
     // Initialize and run the desktop display server
@@ -100,7 +107,7 @@ pub extern "C" fn rust_main() {
             ffi::serial_print(b"[Rust] VESA display initialized, booting display server\n\0".as_ptr());
         }
         
-        match display_server::run(display, PRIMARY_BOOT_UI_MODE) {
+        match display_server::run(display, primary_boot_ui_mode) {
             Ok(()) => {
                 unsafe {
                     ffi::serial_print(b"[Rust] Display server exited normally\n\0".as_ptr());
@@ -108,11 +115,36 @@ pub extern "C" fn rust_main() {
             }
             Err(err) => {
                 log_display_server_error(err);
-                unsafe {
-                    ffi::serial_print(
-                        b"[Rust] Iced-primary boot failed; desktop-shell fallback is disabled\n\0"
-                            .as_ptr(),
-                    );
+                if fallback_boot_ui_mode != primary_boot_ui_mode {
+                    log_fallback_boot_mode(fallback_boot_ui_mode);
+                    if let Some(fallback_display) = graphics::vesa::VesaDisplay::new() {
+                        match display_server::run(fallback_display, fallback_boot_ui_mode) {
+                            Ok(()) => unsafe {
+                                ffi::serial_print(b"[Rust] Display server fallback exited normally\n\0".as_ptr())
+                            },
+                            Err(fallback_err) => {
+                                log_display_server_error(fallback_err);
+                                unsafe {
+                                    ffi::serial_print(
+                                        b"[Rust] Cosmos DE boot and fallback mode both failed\n\0".as_ptr(),
+                                    );
+                                }
+                            }
+                        }
+                    } else {
+                        unsafe {
+                            ffi::serial_print(
+                                b"[Rust] Failed to initialize VESA display for fallback mode\n\0".as_ptr(),
+                            );
+                        }
+                    }
+                } else {
+                    unsafe {
+                        ffi::serial_print(
+                            b"[Rust] Cosmos DE boot failed and integration surface did not provide a fallback mode\n\0"
+                                .as_ptr(),
+                        );
+                    }
                 }
             }
         }

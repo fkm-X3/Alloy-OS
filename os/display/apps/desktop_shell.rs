@@ -1228,6 +1228,34 @@ mod tests {
     }
 
     #[test]
+    fn bootstrap_keeps_panel_and_launcher_visible() {
+        let mut server = DisplayServer::new(MockBackend::default());
+        server.start().expect("server should start");
+
+        let shell = DesktopShell::bootstrap(&mut server, 640, 480)
+            .expect("shell bootstrap should succeed");
+        assert!(shell.launcher_visible(), "launcher should start visible");
+
+        let backend = server.backend_mut();
+        let panel = backend
+            .surfaces
+            .get(&shell.panel_surface)
+            .expect("panel surface should exist");
+        assert!(panel.visible, "panel should be visible at boot");
+        assert_eq!(
+            panel.y,
+            480i32.saturating_sub(PANEL_HEIGHT as i32),
+            "panel should be positioned at the bottom"
+        );
+
+        let launcher = backend
+            .surfaces
+            .get(&shell.launcher_surface)
+            .expect("launcher surface should exist");
+        assert!(launcher.visible, "launcher should be visible at boot");
+    }
+
+    #[test]
     fn sync_tracks_window_state_changes() {
         let mut server = DisplayServer::new(MockBackend::default());
         server.start().expect("server should start");

@@ -33,10 +33,13 @@ docker compose run --rm alloy make screenshot
 docker compose run --rm alloy make mouse-smoke
 docker compose run --rm alloy make mouse-screenshot</code></pre>
 
+<p>The repo is bind-mounted into <code>/workspace</code>, so edits on the host are visible inside the container immediately.</p>
+
 <p>Or run it directly:</p>
 
 <pre><code>docker build -t alloy-os-dev .
-docker run --rm -it -v "$PWD:/workspace" -w /workspace alloy-os-dev make output</code></pre>
+docker run --rm -it -v "$PWD:/workspace" -w /workspace alloy-os-dev make output
+make docker-run</code></pre>
 
 <p><code>make run</code> opens a GUI QEMU window and may need display forwarding in Docker. The headless targets (<code>make output</code>, <code>make screenshot</code>, <code>make mouse-smoke</code>, <code>make mouse-screenshot</code>) work well in containers.</p>
 

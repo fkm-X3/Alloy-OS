@@ -11,35 +11,33 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-    
-    - name: Install basic tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nasm cppcheck
-    
-    - name: Check assembly syntax
-      run: |
-        echo "Checking assembly files..."
-        for asm_file in $(find . -name "*.asm"); do
-          echo "Checking $asm_file"
-          nasm -f elf32 -o /dev/null "$asm_file" || exit 1
-        done
-        echo "All assembly files are valid!"
-    
-    - name: Install Rust nightly
-      uses: dtolnay/rust-toolchain@nightly
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v5
       with:
-        components: rust-src, clippy
-    
-    - name: Rust format check
-      run: |
-        cd kernel/rust
-        cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
-    
-    - name: Rust clippy
-      run: |
-        cd kernel/rust
-        cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          kernel/rust/target/
+        key: rust-${{ runner.os }}-quick-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+        restore-keys: |
+          rust-${{ runner.os }}-quick-
+
+    - name: Syntax checks in Docker
+      uses: ./.github/actions/docker-ci
+      with:
+        command: |
+          echo "Checking assembly files..."
+          for asm_file in $(find . -name "*.asm"); do
+            echo "Checking $asm_file"
+            nasm -f elf32 -o /dev/null "$asm_file"
+          done
+          echo "All assembly files are valid!"
+
+          cd kernel/rust
+          cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
+          cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
     
     - name: Check for common issues
       run: |

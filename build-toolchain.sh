@@ -7,13 +7,20 @@ set -e
 export PREFIX="$HOME/.local/i686-elf"
 export TARGET=i686-elf
 export PATH="$PREFIX/bin:$PATH"
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
 
 BINUTILS_VERSION=2.40
 GCC_VERSION=13.2.0
 
-echo "Installing dependencies..."
-sudo apt-get update
-sudo apt-get install -y build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo wget
+if [ -z "${SKIP_TOOLCHAIN_DEPS:-}" ]; then
+    echo "Installing dependencies..."
+    $SUDO apt-get update
+    $SUDO apt-get install -y build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo wget
+fi
 
 echo "Creating build directory..."
 mkdir -p ~/toolchain-build

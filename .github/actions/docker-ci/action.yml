@@ -1,0 +1,46 @@
+name: Alloy OS Docker CI
+description: Build the Alloy OS Docker image and run a command inside it.
+
+inputs:
+  command:
+    description: Command to run inside the container
+    required: true
+  image-tag:
+    description: Docker image tag
+    required: false
+    default: alloy-os-ci
+
+runs:
+  using: composite
+  steps:
+    - name: Cache cross-compiler
+      uses: actions/cache@v5
+      with:
+        path: ~/.local/i686-elf
+        key: i686-elf-gcc-${{ runner.os }}-v1
+
+    - name: Build image and run command
+      shell: bash
+      env:
+        DOCKER_COMMAND: ${{ inputs.command }}
+      run: |
+        set -euo pipefail
+
+        cd "$GITHUB_WORKSPACE"
+        mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$HOME/.local/i686-elf"
+
+        docker build --pull -t "${{ inputs.image-tag }}" -f Dockerfile .
+
+        docker run --rm \
+          -e HOME=/root \
+          -e CARGO_HOME=/root/.cargo \
+          -e RUSTUP_HOME=/root/.rustup \
+          -e DOCKER_COMMAND \
+          -e SKIP_TOOLCHAIN_DEPS=1 \
+          -v "$GITHUB_WORKSPACE:/workspace" \
+          -v "$HOME/.local/i686-elf:/root/.local/i686-elf" \
+          -v "$HOME/.cargo/registry:/root/.cargo/registry" \
+          -v "$HOME/.cargo/git:/root/.cargo/git" \
+          -w /workspace \
+          "${{ inputs.image-tag }}" \
+          bash -lc 'set -euo pipefail; if [ ! -x /root/.local/i686-elf/bin/i686-elf-gcc ]; then SKIP_TOOLCHAIN_DEPS=1 bash /workspace/build-toolchain.sh; fi; eval "$DOCKER_COMMAND"'

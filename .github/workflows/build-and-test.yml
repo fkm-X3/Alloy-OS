@@ -17,51 +17,11 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          nasm \
-          grub-pc-bin \
-          grub-common \
-          xorriso \
-          qemu-system-x86 \
-          mtools \
-          wget \
-          tar \
-          bison \
-          flex \
-          libgmp3-dev \
-          libmpc-dev \
-          libmpfr-dev \
-          texinfo
-    
-    - name: Cache cross-compiler
-      id: cache-cross-compiler
-      uses: actions/cache@v5
-      with:
-        path: ~/.local/i686-elf
-        key: i686-elf-gcc-${{ runner.os }}-v1
-    
-    - name: Build cross-compiler
-      if: steps.cache-cross-compiler.outputs.cache-hit != 'true'
-      run: |
-        echo "Building i686-elf cross-compiler..."
-        chmod +x build-toolchain.sh
-        ./build-toolchain.sh
-    
-    - name: Install Rust nightly
-      uses: dtolnay/rust-toolchain@nightly
-      with:
-        components: rust-src
-    
+
     - name: Cache Rust dependencies
       uses: actions/cache@v5
       with:
         path: |
-          ~/.cargo/bin/
           ~/.cargo/registry/index/
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
@@ -69,28 +29,32 @@ jobs:
         key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
         restore-keys: |
           rust-${{ runner.os }}-
-    
-    - name: Verify toolchain installation
+
+    - name: Build and test in Docker
+      uses: ./.github/actions/docker-ci
+      with:
+        command: |
+          make clean
+          make
+          make iso
+
+          echo "Testing kernel boot..."
+          timeout 30s qemu-system-i386 \
+            -cdrom build/alloy.iso \
+            -serial file:serial.log \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            -D qemu.log || true
+
+    - name: Show boot logs
+      if: always()
       run: |
-        echo "Checking cross-compiler..."
-        ls -la ~/.local/i686-elf/bin/ || echo "Cross-compiler not found"
-        ~/.local/i686-elf/bin/i686-elf-gcc --version || echo "GCC not working"
-        
-        echo "Checking NASM..."
-        nasm --version
-        
-        echo "Checking Rust..."
-        rustc --version
-        cargo --version
-    
-    - name: Clean build
-      run: make clean
-    
-    - name: Build kernel
-      run: make
-    
-    - name: Build ISO
-      run: make iso
+        echo "=== QEMU Log ==="
+        cat qemu.log || echo "No QEMU log found"
+
+        echo "=== Serial Log ==="
+        cat serial.log || echo "No serial log found"
     
     - name: Verify build artifacts
       run: |
@@ -110,26 +74,6 @@ jobs:
         echo "Build artifacts verified!"
         file build/alloy.elf
         file build/alloy.iso
-    
-    - name: Test boot in QEMU
-      timeout-minutes: 2
-      run: |
-        echo "Testing kernel boot..."
-        
-        # Run QEMU with timeout and capture output
-        timeout 30s qemu-system-i386 \
-          -cdrom build/alloy.iso \
-          -serial file:serial.log \
-          -display none \
-          -no-reboot \
-          -no-shutdown \
-          -D qemu.log || true
-        
-        echo "=== QEMU Log ==="
-        cat qemu.log || echo "No QEMU log found"
-        
-        echo "=== Serial Log ==="
-        cat serial.log || echo "No serial log found"
     
     - name: Verify boot success
       run: |

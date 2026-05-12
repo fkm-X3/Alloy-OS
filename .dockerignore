@@ -1,0 +1,17 @@
+.git
+.github
+build
+target
+**/target
+**/build
+**/*.log
+**/*.iso
+**/*.elf
+**/*.a
+**/*.o
+**/*.obj
+**/*.d
+**/*.tmp
+**/.cache
+**/node_modules
+qemu.log

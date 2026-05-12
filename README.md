@@ -21,7 +21,24 @@ Cosmos DE lives under <code>os/cosmos-de</code> as a local path dependency. It b
 
 <h2>Build and run</h2>
 
-<p>The repo expects the Linux toolchain the Makefile already targets.</p>
+<p>The repo works natively on Linux, but Docker is the recommended path for a reproducible setup that matches CI.</p>
+
+<h3>Docker workflow</h3>
+
+<p>Docker is the easiest reproducible path and keeps local builds close to CI.</p>
+
+<pre><code>docker compose build
+docker compose run --rm alloy make output
+docker compose run --rm alloy make screenshot
+docker compose run --rm alloy make mouse-smoke
+docker compose run --rm alloy make mouse-screenshot</code></pre>
+
+<p>Or run it directly:</p>
+
+<pre><code>docker build -t alloy-os-dev .
+docker run --rm -it -v "$PWD:/workspace" -w /workspace alloy-os-dev make output</code></pre>
+
+<p><code>make run</code> opens a GUI QEMU window and may need display forwarding in Docker. The headless targets (<code>make output</code>, <code>make screenshot</code>, <code>make mouse-smoke</code>, <code>make mouse-screenshot</code>) work well in containers.</p>
 
 <pre><code>make iso
 make lazy

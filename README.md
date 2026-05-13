@@ -67,7 +67,7 @@ make clean</code></pre>
   </ul>
 </details>
 
-<h2>What you see at boot</h2>
+<h2>What you see at boot (currently screenshot updater is broken)</h2>
 
 <p align="center">
   <img src="assets/desktop-shell-grid.png" alt="Alloy OS desktop shell screenshot" />

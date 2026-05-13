@@ -498,7 +498,11 @@ impl DesktopShell {
 
     fn status_from_window_state(state: WindowState) -> ShellWindowStatus {
         match state {
-            WindowState::Normal => ShellWindowStatus::Normal,
+            WindowState::Normal
+            | WindowState::Maximized
+            | WindowState::VerticalMaximized
+            | WindowState::HorizontalMaximized
+            | WindowState::Fullscreen => ShellWindowStatus::Normal,
             WindowState::Minimized => ShellWindowStatus::Minimized,
             WindowState::Hidden => ShellWindowStatus::Hidden,
         }

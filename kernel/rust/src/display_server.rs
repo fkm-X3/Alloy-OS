@@ -581,7 +581,11 @@ fn focus_or_restore_binding<B: DisplayBackend>(
     binding: ManagedWindowBinding,
 ) -> Result<(), DisplayServerBootError> {
     match wm.window_state(binding.window_id) {
-        Some(WindowState::Normal) => wm
+        Some(WindowState::Normal)
+        | Some(WindowState::Maximized)
+        | Some(WindowState::VerticalMaximized)
+        | Some(WindowState::HorizontalMaximized)
+        | Some(WindowState::Fullscreen) => wm
             .focus_window(server, binding.window_id)
             .map_err(|_| DisplayServerBootError::WindowManager),
         Some(WindowState::Minimized) | Some(WindowState::Hidden) => wm

@@ -82,6 +82,10 @@ pub enum WindowState {
     Normal,
     Minimized,
     Hidden,
+    Maximized,
+    VerticalMaximized,
+    HorizontalMaximized,
+    Fullscreen,
 }
 
 impl WindowOptions {
@@ -139,6 +143,11 @@ struct ManagedWindow {
     state: WindowState,
     z_order: u32,
     resizable: bool,
+    // Store previous geometry for window restoration from maximized/fullscreen states
+    previous_x: i32,
+    previous_y: i32,
+    previous_width: u32,
+    previous_height: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -248,6 +257,10 @@ impl WindowManager {
             },
             z_order,
             resizable: options.resizable,
+            previous_x: x,
+            previous_y: y,
+            previous_width: width,
+            previous_height: height,
         };
 
         self.windows.insert(window_id, window);
@@ -304,7 +317,7 @@ impl WindowManager {
             .get(&window_id)
             .copied()
             .ok_or(WindowManagerError::WindowNotFound)?;
-        if window.state != WindowState::Normal {
+        if !Self::is_focusable_state(window.state) {
             return Err(WindowManagerError::WindowNotFocusable);
         }
 
@@ -387,6 +400,7 @@ impl WindowManager {
             .get(&window_id)
             .copied()
             .ok_or(WindowManagerError::WindowNotFound)?;
+        // can't move maximized or fullscreen windows
         if window.state != WindowState::Normal {
             return Ok(());
         }
@@ -461,12 +475,74 @@ impl WindowManager {
             return Ok(());
         }
 
+        // Save current geometry if transitioning to a maximized state
+        if matches!(
+            state,
+            WindowState::Maximized
+                | WindowState::VerticalMaximized
+                | WindowState::HorizontalMaximized
+                | WindowState::Fullscreen
+        ) && window.state == WindowState::Normal
+        {
+            window.previous_x = window.x;
+            window.previous_y = window.y;
+            window.previous_width = window.width;
+            window.previous_height = window.height;
+        }
+
         window.state = state;
+
+        // Apply new geometry based on state
+        match state {
+            WindowState::Normal => {
+                // Restore previous geometry
+                window.x = window.previous_x;
+                window.y = window.previous_y;
+                window.width = window.previous_width;
+                window.height = window.previous_height;
+            }
+            WindowState::Maximized => {
+                if let Some(bounds) = self.workspace_bounds {
+                    window.x = 0;
+                    window.y = 0;
+                    window.width = bounds.width;
+                    window.height = bounds.height;
+                }
+            }
+            WindowState::VerticalMaximized => {
+                if let Some(bounds) = self.workspace_bounds {
+                    window.y = 0;
+                    window.height = bounds.height;
+                }
+            }
+            WindowState::HorizontalMaximized => {
+                if let Some(bounds) = self.workspace_bounds {
+                    window.x = 0;
+                    window.width = bounds.width;
+                }
+            }
+            WindowState::Fullscreen => {
+                if let Some(bounds) = self.workspace_bounds {
+                    window.x = 0;
+                    window.y = 0;
+                    window.width = bounds.width;
+                    window.height = bounds.height;
+                }
+            }
+            WindowState::Minimized | WindowState::Hidden => {
+                // No geometry changes needed for minimized/hidden
+            }
+        }
+
         self.windows.insert(window_id, window);
 
         if state == WindowState::Normal {
             self.focus_window(server, window_id)
         } else {
+            // Resize content and frame surfaces for geometry changes
+            if state != WindowState::Minimized && state != WindowState::Hidden {
+                Self::resize_window_surfaces(server, &window)?;
+            }
             Self::apply_window_geometry(server, &window)?;
             if self.focused_window == Some(window_id) {
                 self.assign_focus_after_mutation(server, window.owner)?;
@@ -504,6 +580,87 @@ impl WindowManager {
         window_id: WindowId,
     ) -> Result<(), WindowManagerError> {
         self.set_window_state(server, window_id, WindowState::Normal)
+    }
+
+    pub fn maximize_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        let window = self
+            .windows
+            .get(&window_id)
+            .copied()
+            .ok_or(WindowManagerError::WindowNotFound)?;
+        // Toggle maximize: if already maximized, restore; otherwise maximize
+        let new_state = if window.state == WindowState::Maximized {
+            WindowState::Normal
+        } else {
+            WindowState::Maximized
+        };
+        self.set_window_state(server, window_id, new_state)
+    }
+
+    pub fn maximize_vertical_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        let window = self
+            .windows
+            .get(&window_id)
+            .copied()
+            .ok_or(WindowManagerError::WindowNotFound)?;
+        let new_state = if window.state == WindowState::VerticalMaximized {
+            WindowState::Normal
+        } else {
+            WindowState::VerticalMaximized
+        };
+        self.set_window_state(server, window_id, new_state)
+    }
+
+    pub fn maximize_horizontal_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        let window = self
+            .windows
+            .get(&window_id)
+            .copied()
+            .ok_or(WindowManagerError::WindowNotFound)?;
+        let new_state = if window.state == WindowState::HorizontalMaximized {
+            WindowState::Normal
+        } else {
+            WindowState::HorizontalMaximized
+        };
+        self.set_window_state(server, window_id, new_state)
+    }
+
+    pub fn toggle_fullscreen_focused<B: DisplayBackend>(
+        &mut self,
+        server: &mut DisplayServer<B>,
+    ) -> Result<(), WindowManagerError> {
+        let Some(window_id) = self.focused_window else {
+            return Ok(());
+        };
+        let window = self
+            .windows
+            .get(&window_id)
+            .copied()
+            .ok_or(WindowManagerError::WindowNotFound)?;
+        let new_state = if window.state == WindowState::Fullscreen {
+            WindowState::Normal
+        } else {
+            WindowState::Fullscreen
+        };
+        self.set_window_state(server, window_id, new_state)
     }
 
     pub fn restore_next_window<B: DisplayBackend>(
@@ -616,6 +773,26 @@ impl WindowManager {
                     self.resize_focused_by(server, -RESIZE_STEP, -RESIZE_STEP)?;
                     Ok(InputOutcome::Consumed)
                 }
+                b'a' | b'A' => {
+                    // Maximize
+                    self.maximize_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'v' | b'V' => {
+                    // Vertical maximize
+                    self.maximize_vertical_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'w' | b'W' => {
+                    // Horizontal maximize
+                    self.maximize_horizontal_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
+                b'f' | b'F' => {
+                    // Fullscreen
+                    self.toggle_fullscreen_focused(server)?;
+                    Ok(InputOutcome::Consumed)
+                }
                 b'm' | b'M' => {
                     self.minimize_focused(server)?;
                     Ok(InputOutcome::Consumed)
@@ -709,11 +886,22 @@ impl WindowManager {
         let mut ordered: Vec<(u32, WindowId)> = self
             .windows
             .values()
-            .filter(|window| window.state == WindowState::Normal)
+            .filter(|window| Self::is_focusable_state(window.state))
             .map(|window| (window.z_order, window.id))
             .collect();
         ordered.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
         ordered.into_iter().map(|(_, id)| id).collect()
+    }
+
+    fn is_focusable_state(state: WindowState) -> bool {
+        matches!(
+            state,
+            WindowState::Normal
+                | WindowState::Maximized
+                | WindowState::VerticalMaximized
+                | WindowState::HorizontalMaximized
+                | WindowState::Fullscreen
+        )
     }
 
     fn rebalance_z_orders<B: DisplayBackend>(

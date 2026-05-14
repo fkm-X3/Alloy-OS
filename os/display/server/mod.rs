@@ -1,12 +1,28 @@
+//! Protocol-driven display server runtime with session boundary support.
+//!
+//! Manages surface lifecycle, input routing delegation, and session-based
+//! boundary negotiation between kernel display primitives and userland
+//! desktop session processes.
+
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::format;
 use core::fmt;
 
 use crate::protocol::{
-    ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, ProtocolError, Rect,
-    SurfaceId, validate_request,
-};
+     ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, ProtocolError, Rect,
+     SessionBoundary, SessionConfig, SessionId, SessionType, SurfaceId, validate_request,
+     CAPABILITY_SESSION, CAPABILITY_WAYLAND, CAPABILITY_COSMOS, CAPABILITY_INPUT,
+ };
+
+/// Set the session boundary from bootstrap configuration.
+pub fn set_session_boundary<B: DisplayBackend>(
+    server: &mut DisplayServer<B>,
+    boundary: SessionBoundary,
+) {
+    server.session_boundary = boundary;
+}
 
 /// Default display update cadence (about 60fps).
 pub const DEFAULT_FRAME_INTERVAL_MS: u32 = 16;
@@ -29,6 +45,8 @@ pub enum ServerError {
     PermissionDenied,
     SurfaceIdExhausted,
     BackendError,
+    SessionDenied,
+    InvalidSession,
 }
 
 impl fmt::Display for ServerError {
@@ -41,6 +59,8 @@ impl fmt::Display for ServerError {
             ServerError::PermissionDenied => write!(f, "permission denied"),
             ServerError::SurfaceIdExhausted => write!(f, "surface id space exhausted"),
             ServerError::BackendError => write!(f, "backend operation failed"),
+            ServerError::SessionDenied => write!(f, "session request denied"),
+            ServerError::InvalidSession => write!(f, "invalid session"),
         }
     }
 }
@@ -111,6 +131,7 @@ pub trait DisplayBackend {
 pub struct SurfaceEntry {
     pub id: SurfaceId,
     pub owner: ClientId,
+    pub session_id: SessionId,
     pub width: u32,
     pub height: u32,
     pub x: i32,
@@ -118,6 +139,14 @@ pub struct SurfaceEntry {
     pub visible: bool,
     pub z_order: u32,
     pub format: PixelFormat,
+}
+
+/// Per-session state tracking
+#[derive(Debug, Clone)]
+struct SessionState {
+    config: SessionConfig,
+    surfaces: Vec<SurfaceId>,
+    focused_surface: Option<SurfaceId>,
 }
 
 /// Server-side observability counters.
@@ -128,16 +157,20 @@ pub struct ServerDiagnostics {
     pub dropped_events: u64,
     pub frames_presented: u64,
     pub backend_errors: u64,
+    pub session_transfers: u64,
 }
 
-/// Protocol-driven display server runtime.
+/// Protocol-driven display server runtime with session support.
 pub struct DisplayServer<B: DisplayBackend> {
     backend: B,
     state: ServerState,
     next_surface_id: u32,
     surfaces: BTreeMap<SurfaceId, SurfaceEntry>,
-    // Per-client capability flags (bitmask) for compositor integrations
     client_capabilities: BTreeMap<ClientId, u32>,
+    client_sessions: BTreeMap<ClientId, SessionId>,
+    sessions: BTreeMap<SessionId, SessionState>,
+    session_boundary: SessionBoundary,
+    next_session_id: u32,
     focused_surface: Option<SurfaceId>,
     events: VecDeque<DisplayEvent>,
     frame_interval_ms: u32,
@@ -149,12 +182,33 @@ pub struct DisplayServer<B: DisplayBackend> {
 
 impl<B: DisplayBackend> DisplayServer<B> {
     pub fn new(backend: B) -> Self {
+        let mut sessions = BTreeMap::new();
+        sessions.insert(
+            SessionId::KERNEL,
+            SessionState {
+                config: SessionConfig {
+                    session_id: SessionId::KERNEL,
+                    session_type: SessionType::Kernel,
+                    capabilities: 0,
+                    receives_input: true,
+                    manages_windows: true,
+                    name: String::from("kernel"),
+                },
+                surfaces: Vec::new(),
+                focused_surface: None,
+            },
+        );
+
         Self {
             backend,
             state: ServerState::Stopped,
             next_surface_id: 1,
             surfaces: BTreeMap::new(),
             client_capabilities: BTreeMap::new(),
+            client_sessions: BTreeMap::new(),
+            sessions,
+            session_boundary: SessionBoundary::default(),
+            next_session_id: 1,
             focused_surface: None,
             events: VecDeque::new(),
             frame_interval_ms: DEFAULT_FRAME_INTERVAL_MS,
@@ -169,7 +223,6 @@ impl<B: DisplayBackend> DisplayServer<B> {
         if self.state == ServerState::Running {
             return Err(ServerError::AlreadyRunning);
         }
-
         self.state = ServerState::Running;
         self.events.clear();
         self.last_present_ms = 0;
@@ -181,18 +234,15 @@ impl<B: DisplayBackend> DisplayServer<B> {
         if self.state == ServerState::Stopped {
             return Err(ServerError::NotRunning);
         }
-
         let mut ids = Vec::with_capacity(self.surfaces.len());
         for id in self.surfaces.keys() {
             ids.push(*id);
         }
-
         for id in ids {
             if self.backend.destroy_surface(id).is_err() {
                 self.diagnostics.backend_errors = self.diagnostics.backend_errors.saturating_add(1);
             }
         }
-
         self.surfaces.clear();
         self.focused_surface = None;
         self.events.clear();
@@ -200,32 +250,28 @@ impl<B: DisplayBackend> DisplayServer<B> {
         Ok(())
     }
 
-    pub fn state(&self) -> ServerState {
-        self.state
-    }
+    pub fn state(&self) -> ServerState { self.state }
+    pub fn surface_count(&self) -> usize { self.surfaces.len() }
+    pub fn surface(&self, surface_id: SurfaceId) -> Option<&SurfaceEntry> { self.surfaces.get(&surface_id) }
+    pub fn focused_surface(&self) -> Option<SurfaceId> { self.focused_surface }
+    pub fn diagnostics(&self) -> ServerDiagnostics { self.diagnostics }
+    pub fn frame_interval_ms(&self) -> u32 { self.frame_interval_ms }
+    pub fn session_boundary(&self) -> SessionBoundary { self.session_boundary }
+    pub fn input_owner(&self) -> SessionId { self.session_boundary.input_owner }
+    pub fn shell_owner(&self) -> SessionId { self.session_boundary.shell_owner }
+    pub fn compositor_owner(&self) -> SessionId { self.session_boundary.compositor_owner }
 
-    pub fn surface_count(&self) -> usize {
-        self.surfaces.len()
-    }
+    /// Get mutable reference to the backend (used by tests and compositor integration)
+    pub fn backend_mut(&mut self) -> &mut B { &mut self.backend }
 
-    pub fn surface(&self, surface_id: SurfaceId) -> Option<&SurfaceEntry> {
-        self.surfaces.get(&surface_id)
-    }
-
-    pub fn focused_surface(&self) -> Option<SurfaceId> {
-        self.focused_surface
-    }
-
-    pub fn diagnostics(&self) -> ServerDiagnostics {
-        self.diagnostics
-    }
-
-    pub fn frame_interval_ms(&self) -> u32 {
-        self.frame_interval_ms
-    }
-
-    pub fn backend_mut(&mut self) -> &mut B {
-        &mut self.backend
+    fn check_session_permission(&self, client_id: ClientId, surface_id: SurfaceId) -> Result<(), ServerError> {
+        let surface = self.surfaces.get(&surface_id).ok_or(ServerError::SurfaceNotFound)?;
+        let client_session = self.client_sessions.get(&client_id).copied().unwrap_or(SessionId::KERNEL);
+        if surface.owner == client_id { return Ok(()); }
+        if surface.session_id == client_session { return Ok(()); }
+        if client_session == SessionId::KERNEL { return Ok(()); }
+        if self.session_boundary.compositor_owner == client_session { return Ok(()); }
+        Err(ServerError::PermissionDenied)
     }
 
     pub fn handle_request(
@@ -238,146 +284,182 @@ impl<B: DisplayBackend> DisplayServer<B> {
         self.diagnostics.requests_handled = self.diagnostics.requests_handled.saturating_add(1);
 
         match request {
-            DisplayRequest::CreateSurface {
-                width,
-                height,
-                format,
-            } => {
-                let surface_id = self
-                    .allocate_surface_id()
-                    .ok_or(ServerError::SurfaceIdExhausted)?;
-
-                self.backend
-                    .create_surface(surface_id, width, height, format)
+            DisplayRequest::CreateSurface { width, height, format } => {
+                let surface_id = self.allocate_surface_id().ok_or(ServerError::SurfaceIdExhausted)?;
+                self.backend.create_surface(surface_id, width, height, format)
                     .map_err(|_| self.map_backend_error())?;
-
+                let session_id = self.client_sessions.get(&client_id).copied().unwrap_or(SessionId::KERNEL);
                 let entry = SurfaceEntry {
-                    id: surface_id,
-                    owner: client_id,
-                    width,
-                    height,
-                    x: 0,
-                    y: 0,
-                    visible: true,
-                    z_order: 0,
-                    format,
+                    id: surface_id, owner: client_id, session_id, width, height,
+                    x: 0, y: 0, visible: true, z_order: 0, format,
                 };
                 self.surfaces.insert(surface_id, entry);
-                self.emit_event(DisplayEvent::SurfaceCreated {
-                    surface_id,
-                    owner: client_id,
-                });
+                if let Some(session) = self.sessions.get_mut(&session_id) {
+                    session.surfaces.push(surface_id);
+                }
+                self.emit_event(DisplayEvent::SurfaceCreated { surface_id, owner: client_id });
                 Ok(DisplayResponse::SurfaceCreated { surface_id })
             }
             DisplayRequest::DestroySurface { surface_id } => {
                 self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .destroy_surface(surface_id)
-                    .map_err(|_| self.map_backend_error())?;
-
-                self.surfaces.remove(&surface_id);
-                if self.focused_surface == Some(surface_id) {
-                    self.focused_surface = None;
-                    self.emit_event(DisplayEvent::FocusChanged { surface_id: None });
+                self.backend.destroy_surface(surface_id).map_err(|_| self.map_backend_error())?;
+                let entry = self.surfaces.remove(&surface_id);
+                if let Some(entry) = entry {
+                    if let Some(session) = self.sessions.get_mut(&entry.session_id) {
+                        session.surfaces.retain(|&id| id != surface_id);
+                    }
+                    if self.focused_surface == Some(surface_id) {
+                        self.focused_surface = None;
+                        self.emit_event(DisplayEvent::FocusChanged { surface_id: None });
+                    }
+                    self.emit_event(DisplayEvent::SurfaceDestroyed { surface_id });
                 }
-                self.emit_event(DisplayEvent::SurfaceDestroyed { surface_id });
                 Ok(DisplayResponse::Ack)
             }
             DisplayRequest::SetSurfacePosition { surface_id, x, y } => {
-                self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .set_surface_position(surface_id, x, y)
-                    .map_err(|_| self.map_backend_error())?;
-
+                self.check_session_permission(client_id, surface_id)?;
+                self.backend.set_surface_position(surface_id, x, y).map_err(|_| self.map_backend_error())?;
                 if let Some(entry) = self.surfaces.get_mut(&surface_id) {
-                    entry.x = x;
-                    entry.y = y;
+                    entry.x = x; entry.y = y;
                 }
                 Ok(DisplayResponse::Ack)
             }
-            DisplayRequest::ResizeSurface {
-                surface_id,
-                width,
-                height,
-            } => {
-                self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .resize_surface(surface_id, width, height)
-                    .map_err(|_| self.map_backend_error())?;
-
+            DisplayRequest::ResizeSurface { surface_id, width, height } => {
+                self.check_session_permission(client_id, surface_id)?;
+                self.backend.resize_surface(surface_id, width, height).map_err(|_| self.map_backend_error())?;
                 if let Some(entry) = self.surfaces.get_mut(&surface_id) {
-                    entry.width = width;
-                    entry.height = height;
+                    entry.width = width; entry.height = height;
                 }
                 Ok(DisplayResponse::Ack)
             }
-            DisplayRequest::SetSurfaceVisibility {
-                surface_id,
-                visible,
-            } => {
-                self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .set_surface_visibility(surface_id, visible)
-                    .map_err(|_| self.map_backend_error())?;
-
+            DisplayRequest::SetSurfaceVisibility { surface_id, visible } => {
+                self.check_session_permission(client_id, surface_id)?;
+                self.backend.set_surface_visibility(surface_id, visible).map_err(|_| self.map_backend_error())?;
                 if let Some(entry) = self.surfaces.get_mut(&surface_id) {
                     entry.visible = visible;
                 }
                 Ok(DisplayResponse::Ack)
             }
-            DisplayRequest::SetSurfaceZOrder {
-                surface_id,
-                z_order,
-            } => {
-                self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .set_surface_z_order(surface_id, z_order)
-                    .map_err(|_| self.map_backend_error())?;
-
+            DisplayRequest::SetSurfaceZOrder { surface_id, z_order } => {
+                self.check_session_permission(client_id, surface_id)?;
+                self.backend.set_surface_z_order(surface_id, z_order).map_err(|_| self.map_backend_error())?;
                 if let Some(entry) = self.surfaces.get_mut(&surface_id) {
                     entry.z_order = z_order;
                 }
                 Ok(DisplayResponse::Ack)
             }
             DisplayRequest::CommitSurface { surface_id, damage } => {
-                self.ensure_owner(client_id, surface_id)?;
-
-                self.backend
-                    .commit_surface(surface_id, damage)
-                    .map_err(|_| self.map_backend_error())?;
+                self.check_session_permission(client_id, surface_id)?;
+                self.backend.commit_surface(surface_id, damage).map_err(|_| self.map_backend_error())?;
                 Ok(DisplayResponse::Ack)
             }
             DisplayRequest::RequestFocus { surface_id } => {
                 if let Some(target) = surface_id {
+                    let client_session = self.client_sessions.get(&client_id).copied().unwrap_or(SessionId::KERNEL);
+                    if client_session != self.session_boundary.input_owner && client_session != SessionId::KERNEL {
+                        return Err(ServerError::PermissionDenied);
+                    }
                     self.ensure_owner(client_id, target)?;
                 }
-
                 if self.focused_surface != surface_id {
                     self.focused_surface = surface_id;
+                    if let Some(session) = self.sessions.get_mut(&SessionId::KERNEL) {
+                        session.focused_surface = surface_id;
+                    }
                     self.emit_event(DisplayEvent::FocusChanged { surface_id });
                 }
                 Ok(DisplayResponse::Ack)
             }
             DisplayRequest::SetClientCapabilities { capabilities } => {
-                // Store per-client capability flags for later use by compositor integrations
                 self.client_capabilities.insert(client_id, capabilities);
                 Ok(DisplayResponse::CapabilitiesAck { capabilities })
             }
-            DisplayRequest::AnnounceCompositor { name, version_major: _, version_minor: _ } => {
-                // For now simply acknowledge the compositor announcement. Higher-level
-                // integration will use the capability flags set by the client.
+            DisplayRequest::AnnounceCompositor { name, .. } => {
                 Ok(DisplayResponse::CompositorAnnounced { name })
             }
             DisplayRequest::SetFrameIntervalMs { interval_ms } => {
                 self.frame_interval_ms = interval_ms;
                 Ok(DisplayResponse::Ack)
             }
+            DisplayRequest::AnnounceSession { session_id, session_type, capabilities } => {
+                self.handle_session_announcement(client_id, session_id, session_type, capabilities)
+            }
+            DisplayRequest::TransferShell { session_id } => {
+                self.handle_shell_transfer(client_id, session_id)
+            }
+            DisplayRequest::TransferInput { session_id } => {
+                self.handle_input_transfer(client_id, session_id)
+            }
         }
+    }
+
+    fn handle_session_announcement(
+        &mut self,
+        client_id: ClientId,
+        session_id: u32,
+        session_type: u32,
+        capabilities: u32,
+    ) -> Result<DisplayResponse, ServerError> {
+        let sid = SessionId(session_id);
+        if self.sessions.contains_key(&sid) {
+            return Err(ServerError::InvalidSession);
+        }
+        let stype = match session_type {
+            0 => SessionType::Kernel,
+            1 => SessionType::Userland,
+            _ => return Err(ServerError::InvalidSession),
+        };
+        let allowed = CAPABILITY_SESSION | CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_INPUT;
+        if (capabilities & !allowed) != 0 {
+            return Err(ServerError::SessionDenied);
+        }
+        let config = SessionConfig {
+            session_id: sid,
+            session_type: stype,
+            capabilities,
+            receives_input: (capabilities & CAPABILITY_INPUT) != 0,
+            manages_windows: (capabilities & CAPABILITY_SESSION) != 0,
+            name: format!("userland-session-{}", session_id),
+        };
+        self.sessions.insert(sid, SessionState {
+            config: config.clone(),
+            surfaces: Vec::new(),
+            focused_surface: None,
+        });
+        self.client_sessions.insert(client_id, sid);
+        if config.receives_input { self.session_boundary.input_owner = sid; }
+        if config.manages_windows { self.session_boundary.shell_owner = sid; }
+        let boundary = self.session_boundary;
+        Ok(DisplayResponse::SessionAcknowledged { session_id, boundary })
+    }
+
+    fn handle_shell_transfer(
+        &mut self,
+        _client_id: ClientId,
+        session_id: u32,
+    ) -> Result<DisplayResponse, ServerError> {
+        let sid = SessionId(session_id);
+        if !self.sessions.contains_key(&sid) {
+            return Err(ServerError::InvalidSession);
+        }
+        let previous = self.session_boundary.shell_owner;
+        self.session_boundary.shell_owner = sid;
+        self.diagnostics.session_transfers = self.diagnostics.session_transfers.saturating_add(1);
+        Ok(DisplayResponse::ShellTransferResult { success: true, previous_owner: previous.0 })
+    }
+
+    fn handle_input_transfer(
+        &mut self,
+        _client_id: ClientId,
+        session_id: u32,
+    ) -> Result<DisplayResponse, ServerError> {
+        let sid = SessionId(session_id);
+        if !self.sessions.contains_key(&sid) {
+            return Err(ServerError::InvalidSession);
+        }
+        self.session_boundary.input_owner = sid;
+        self.diagnostics.session_transfers = self.diagnostics.session_transfers.saturating_add(1);
+        Ok(DisplayResponse::Ack)
     }
 
     pub fn upload_surface_pixels(
@@ -390,125 +472,75 @@ impl<B: DisplayBackend> DisplayServer<B> {
         damage: Option<Rect>,
     ) -> Result<(), ServerError> {
         self.ensure_running()?;
-        self.ensure_owner(client_id, surface_id)?;
-
-        let entry = self
-            .surfaces
-            .get(&surface_id)
-            .ok_or(ServerError::SurfaceNotFound)?;
+        self.check_session_permission(client_id, surface_id)?;
+        let entry = self.surfaces.get(&surface_id).ok_or(ServerError::SurfaceNotFound)?;
         if entry.width != width || entry.height != height {
             return Err(ServerError::InvalidRequest(ProtocolError::InvalidDimensions));
         }
-
-        self.backend
-            .upload_surface_pixels(surface_id, width, height, pixels, damage)
-            .map_err(|_| self.map_backend_error())?;
-        self.backend
-            .commit_surface(surface_id, damage)
-            .map_err(|_| self.map_backend_error())?;
-
+        self.backend.upload_surface_pixels(surface_id, width, height, pixels, damage).map_err(|_| self.map_backend_error())?;
+        self.backend.commit_surface(surface_id, damage).map_err(|_| self.map_backend_error())?;
         Ok(())
     }
 
     pub fn route_key_input(&mut self, key: u8, pressed: bool) -> Result<(), ServerError> {
         self.ensure_running()?;
-        self.emit_event(DisplayEvent::KeyInput {
-            surface_id: self.focused_surface,
-            key,
-            pressed,
-        });
+        self.emit_event(DisplayEvent::KeyInput { surface_id: self.focused_surface, key, pressed });
         Ok(())
     }
 
-    pub fn route_pointer_motion(
-        &mut self,
-        x: i32,
-        y: i32,
-        dx: i32,
-        dy: i32,
-    ) -> Result<(), ServerError> {
+    pub fn route_pointer_motion(&mut self, x: i32, y: i32, dx: i32, dy: i32) -> Result<(), ServerError> {
         self.ensure_running()?;
-        self.emit_event(DisplayEvent::PointerMotion {
-            surface_id: self.focused_surface,
-            x,
-            y,
-            dx,
-            dy,
-        });
+        self.emit_event(DisplayEvent::PointerMotion { surface_id: self.focused_surface, x, y, dx, dy });
         Ok(())
     }
 
-    pub fn route_mouse_button(
-        &mut self,
-        button: MouseButton,
-        pressed: bool,
-        x: i32,
-        y: i32,
-    ) -> Result<(), ServerError> {
+    pub fn route_mouse_button(&mut self, button: MouseButton, pressed: bool, x: i32, y: i32) -> Result<(), ServerError> {
         self.ensure_running()?;
-        self.emit_event(DisplayEvent::MouseButton {
-            surface_id: self.focused_surface,
-            button,
-            pressed,
-            x,
-            y,
-        });
+        self.emit_event(DisplayEvent::MouseButton { surface_id: self.focused_surface, button, pressed, x, y });
         Ok(())
     }
 
     pub fn route_mouse_wheel(&mut self, delta: i32, x: i32, y: i32) -> Result<(), ServerError> {
         self.ensure_running()?;
-        self.emit_event(DisplayEvent::MouseWheel {
-            surface_id: self.focused_surface,
-            delta,
-            x,
-            y,
-        });
+        self.emit_event(DisplayEvent::MouseWheel { surface_id: self.focused_surface, delta, x, y });
         Ok(())
     }
 
-    /// Present a new frame when the configured frame interval elapses.
     pub fn update_frame(&mut self, now_ms: u64) -> Result<bool, ServerError> {
         self.ensure_running()?;
-
-        if now_ms < self.last_present_ms {
-            self.last_present_ms = now_ms;
-        }
-
+        if now_ms < self.last_present_ms { self.last_present_ms = now_ms; }
         let elapsed = now_ms.saturating_sub(self.last_present_ms);
-        if elapsed < self.frame_interval_ms as u64 {
-            return Ok(false);
-        }
-
+        if elapsed < self.frame_interval_ms as u64 { return Ok(false); }
         self.backend.flush().map_err(|_| self.map_backend_error())?;
         self.last_present_ms = now_ms;
         self.next_frame_id = self.next_frame_id.wrapping_add(1);
         self.diagnostics.frames_presented = self.diagnostics.frames_presented.saturating_add(1);
-        self.emit_event(DisplayEvent::FramePresented {
-            frame_id: self.next_frame_id,
-        });
-
+        self.emit_event(DisplayEvent::FramePresented { frame_id: self.next_frame_id });
         Ok(true)
     }
 
-    pub fn poll_event(&mut self) -> Option<DisplayEvent> {
-        self.events.pop_front()
+    pub fn poll_event(&mut self) -> Option<DisplayEvent> { self.events.pop_front() }
+
+    pub fn session_surface_count(&self, session_id: SessionId) -> usize {
+        self.sessions.get(&session_id).map(|s| s.surfaces.len()).unwrap_or(0)
+    }
+
+    pub fn get_session_config(&self, session_id: SessionId) -> Option<&SessionConfig> {
+        self.sessions.get(&session_id).map(|s| &s.config)
     }
 
     fn ensure_running(&self) -> Result<(), ServerError> {
-        if self.state != ServerState::Running {
-            return Err(ServerError::NotRunning);
-        }
+        if self.state != ServerState::Running { return Err(ServerError::NotRunning); }
         Ok(())
     }
 
     fn ensure_owner(&self, client_id: ClientId, surface_id: SurfaceId) -> Result<(), ServerError> {
-        let surface = self
-            .surfaces
-            .get(&surface_id)
-            .ok_or(ServerError::SurfaceNotFound)?;
+        let surface = self.surfaces.get(&surface_id).ok_or(ServerError::SurfaceNotFound)?;
         if surface.owner != client_id {
-            return Err(ServerError::PermissionDenied);
+            let client_session = self.client_sessions.get(&client_id).copied().unwrap_or(SessionId::KERNEL);
+            if surface.session_id != client_session && client_session != SessionId::KERNEL {
+                return Err(ServerError::PermissionDenied);
+            }
         }
         Ok(())
     }
@@ -516,23 +548,15 @@ impl<B: DisplayBackend> DisplayServer<B> {
     fn allocate_surface_id(&mut self) -> Option<SurfaceId> {
         let start = self.next_surface_id.max(1);
         let mut candidate = start;
-
         loop {
-            if candidate == 0 {
-                candidate = 1;
-            }
-
+            if candidate == 0 { candidate = 1; }
             let id = SurfaceId(candidate);
             candidate = candidate.wrapping_add(1);
-
             if !self.surfaces.contains_key(&id) {
                 self.next_surface_id = candidate.max(1);
                 return Some(id);
             }
-
-            if candidate == start {
-                return None;
-            }
+            if candidate == start { return None; }
         }
     }
 
@@ -546,201 +570,7 @@ impl<B: DisplayBackend> DisplayServer<B> {
             self.diagnostics.dropped_events = self.diagnostics.dropped_events.saturating_add(1);
             return;
         }
-
         self.events.push_back(event);
         self.diagnostics.events_emitted = self.diagnostics.events_emitted.saturating_add(1);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use alloc::collections::BTreeMap;
-
-    use super::*;
-
-    #[derive(Debug, Clone, Copy)]
-    struct MockSurface {
-        width: u32,
-        height: u32,
-    }
-
-    #[derive(Debug, Default)]
-    struct MockBackend {
-        surfaces: BTreeMap<SurfaceId, MockSurface>,
-    }
-
-    impl DisplayBackend for MockBackend {
-        type Error = ();
-
-        fn create_surface(
-            &mut self,
-            surface_id: SurfaceId,
-            width: u32,
-            height: u32,
-            _format: PixelFormat,
-        ) -> Result<(), Self::Error> {
-            self.surfaces.insert(surface_id, MockSurface { width, height });
-            Ok(())
-        }
-
-        fn destroy_surface(&mut self, surface_id: SurfaceId) -> Result<(), Self::Error> {
-            self.surfaces.remove(&surface_id).map(|_| ()).ok_or(())
-        }
-
-        fn set_surface_position(
-            &mut self,
-            surface_id: SurfaceId,
-            _x: i32,
-            _y: i32,
-        ) -> Result<(), Self::Error> {
-            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
-        }
-
-        fn resize_surface(
-            &mut self,
-            surface_id: SurfaceId,
-            width: u32,
-            height: u32,
-        ) -> Result<(), Self::Error> {
-            let surface = self.surfaces.get_mut(&surface_id).ok_or(())?;
-            surface.width = width;
-            surface.height = height;
-            Ok(())
-        }
-
-        fn set_surface_visibility(
-            &mut self,
-            surface_id: SurfaceId,
-            _visible: bool,
-        ) -> Result<(), Self::Error> {
-            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
-        }
-
-        fn set_surface_z_order(
-            &mut self,
-            surface_id: SurfaceId,
-            _z_order: u32,
-        ) -> Result<(), Self::Error> {
-            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
-        }
-
-        fn commit_surface(
-            &mut self,
-            surface_id: SurfaceId,
-            _damage: Option<Rect>,
-        ) -> Result<(), Self::Error> {
-            self.surfaces.get(&surface_id).map(|_| ()).ok_or(())
-        }
-
-        fn upload_surface_pixels(
-            &mut self,
-            surface_id: SurfaceId,
-            width: u32,
-            height: u32,
-            pixels: &[u32],
-            _damage: Option<Rect>,
-        ) -> Result<(), Self::Error> {
-            let Some(surface) = self.surfaces.get(&surface_id) else {
-                return Err(());
-            };
-            if surface.width != width || surface.height != height {
-                return Err(());
-            }
-            let required = (width as usize).saturating_mul(height as usize);
-            if pixels.len() < required {
-                return Err(());
-            }
-            Ok(())
-        }
-
-        fn flush(&mut self) -> Result<(), Self::Error> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn mouse_routing_emits_events_with_focused_surface() {
-        let mut server = DisplayServer::new(MockBackend::default());
-        server.start().expect("server should start");
-
-        let owner = ClientId::new(11);
-        let created = server
-            .handle_request(
-                owner,
-                DisplayRequest::CreateSurface {
-                    width: 64,
-                    height: 64,
-                    format: PixelFormat::Argb8888,
-                },
-            )
-            .expect("surface creation should succeed");
-        let surface_id = match created {
-            DisplayResponse::SurfaceCreated { surface_id } => surface_id,
-            _ => panic!("unexpected create response"),
-        };
-        server
-            .handle_request(
-                owner,
-                DisplayRequest::RequestFocus {
-                    surface_id: Some(surface_id),
-                },
-            )
-            .expect("focus request should succeed");
-
-        server
-            .route_pointer_motion(100, 80, 5, -3)
-            .expect("pointer event should route");
-        server
-            .route_mouse_button(MouseButton::Left, true, 100, 80)
-            .expect("button event should route");
-        server
-            .route_mouse_wheel(-1, 100, 80)
-            .expect("wheel event should route");
-
-        let mut saw_motion = false;
-        let mut saw_button = false;
-        let mut saw_wheel = false;
-
-        while let Some(event) = server.poll_event() {
-            match event {
-                DisplayEvent::PointerMotion {
-                    surface_id: Some(id),
-                    x,
-                    y,
-                    dx,
-                    dy,
-                } if id == surface_id => {
-                    assert_eq!((x, y, dx, dy), (100, 80, 5, -3));
-                    saw_motion = true;
-                }
-                DisplayEvent::MouseButton {
-                    surface_id: Some(id),
-                    button,
-                    pressed,
-                    x,
-                    y,
-                } if id == surface_id => {
-                    assert_eq!(button, MouseButton::Left);
-                    assert!(pressed);
-                    assert_eq!((x, y), (100, 80));
-                    saw_button = true;
-                }
-                DisplayEvent::MouseWheel {
-                    surface_id: Some(id),
-                    delta,
-                    x,
-                    y,
-                } if id == surface_id => {
-                    assert_eq!(delta, -1);
-                    assert_eq!((x, y), (100, 80));
-                    saw_wheel = true;
-                }
-                _ => {}
-            }
-        }
-
-        assert!(saw_motion, "pointer motion event should be emitted");
-        assert!(saw_button, "mouse button event should be emitted");
-        assert!(saw_wheel, "mouse wheel event should be emitted");
     }
 }

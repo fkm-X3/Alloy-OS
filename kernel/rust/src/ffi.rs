@@ -1,5 +1,5 @@
 /// Foreign Function Interface (FFI) to C++ kernel functions
-/// 
+///
 /// This module provides safe Rust wrappers around C++ functions
 
 use core::ffi::c_void;
@@ -18,7 +18,7 @@ extern "C" {
     pub fn vga_get_cursor_y() -> u8;
     pub fn vga_print_hex(value: u32);
     pub fn vga_print_dec(value: u32);
-    
+
     // Memory management functions (from VMM)
     pub fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
     pub fn vmm_free_region(addr: *mut c_void, size: u32);
@@ -28,7 +28,7 @@ extern "C" {
     pub fn vmm_get_heap_start() -> u32;
     pub fn vmm_get_heap_size() -> u32;
     pub fn vmm_get_next_virt_addr() -> u32;
-    
+
     // Physical memory management
     pub fn pmm_alloc_frame() -> *mut c_void;
     pub fn pmm_free_frame(addr: *mut c_void);
@@ -36,7 +36,7 @@ extern "C" {
     pub fn pmm_get_used_frames() -> u32;
     pub fn pmm_get_total_memory() -> u64;
     pub fn pmm_get_available_memory() -> u64;
-    
+
     // Keyboard functions - matches C++ signatures
     pub fn keyboard_has_data() -> bool;
     pub fn keyboard_get_char() -> i8;  // C char is signed
@@ -52,17 +52,25 @@ extern "C" {
     ) -> bool;
     pub fn mouse_is_initialized() -> bool;
     pub fn mouse_last_init_error() -> u8;
-    
+
     // CPU information functions
     pub fn cpu_get_vendor_ffi(vendor: *mut u8);
     pub fn cpu_get_features_ffi() -> u32;
     pub fn cpu_get_model_info_ffi(family: *mut u32, model: *mut u32, stepping: *mut u32);
-    
+
     // System uptime
     pub fn get_system_uptime_ms() -> u64;
-    
+
     // Context switching (from context_switch.asm)
     pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
+
+    // Socket/Network syscalls (for Wayland socket support)
+    pub fn socket(domain: i32, socket_type: i32, protocol: i32) -> i32;
+    pub fn bind_socket(fd: i32, addr: *const c_void, addr_len: u32) -> i32;
+    pub fn listen_socket(fd: i32, backlog: i32) -> i32;
+    pub fn accept_socket(fd: i32) -> i32;
+    pub fn connect_socket(fd: i32, addr: *const c_void, addr_len: u32) -> i32;
+    pub fn close_socket(fd: i32) -> i32;
 
     // Paging helpers
     pub fn paging_create_directory_phys() -> u32;
@@ -70,49 +78,49 @@ extern "C" {
     pub fn paging_get_kernel_directory_phys() -> u32;
     pub fn paging_get_physical_address(virt: u32) -> u32;
     pub fn paging_destroy_directory(pd_phys: u32);
-    
+
     // Timer functions (from timer.cpp)
     pub fn timer_init_ffi(frequency: u32);
     pub fn timer_get_ticks_ffi() -> u64;
     pub fn timer_get_uptime_ms_ffi() -> u64;
     pub fn timer_get_frequency_ffi() -> u32;
-    
+
     // VESA VBE graphics functions (from vesa.cpp)
     /// Initialize VESA VBE detection and controller check
     pub fn vesa_init();
-    
+
     /// Set a graphics mode
     /// Returns: 0 on success, 1 if not initialized, 2 if mode not supported, 3 if mode setting failed
     pub fn vesa_set_mode(mode: u16) -> u16;
-    
+
     /// Get current framebuffer linear address
     /// Returns: Physical address of linear framebuffer, 0 if not available
     pub fn vesa_get_framebuffer() -> u32;
-    
+
     /// Get current graphics mode resolution
     /// Parameters: width, height - pointers to store resolution
     pub fn vesa_get_resolution(width: *mut u16, height: *mut u16);
-    
+
     /// Get current graphics mode number
     /// Returns: 0 on success, non-zero on failure
     pub fn vesa_get_mode(mode: *mut u16) -> u16;
-    
+
     /// Check if VESA VBE is available
     /// Returns: 1 if available, 0 if not
     pub fn vesa_is_available() -> u8;
-    
+
     /// Get controller capabilities
     /// Returns: Capabilities byte from VBE info block
     pub fn vesa_get_capabilities() -> u8;
-    
+
     /// Get bits per pixel for current mode
     /// Returns: 0, 16, 24, or 32 bits per pixel; 0 if not in graphics mode
     pub fn vesa_get_bits_per_pixel() -> u8;
-    
+
     /// Get bytes per scanline for current mode
     /// Returns: Bytes per scan line, or 0 if not in graphics mode
     pub fn vesa_get_bytes_per_scanline() -> u16;
-    
+
     /// Get total framebuffer size in bytes
     /// Returns: Size in bytes, or 0 if not in graphics mode
     pub fn vesa_get_framebuffer_size() -> u32;
@@ -126,7 +134,7 @@ pub fn print_str(s: &str) {
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
     buffer[len] = 0; // Null terminator
-    
+
     unsafe {
         serial_print(buffer.as_ptr());
     }
@@ -138,7 +146,7 @@ pub fn vga_print_str(s: &str) {
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
     buffer[len] = 0;
-    
+
     unsafe {
         vga_print(buffer.as_ptr());
     }
@@ -150,7 +158,7 @@ pub fn vga_println_str(s: &str) {
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
     buffer[len] = 0;
-    
+
     unsafe {
         vga_println(buffer.as_ptr());
     }
@@ -276,6 +284,31 @@ pub const MOUSE_BUTTON_MIDDLE: u8 = 0x04;
 
 pub const MOUSE_EVENT_FLAG_X_OVERFLOW: u8 = 0x01;
 pub const MOUSE_EVENT_FLAG_Y_OVERFLOW: u8 = 0x02;
+
+/// Socket convenience wrappers
+pub fn socket_create(domain: i32, socket_type: i32, protocol: i32) -> i32 {
+    unsafe { socket(domain, socket_type, protocol) }
+}
+
+pub fn socket_bind(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
+    unsafe { bind_socket(fd, addr, addr_len) }
+}
+
+pub fn socket_listen(fd: i32, backlog: i32) -> i32 {
+    unsafe { listen_socket(fd, backlog) }
+}
+
+pub fn socket_accept(fd: i32) -> i32 {
+    unsafe { accept_socket(fd) }
+}
+
+pub fn socket_connect(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
+    unsafe { connect_socket(fd, addr, addr_len) }
+}
+
+pub fn socket_close(fd: i32) -> i32 {
+    unsafe { close_socket(fd) }
+}
 
 // Page flags for memory mapping
 pub const PAGE_PRESENT: u32 = 0x001;

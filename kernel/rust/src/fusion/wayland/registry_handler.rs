@@ -46,6 +46,8 @@ pub struct RegistryHandler {
     globals: GlobalRegistry,
     /// Track which clients have bound which globals
     client_bindings: BTreeMap<(ClientId, u32), u32>, // (client, global_name) -> bound_object_id
+    /// Per-client registered object IDs (for cleanup)
+    client_objects: BTreeMap<ClientId, Vec<u32>>,
 }
 
 impl RegistryHandler {
@@ -54,6 +56,7 @@ impl RegistryHandler {
         Self {
             globals: GlobalRegistry::new(),
             client_bindings: BTreeMap::new(),
+            client_objects: BTreeMap::new(),
         }
     }
 
@@ -67,9 +70,7 @@ impl RegistryHandler {
         let request = RegistryRequest::try_from(opcode)?;
 
         match request {
-            RegistryRequest::Bind => {
-                self.handle_bind(client_id, payload)
-            }
+            RegistryRequest::Bind => self.handle_bind(client_id, payload),
         }
     }
 
@@ -90,7 +91,6 @@ impl RegistryHandler {
         let global_name = u32::from_le_bytes(name_bytes);
 
         // Find interface string and version in payload
-        // Interface is null-terminated string starting after name
         let interface_start = 4;
         let mut interface_end = interface_start;
         while interface_end < payload.len() && payload[interface_end] != 0 {
@@ -124,6 +124,10 @@ impl RegistryHandler {
 
         // Track the binding
         self.client_bindings.insert((client_id, global_name), object_id);
+        self.client_objects
+            .entry(client_id)
+            .or_insert_with(Vec::new)
+            .push(object_id);
 
         unsafe {
             crate::ffi::serial_print(b"[Wayland Registry] Handled bind request\n\0".as_ptr());
@@ -137,7 +141,20 @@ impl RegistryHandler {
         })
     }
 
-    /// Generate global events for a newly connected registry
+    /// Generate global events for a newly connected registry client
+    pub fn get_global_events_for_client(&self, client_id: ClientId, registry_id: u32) -> Vec<WaylandMessage> {
+        let mut events = Vec::new();
+
+        for (name, global) in self.globals.iter() {
+            if let Ok(msg) = Self::emit_global(registry_id, *name, global.interface(), global.version()) {
+                events.push(msg);
+            }
+        }
+
+        events
+    }
+
+    /// Emit global events for a newly connected registry
     pub fn get_global_events(&self, registry_id: u32) -> Vec<WaylandMessage> {
         let mut events = Vec::new();
 
@@ -195,6 +212,18 @@ impl RegistryHandler {
     pub fn globals(&self) -> &GlobalRegistry {
         &self.globals
     }
+
+    /// Get global events for a newly connected client's registry
+    pub fn handle_get_globals_for_client(&self, client_id: ClientId) -> Vec<WaylandMessage> {
+        let registry_id = 2; // Standard registry object ID
+        self.get_global_events_for_client(client_id, registry_id)
+    }
+
+    /// Remove all client state (called on disconnect)
+    pub fn remove_client(&mut self, client_id: ClientId) {
+        self.client_bindings.retain(|(cid, _), _| *cid != client_id);
+        self.client_objects.remove(&client_id);
+    }
 }
 
 impl Default for RegistryHandler {
@@ -250,5 +279,19 @@ mod tests {
         let handler = RegistryHandler::new();
         let events = handler.get_global_events(2);
         assert!(events.len() > 0);
+    }
+
+    #[test]
+    fn test_remove_client() {
+        let mut handler = RegistryHandler::new();
+        let client_id = ClientId(1);
+
+        // Simulate a bind creating client objects
+        handler.client_objects.entry(client_id).or_insert_with(Vec::new).push(100);
+        handler.client_bindings.insert((client_id, 0), 100);
+
+        handler.remove_client(client_id);
+        assert!(handler.client_objects.get(&client_id).is_none());
+        assert!(handler.client_bindings.keys().all(|(cid, _)| *cid != client_id));
     }
 }

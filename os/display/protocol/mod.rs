@@ -3,7 +3,7 @@ use core::fmt;
 
 /// Protocol version for compatibility negotiation.
 pub const PROTOCOL_VERSION_MAJOR: u16 = 0;
-pub const PROTOCOL_VERSION_MINOR: u16 = 1;
+pub const PROTOCOL_VERSION_MINOR: u16 = 2;
 
 /// Minimum frame interval accepted by the server.
 pub const MIN_FRAME_INTERVAL_MS: u32 = 1;
@@ -111,6 +111,20 @@ pub enum DisplayRequest {
     SetClientCapabilities {
         capabilities: u32,
     },
+    /// New: userland session announces itself and requests session boundary negotiation
+    AnnounceSession {
+        session_id: u32,
+        session_type: u32,
+        capabilities: u32,
+    },
+    /// New: request to transfer shell ownership to a session
+    TransferShell {
+        session_id: u32,
+    },
+    /// New: request to transfer input routing ownership
+    TransferInput {
+        session_id: u32,
+    },
 }
 
 /// Response values for successful request execution.
@@ -127,6 +141,16 @@ pub enum DisplayResponse {
     /// A compositor announce acknowledgement
     CompositorAnnounced {
         name: String,
+    },
+    /// Session announcement acknowledged with assigned boundary
+    SessionAcknowledged {
+        session_id: u32,
+        boundary: SessionBoundary,
+    },
+    /// Shell transfer result
+    ShellTransferResult {
+        success: bool,
+        previous_owner: u32,
     },
     Error(String),
 }
@@ -179,6 +203,11 @@ pub enum DisplayEvent {
     FramePresented {
         frame_id: u64,
     },
+    /// New: session boundary change notification
+    SessionBoundaryChanged {
+        session_id: u32,
+        boundary: SessionBoundary,
+    },
 }
 
 /// Validation errors for malformed protocol requests.
@@ -189,6 +218,8 @@ pub enum ProtocolError {
     EmptyDamageRect,
     InvalidCapability,
     UnsupportedCompositorName,
+    InvalidSessionId,
+    SessionDenied,
 }
 
 impl fmt::Display for ProtocolError {
@@ -199,6 +230,8 @@ impl fmt::Display for ProtocolError {
             ProtocolError::EmptyDamageRect => write!(f, "damage rect must be non-empty"),
             ProtocolError::InvalidCapability => write!(f, "invalid capability flags"),
             ProtocolError::UnsupportedCompositorName => write!(f, "unsupported compositor name"),
+            ProtocolError::InvalidSessionId => write!(f, "invalid session ID"),
+            ProtocolError::SessionDenied => write!(f, "session request denied"),
         }
     }
 }
@@ -208,6 +241,68 @@ pub type CapabilityFlags = u32;
 pub const CAPABILITY_NONE: CapabilityFlags = 0;
 pub const CAPABILITY_WAYLAND: CapabilityFlags = 1 << 0;
 pub const CAPABILITY_COSMOS: CapabilityFlags = 1 << 1;
+pub const CAPABILITY_SESSION: CapabilityFlags = 1 << 2;
+pub const CAPABILITY_INPUT: CapabilityFlags = 1 << 3;
+
+/// Session identifier for kernel/userland boundary
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SessionId(pub u32);
+
+impl SessionId {
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+    /// The kernel-owned session (always 0)
+    pub const KERNEL: SessionId = SessionId(0);
+}
+
+/// Session boundary marker - distinguishes kernel display primitives
+/// from userland session/runtime responsibilities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionBoundary {
+    /// Which session owns input routing decisions
+    pub input_owner: SessionId,
+    /// Which session owns shell lifecycle (launcher, panel, window management policy)
+    pub shell_owner: SessionId,
+    /// Which session owns surface composition ordering
+    pub compositor_owner: SessionId,
+}
+
+impl Default for SessionBoundary {
+    fn default() -> Self {
+        Self {
+            input_owner: SessionId::KERNEL,
+            shell_owner: SessionId::KERNEL,
+            compositor_owner: SessionId::KERNEL,
+        }
+    }
+}
+
+/// Session type classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionType {
+    /// Kernel-integrated session (built-in shell/window manager)
+    Kernel = 0,
+    /// Userland session (external compositor, desktop shell)
+    Userland = 1,
+}
+
+/// Display server session configuration
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionConfig {
+    /// Session identifier
+    pub session_id: SessionId,
+    /// Session type
+    pub session_type: SessionType,
+    /// Capabilities this session advertises
+    pub capabilities: CapabilityFlags,
+    /// Whether this session should receive input events
+    pub receives_input: bool,
+    /// Whether this session manages window lifecycle
+    pub manages_windows: bool,
+    /// Name for debugging/diagnostics
+    pub name: alloc::string::String,
+}
 
 /// Validate request shape before stateful execution.
 pub fn validate_request(request: &DisplayRequest) -> Result<(), ProtocolError> {
@@ -240,8 +335,7 @@ pub fn validate_request(request: &DisplayRequest) -> Result<(), ProtocolError> {
             }
         }
         DisplayRequest::SetClientCapabilities { capabilities } => {
-            // Only allow known capability bits for now
-            let allowed = CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_NONE;
+            let allowed = CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_SESSION | CAPABILITY_INPUT | CAPABILITY_NONE;
             if (*capabilities & !allowed) != 0 {
                 return Err(ProtocolError::InvalidCapability);
             }

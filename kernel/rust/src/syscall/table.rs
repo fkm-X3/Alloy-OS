@@ -13,6 +13,12 @@ pub const DUP: u32 = 8;
 pub const LSEEK: u32 = 9;
 pub const PIPE: u32 = 10;
 pub const EXECVE: u32 = 11;
+pub const SOCKET: u32 = 12;
+pub const BIND: u32 = 13;
+pub const LISTEN: u32 = 14;
+pub const ACCEPT: u32 = 15;
+pub const CONNECT: u32 = 16;
+pub const CLOSE_SOCKET: u32 = 17;
 
 /// Enum representation of syscall numbers
 #[repr(u32)]
@@ -30,6 +36,12 @@ pub enum SyscallNumber {
     Lseek = LSEEK,
     Pipe = PIPE,
     Execve = EXECVE,
+    Socket = SOCKET,
+    Bind = BIND,
+    Listen = LISTEN,
+    Accept = ACCEPT,
+    Connect = CONNECT,
+    CloseSocket = CLOSE_SOCKET,
 }
 
 impl SyscallNumber {
@@ -47,6 +59,12 @@ impl SyscallNumber {
             LSEEK => Some(SyscallNumber::Lseek),
             PIPE => Some(SyscallNumber::Pipe),
             EXECVE => Some(SyscallNumber::Execve),
+            SOCKET => Some(SyscallNumber::Socket),
+            BIND => Some(SyscallNumber::Bind),
+            LISTEN => Some(SyscallNumber::Listen),
+            ACCEPT => Some(SyscallNumber::Accept),
+            CONNECT => Some(SyscallNumber::Connect),
+            CLOSE_SOCKET => Some(SyscallNumber::CloseSocket),
             _ => None,
         }
     }

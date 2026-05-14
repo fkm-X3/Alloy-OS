@@ -9,6 +9,10 @@ use alloc::vec::Vec;
 
 use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
+use super::compositor_handler::{CompositorHandler, CompositorResponse, SurfaceResponse};
+use super::buffer_handler::{ShmBufferHandler, ShmHandlerResponse, ShmPoolHandlerResponse};
+use super::registry_handler::{RegistryHandler, RegistryResponse};
+use super::display_handler::{DisplayHandler, DisplayResponse};
 
 /// Wayland message wire header size (in bytes)
 const MESSAGE_HEADER_SIZE: usize = 8; // object_id (4) + opcode (2) + length (2)
@@ -65,7 +69,7 @@ impl WaylandMessage {
     pub fn encode(&self) -> WaylandResult<Vec<u8>> {
         // Total length: payload length + header size
         let total_length = self.payload.len() as u16 + MESSAGE_HEADER_SIZE as u16;
-        
+
         // Maximum message size (reasonable limit)
         if total_length > 4096 {
             return Err(WaylandError::ProtocolViolation);
@@ -172,87 +176,152 @@ pub fn identify_interface(object_id: u32) -> InterfaceId {
     }
 }
 
-/// Protocol message handler
+/// Protocol message handler (routing)
+///
+/// Dispatches incoming Wayland messages to the appropriate sub-handler
+/// based on the object ID and interface. This is the central routing point
+/// for all client protocol traffic.
 pub struct ProtocolHandler {
-    /// Handler state
     initialized: bool,
 }
 
 impl ProtocolHandler {
     /// Create a new protocol handler
     pub fn new() -> Self {
-        Self {
-            initialized: false,
-        }
+        Self { initialized: false }
     }
 
-    /// Handle an incoming message from a client
-    pub fn handle_message(&mut self, client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
+    /// Handle an incoming message from a client, routing to the appropriate handler.
+    ///
+    /// Dispatches based on object_id to the relevant protocol handler:
+    /// - Object 1: wl_display (core display protocol)
+    /// - Object 2: wl_registry (global registry)
+    /// - Object 3: wl_compositor (surface creation)
+    /// - 4..=100: wl_surface (surface operations)
+    /// - Higher IDs: delegated to registry handler lookup
+    pub fn handle_message(
+        &mut self,
+        client_id: ClientId,
+        message: WaylandMessage,
+        display_handler: &mut DisplayHandler,
+        registry_handler: &mut RegistryHandler,
+        compositor_handler: &mut CompositorHandler,
+        buffer_handler: &mut ShmBufferHandler,
+    ) -> WaylandResult<()> {
         match message.object_id {
             ObjectId::DISPLAY => {
-                self.handle_display_request(client_id, message)?;
+                let response = display_handler.handle_request(client_id, message.opcode, &message.payload)?;
+                self.handle_display_response(response);
+            }
+            ObjectId(2) => {
+                // wl_registry - bind requests create client-side objects
+                let response = registry_handler.handle_request(client_id, message.opcode, &message.payload)?;
+                self.handle_registry_response(response);
+            }
+            ObjectId(3) => {
+                // wl_compositor
+                let response = compositor_handler.handle_compositor_request(client_id, message.opcode, &message.payload)?;
+                self.handle_compositor_response(response);
+            }
+            ObjectId(4..=100) => {
+                // Could be wl_surface or wl_shm_pool
+                // Try compositor surface handler first, then shm pool handler
+                let surface_result = compositor_handler.handle_surface_request(message.object_id.0, message.opcode, &message.payload);
+                match surface_result {
+                    Ok(SurfaceResponse::DamageRecorded)
+                    | Ok(SurfaceResponse::BufferAttached)
+                    | Ok(SurfaceResponse::Committed)
+                    | Ok(SurfaceResponse::Destroyed) => {
+                        self.handle_surface_response(message.object_id.0, surface_result.unwrap());
+                    }
+                    Err(WaylandError::ProtocolViolation) | Err(WaylandError::ObjectNotFound) => {
+                        // Not a surface request, try shm pool handler
+                        let pool_result = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
+                        match pool_result {
+                            Ok(ShmPoolHandlerResponse::BufferCreated { buffer_id: _ })
+                            | Ok(ShmPoolHandlerResponse::Destroyed) => {
+                                self.handle_shm_pool_response(message.object_id.0, pool_result.unwrap());
+                            }
+                            Err(e) => {
+                                unsafe {
+                                    crate::ffi::serial_print(b"[Wayland Protocol] Unhandled object request\n\0".as_ptr());
+                                }
+                                return Err(e);
+                            }
+                        }
+                    }
+                    Err(e) => return Err(e),
+                    Ok(r) => {
+                        self.handle_surface_response(message.object_id.0, r);
+                    }
+                }
             }
             _ => {
-                // Stub handler for other objects
+                // Extended object IDs - try buffer handler for shared memory objects
                 unsafe {
-                    crate::ffi::serial_print(b"[Wayland Protocol] Unhandled object request\n\0".as_ptr());
+                    crate::ffi::serial_print(b"[Wayland Protocol] Extended object routing\n\0".as_ptr());
                 }
+                let _ = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
             }
         }
         Ok(())
     }
 
-    /// Handle wl_display requests
-    fn handle_display_request(&mut self, _client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
-        let opcode = message.opcode;
-
-        match opcode {
-            0 => {
-                // Sync request: sync(callback_id)
-                if message.payload.len() < 4 {
-                    return Err(WaylandError::ProtocolViolation);
-                }
-
-                let _callback_id_le = [
-                    message.payload[0],
-                    message.payload[1],
-                    message.payload[2],
-                    message.payload[3],
-                ];
-
-                unsafe {
-                    crate::ffi::serial_print(b"[Wayland Protocol] Handled wl_display.sync\n\0".as_ptr());
-                }
-
-                // Would send Done event back to client
-                // For now, just log the request
+    /// Handle display protocol responses (send events back to client)
+    fn handle_display_response(&mut self, response: DisplayResponse) {
+        match response {
+            DisplayResponse::SyncAck { callback_id, callback_data } => {
+                let _ = (callback_id, callback_data);
             }
-            1 => {
-                // GetRegistry request: get_registry(registry_id)
-                if message.payload.len() < 4 {
-                    return Err(WaylandError::ProtocolViolation);
-                }
-
-                let _registry_id_le = [
-                    message.payload[0],
-                    message.payload[1],
-                    message.payload[2],
-                    message.payload[3],
-                ];
-
-                unsafe {
-                    crate::ffi::serial_print(b"[Wayland Protocol] Handled wl_display.get_registry\n\0".as_ptr());
-                }
-
-                // Would create registry object and send back to client
-                // For now, just log the request
+            DisplayResponse::RegistryCreated { registry_id } => {
+                let _ = registry_id;
             }
-            _ => {
-                return Err(WaylandError::ProtocolViolation);
+            DisplayResponse::CapabilitiesAck { capabilities } => {
+                let _ = capabilities;
+            }
+            DisplayResponse::CompositorAnnounced { name } => {
+                let _ = name;
+            }
+DisplayResponse::Error { code, message } => {
+                 let _ = (code, message);
+             }
+        }
+    }
+
+    /// Handle registry responses
+    fn handle_registry_response(&mut self, response: RegistryResponse) {
+        match response {
+            RegistryResponse::Bound { global_name, object_id, interface, version } => {
+                let _ = (global_name, object_id, interface, version);
             }
         }
+    }
 
-        Ok(())
+    /// Handle compositor responses
+    fn handle_compositor_response(&mut self, response: CompositorResponse) {
+        match response {
+            CompositorResponse::SurfaceCreated { surface_id, object_id } => {
+                let _ = (surface_id, object_id);
+            }
+        }
+    }
+
+    /// Handle surface responses
+    fn handle_surface_response(&mut self, _object_id: u32, _response: SurfaceResponse) {
+    }
+
+    /// Handle SHM pool responses
+    fn handle_shm_pool_response(&mut self, _pool_id: u32, _response: ShmPoolHandlerResponse) {
+    }
+
+    /// Initialize the protocol handler (called when a client connects)
+    pub fn initialize(&mut self) {
+        self.initialized = true;
+    }
+
+    /// Check if handler is initialized
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
     }
 }
 
@@ -287,5 +356,14 @@ mod tests {
         assert_eq!(size_of::<u32>(), 4);
         assert_eq!(size_of::<u16>(), 2);
         assert_eq!(MESSAGE_HEADER_SIZE, 8);
+    }
+
+    #[test]
+    fn test_identify_interface() {
+        assert_eq!(identify_interface(1), InterfaceId::Display);
+        assert_eq!(identify_interface(2), InterfaceId::Registry);
+        assert_eq!(identify_interface(3), InterfaceId::Compositor);
+        assert_eq!(identify_interface(10), InterfaceId::Surface);
+        assert_eq!(identify_interface(999), InterfaceId::Unknown);
     }
 }

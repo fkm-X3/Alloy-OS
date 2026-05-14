@@ -5,6 +5,7 @@
 //! to appropriate handlers.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::fmt;
 
 pub mod socket;
@@ -31,9 +32,13 @@ use self::display_handler::DisplayHandler;
 use self::registry_handler::RegistryHandler;
 use self::compositor_handler::CompositorHandler;
 use self::buffer_handler::ShmBufferHandler;
+use self::surface::SurfaceState;
 use self::seat::SeatManager;
 use self::output::OutputManager;
 use self::input_routing::InputRouter;
+use self::compositor_integration::CompositorIntegration;
+use crate::graphics::vesa::VesaDisplay;
+use crate::fusion::FusionDisplayBackend;
 
 /// Wayland server error types
 #[derive(Debug, Clone, Copy)]
@@ -62,8 +67,8 @@ pub enum WaylandError {
     WriteFailed,
 }
 
-impl fmt::Display for WaylandError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for WaylandError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             WaylandError::SocketCreationFailed => write!(f, "Socket creation failed"),
             WaylandError::SocketBindFailed => write!(f, "Socket bind failed"),
@@ -76,6 +81,25 @@ impl fmt::Display for WaylandError {
             WaylandError::AllocationFailed => write!(f, "Memory allocation failed"),
             WaylandError::ReadFailed => write!(f, "Read operation failed"),
             WaylandError::WriteFailed => write!(f, "Write operation failed"),
+        }
+    }
+}
+
+impl WaylandError {
+    /// Get error message as a static byte string for serial logging
+    pub fn as_bytes(self) -> &'static [u8] {
+        match self {
+            WaylandError::SocketCreationFailed => b"Socket creation failed",
+            WaylandError::SocketBindFailed => b"Socket bind failed",
+            WaylandError::SocketListenFailed => b"Socket listen failed",
+            WaylandError::AcceptFailed => b"Accept connection failed",
+            WaylandError::InvalidFd => b"Invalid file descriptor",
+            WaylandError::ProtocolViolation => b"Protocol violation",
+            WaylandError::ObjectNotFound => b"Object not found",
+            WaylandError::InvalidObjectId => b"Invalid object ID",
+            WaylandError::AllocationFailed => b"Memory allocation failed",
+            WaylandError::ReadFailed => b"Read operation failed",
+            WaylandError::WriteFailed => b"Write operation failed",
         }
     }
 }
@@ -132,9 +156,9 @@ pub struct WaylandServer {
     clients: BTreeMap<ClientId, ClientConnection>,
     /// Next client ID to assign
     next_client_id: u32,
-    /// Protocol message handler
+    /// Protocol message handler (routes to all sub-handlers)
     protocol_handler: ProtocolHandler,
-    /// Display protocol handler
+    /// Display protocol handler (sync, get_registry)
     display_handler: DisplayHandler,
     /// Registry protocol handler
     registry_handler: RegistryHandler,
@@ -148,6 +172,8 @@ pub struct WaylandServer {
     output_manager: OutputManager,
     /// Input router for event dispatch
     input_router: InputRouter,
+    /// Framebuffer reference for compositor integration
+    framebuffer: Option<FusionDisplayBackend>,
 }
 
 impl WaylandServer {
@@ -165,6 +191,7 @@ impl WaylandServer {
             seat_manager: SeatManager::new(),
             output_manager: OutputManager::new(),
             input_router: InputRouter::new(),
+            framebuffer: None,
         }
     }
 
@@ -184,6 +211,13 @@ impl WaylandServer {
         Ok(())
     }
 
+/// Initialize with framebuffer reference for compositor integration
+     pub fn init_with_framebuffer(&mut self, width: u32, height: u32) -> WaylandResult<()> {
+         let display = VesaDisplay::new().ok_or(WaylandError::AllocationFailed)?;
+         self.framebuffer = Some(FusionDisplayBackend::new(display));
+         self.init()
+     }
+
     /// Accept a new client connection
     pub fn accept_client(&mut self) -> WaylandResult<()> {
         if let Some(ref socket) = self.socket {
@@ -193,6 +227,9 @@ impl WaylandServer {
 
             let connection = ClientConnection::new(client_id, fd);
             self.clients.insert(client_id, connection);
+
+            // Send initial registry globals to new client
+            self.send_initial_globals(client_id);
 
             unsafe {
                 crate::ffi::serial_print(b"[Wayland] Accepted client connection\n\0".as_ptr());
@@ -204,13 +241,67 @@ impl WaylandServer {
         }
     }
 
+    /// Send initial global objects to a newly connected client
+    fn send_initial_globals(&mut self, client_id: ClientId) {
+        if let Some(connection) = self.clients.get_mut(&client_id) {
+            // Client creates registry object (ID 2) on connect
+            let _registry = connection.state.register_object(
+                crate::fusion::wayland::client::ObjectType::Registry,
+                1,
+            );
+
+            // Send initial globals to the new client
+            let globals = self.registry_handler.get_global_events_for_client(client_id, 2);
+            for msg in globals {
+                let _ = msg;
+            }
+        }
+    }
+
     /// Dispatch a message from a client
     pub fn dispatch_message(&mut self, client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
-        if let Some(_client) = self.clients.get_mut(&client_id) {
-            self.protocol_handler.handle_message(client_id, message)?;
+        if self.clients.get(&client_id).is_some() {
+            self.protocol_handler.handle_message(
+                client_id,
+                message,
+                &mut self.display_handler,
+                &mut self.registry_handler,
+                &mut self.compositor_handler,
+                &mut self.shm_buffer_handler,
+            )?;
             Ok(())
         } else {
             Err(WaylandError::ObjectNotFound)
+        }
+    }
+
+    /// Process all pending frame callbacks and emit done events
+    pub fn process_frame_callbacks(&mut self) {
+        while let Some(callback) = self.display_handler.get_pending_callback() {
+            if let Ok(msg) = super::wayland::display_handler::DisplayHandler::emit_callback_done(
+                callback.callback_id,
+                callback.callback_data,
+            ) {
+                // In a full implementation, this message would be sent back to the client
+                let _ = msg;
+            }
+        }
+    }
+
+/// Composite all surfaces and present to framebuffer
+    pub fn composite_frame(&mut self) {
+        let surfaces: Vec<(u32, &SurfaceState)> = self.compositor_handler
+            .iter_surfaces()
+            .map(|(id, surface)| (id.0, surface))
+            .collect();
+
+        if let Some(backend) = self.framebuffer.as_mut() {
+            let shm_mgr = self.shm_buffer_handler.shm_manager_mut();
+            let _ = CompositorIntegration::composite_frame(
+                backend,
+                shm_mgr,
+                &surfaces,
+            );
         }
     }
 
@@ -227,7 +318,11 @@ impl WaylandServer {
     /// Remove a client connection
     pub fn disconnect_client(&mut self, client_id: ClientId) -> WaylandResult<()> {
         if let Some(_connection) = self.clients.remove(&client_id) {
-            // Socket will be closed when connection is dropped
+self.registry_handler.remove_client(client_id);
+             self.seat_manager.remove_client(client_id.0);
+             self.output_manager.remove_client(client_id.0);
+            self.compositor_handler.clear_surface_for_client(client_id);
+
             unsafe {
                 crate::ffi::serial_print(b"[Wayland] Client disconnected\n\0".as_ptr());
             }

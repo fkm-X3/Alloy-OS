@@ -48,13 +48,13 @@ pub struct DisplayHandler {
 
 /// Information about a pending callback
 #[derive(Debug, Clone)]
-struct CallbackInfo {
+pub struct CallbackInfo {
     /// Client that requested the callback
-    client_id: ClientId,
+    pub client_id: ClientId,
     /// Callback object ID
-    callback_id: u32,
+    pub callback_id: u32,
     /// Callback data (serial number)
-    callback_data: u32,
+    pub callback_data: u32,
 }
 
 impl DisplayHandler {
@@ -179,6 +179,19 @@ pub enum DisplayResponse {
     /// Registry created
     RegistryCreated {
         registry_id: u32,
+    },
+    /// Capabilities acknowledgment
+    CapabilitiesAck {
+        capabilities: u32,
+    },
+    /// Compositor announced
+    CompositorAnnounced {
+        name: u32,
+    },
+    /// Error response
+    Error {
+        code: u32,
+        message: &'static str,
     },
 }
 

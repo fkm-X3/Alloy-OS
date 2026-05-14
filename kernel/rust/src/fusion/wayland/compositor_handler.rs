@@ -63,6 +63,8 @@ pub struct CompositorHandler {
     surfaces: BTreeMap<SurfaceId, SurfaceState>,
     /// Mapping from object_id to SurfaceId for quick lookup
     object_id_map: BTreeMap<u32, SurfaceId>,
+    /// Mapping from client_id to their surface IDs for cleanup
+    client_surfaces: BTreeMap<ClientId, BTreeMap<SurfaceId, ()>>,
     /// Next surface ID to assign
     next_surface_id: u32,
 }
@@ -73,6 +75,7 @@ impl CompositorHandler {
         Self {
             surfaces: BTreeMap::new(),
             object_id_map: BTreeMap::new(),
+            client_surfaces: BTreeMap::new(),
             next_surface_id: 1,
         }
     }
@@ -80,7 +83,7 @@ impl CompositorHandler {
     /// Handle a wl_compositor request
     pub fn handle_compositor_request(
         &mut self,
-        _client_id: ClientId,
+        client_id: ClientId,
         opcode: u16,
         payload: &[u8],
     ) -> WaylandResult<CompositorResponse> {
@@ -88,7 +91,7 @@ impl CompositorHandler {
 
         match request {
             CompositorRequest::CreateSurface => {
-                self.handle_create_surface(payload)
+                self.handle_create_surface(client_id, payload)
             }
         }
     }
@@ -109,24 +112,17 @@ impl CompositorHandler {
             .ok_or(WaylandError::ObjectNotFound)?;
 
         match request {
-            SurfaceRequest::Damage => {
-                self.handle_damage(surface_id, payload)
-            }
-            SurfaceRequest::Attach => {
-                self.handle_attach(surface_id, payload)
-            }
-            SurfaceRequest::Commit => {
-                self.handle_commit(surface_id, payload)
-            }
-            SurfaceRequest::Destroy => {
-                self.handle_destroy(surface_id, payload)
-            }
+            SurfaceRequest::Damage => self.handle_damage(surface_id, payload),
+            SurfaceRequest::Attach => self.handle_attach(surface_id, payload),
+            SurfaceRequest::Commit => self.handle_commit(surface_id, payload),
+            SurfaceRequest::Destroy => self.handle_destroy(surface_id),
         }
     }
 
     /// Handle wl_compositor.create_surface request
     fn handle_create_surface(
         &mut self,
+        client_id: ClientId,
         payload: &[u8],
     ) -> WaylandResult<CompositorResponse> {
         if payload.len() < 4 {
@@ -143,6 +139,10 @@ impl CompositorHandler {
         let surface = SurfaceState::new(surface_id, object_id, 1);
         self.surfaces.insert(surface_id, surface);
         self.object_id_map.insert(object_id, surface_id);
+        self.client_surfaces
+            .entry(client_id)
+            .or_insert_with(BTreeMap::new)
+            .insert(surface_id, ());
 
         unsafe {
             crate::ffi::serial_print(b"[Wayland Compositor] Created surface\n\0".as_ptr());
@@ -221,10 +221,6 @@ impl CompositorHandler {
             surface.commit();
         }
 
-        unsafe {
-            crate::ffi::serial_print(b"[Wayland Compositor] Surface committed\n\0".as_ptr());
-        }
-
         Ok(SurfaceResponse::Committed)
     }
 
@@ -232,13 +228,35 @@ impl CompositorHandler {
     fn handle_destroy(
         &mut self,
         surface_id: SurfaceId,
-        _payload: &[u8],
     ) -> WaylandResult<SurfaceResponse> {
-        if let Some(surface) = self.surfaces.remove(&surface_id) {
-            self.object_id_map.remove(&surface.object_id);
+        let object_id = {
+            self.surfaces
+                .get(&surface_id)
+                .map(|s| s.object_id)
+        };
+
+        if let Some(oid) = object_id {
+            self.object_id_map.remove(&oid);
+        }
+        self.surfaces.remove(&surface_id);
+
+        // Remove from client surface tracking
+        for (_client_id, surfaces) in self.client_surfaces.iter_mut() {
+            surfaces.remove(&surface_id);
         }
 
         Ok(SurfaceResponse::Destroyed)
+    }
+
+    /// Remove all surfaces belonging to a client (called on disconnect)
+    pub fn clear_surface_for_client(&mut self, client_id: ClientId) {
+        if let Some(surface_ids) = self.client_surfaces.remove(&client_id) {
+            for surface_id in surface_ids.keys() {
+                if let Some(surface) = self.surfaces.remove(surface_id) {
+                    self.object_id_map.remove(&surface.object_id);
+                }
+            }
+        }
     }
 
     /// Get a surface by ID
@@ -321,10 +339,16 @@ mod tests {
         let mut handler = CompositorHandler::new();
         let client_id = ClientId(1);
         let mut payload = Vec::new();
-        payload.extend_from_slice(&3u32.to_le_bytes()); // object_id
+        payload.extend_from_slice(&3u32.to_le_bytes());
 
         let response = handler.handle_compositor_request(client_id, 0, &payload).unwrap();
         assert_eq!(handler.surface_count(), 1);
+        match response {
+            CompositorResponse::SurfaceCreated { surface_id, object_id } => {
+                assert_eq!(surface_id.0, 1);
+                assert_eq!(object_id, 3);
+            }
+        }
     }
 
     #[test]
@@ -332,17 +356,15 @@ mod tests {
         let mut handler = CompositorHandler::new();
         let client_id = ClientId(1);
 
-        // Create surface
         let mut create_payload = Vec::new();
         create_payload.extend_from_slice(&3u32.to_le_bytes());
         handler.handle_compositor_request(client_id, 0, &create_payload).unwrap();
 
-        // Damage surface
         let mut damage_payload = Vec::new();
-        damage_payload.extend_from_slice(&0i32.to_le_bytes()); // x
-        damage_payload.extend_from_slice(&0i32.to_le_bytes()); // y
-        damage_payload.extend_from_slice(&100i32.to_le_bytes()); // width
-        damage_payload.extend_from_slice(&100i32.to_le_bytes()); // height
+        damage_payload.extend_from_slice(&0i32.to_le_bytes());
+        damage_payload.extend_from_slice(&0i32.to_le_bytes());
+        damage_payload.extend_from_slice(&100i32.to_le_bytes());
+        damage_payload.extend_from_slice(&100i32.to_le_bytes());
 
         let response = handler.handle_surface_request(3, 0, &damage_payload).unwrap();
         match response {
@@ -356,16 +378,28 @@ mod tests {
         let mut handler = CompositorHandler::new();
         let client_id = ClientId(1);
 
-        // Create surface
         let mut create_payload = Vec::new();
         create_payload.extend_from_slice(&3u32.to_le_bytes());
         handler.handle_compositor_request(client_id, 0, &create_payload).unwrap();
 
-        // Commit surface
         let response = handler.handle_surface_request(3, 2, &[]).unwrap();
         match response {
             SurfaceResponse::Committed => {}
             _ => panic!("Expected Committed"),
         }
+    }
+
+    #[test]
+    fn test_clear_client_surfaces() {
+        let mut handler = CompositorHandler::new();
+        let client_id = ClientId(1);
+
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&3u32.to_le_bytes());
+        handler.handle_compositor_request(client_id, 0, &payload).unwrap();
+
+        assert_eq!(handler.surface_count(), 1);
+        handler.clear_surface_for_client(client_id);
+        assert_eq!(handler.surface_count(), 0);
     }
 }

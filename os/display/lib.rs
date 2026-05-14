@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "host"), no_std)]
 
+extern crate alloc;
+
 #[cfg(feature = "host")]
 extern crate std;
-
-extern crate alloc;
 
 pub mod apps;
 pub mod client;

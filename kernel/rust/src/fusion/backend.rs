@@ -15,13 +15,9 @@ const COMPOSITOR_CLEAR_COLOR: u32 = 0x0011141C;
 /// Error type for Fusion display operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FusionError {
-    /// Surface not found
     SurfaceNotFound,
-    /// Invalid surface dimensions
     InvalidDimensions,
-    /// Memory allocation failed
     AllocationFailed,
-    /// Invalid pixel data
     InvalidPixelData,
 }
 
@@ -68,19 +64,24 @@ impl SurfaceData {
             pixels: alloc::vec![0u32; pixel_count],
         })
     }
+
+    fn pixel_index(&self, x: u32, y: u32) -> Option<usize> {
+        if x < self.width && y < self.height {
+            Some((y as usize) * (self.width as usize) + (x as usize))
+        } else {
+            None
+        }
+    }
 }
 
 /// Fusion Display Backend
-/// 
-/// Manages framebuffer surfaces for the display server. Each surface represents
-/// a renderable area that can be positioned, resized, and composited onto the
-/// main framebuffer.
 pub struct FusionDisplayBackend {
     surfaces: BTreeMap<u32, SurfaceData>,
     next_surface_id: u32,
     display: VesaDisplay,
     framebuffer_width: u32,
     framebuffer_height: u32,
+    dirty: bool,
 }
 
 impl core::fmt::Debug for FusionDisplayBackend {
@@ -99,14 +100,31 @@ impl FusionDisplayBackend {
         let (width, height) = display.get_resolution();
         let _ = display.clear(COMPOSITOR_CLEAR_COLOR);
         display.swap_buffer();
-        
+
         FusionDisplayBackend {
             surfaces: BTreeMap::new(),
             next_surface_id: 1,
             display,
             framebuffer_width: width,
             framebuffer_height: height,
+            dirty: false,
         }
+    }
+
+    /// Get framebuffer width
+    pub fn framebuffer_width(&self) -> u32 {
+        self.framebuffer_width
+    }
+
+    /// Get framebuffer height
+    pub fn framebuffer_height(&self) -> u32 {
+        self.framebuffer_height
+    }
+
+    /// Clear the entire framebuffer
+    pub fn clear_framebuffer(&mut self) {
+        let _ = self.display.clear(COMPOSITOR_CLEAR_COLOR);
+        self.dirty = true;
     }
 
     /// Create a new framebuffer surface
@@ -141,6 +159,7 @@ impl FusionDisplayBackend {
         let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
         surface.x = x;
         surface.y = y;
+        self.dirty = true;
         Ok(())
     }
 
@@ -159,6 +178,7 @@ impl FusionDisplayBackend {
         surface.height = height;
         surface.pixels.clear();
         surface.pixels.resize(new_pixel_count, 0u32);
+        self.dirty = true;
 
         Ok(())
     }
@@ -167,6 +187,7 @@ impl FusionDisplayBackend {
     pub fn set_visibility(&mut self, id: u32, visible: bool) -> Result<(), FusionError> {
         let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
         surface.visible = visible;
+        self.dirty = true;
         Ok(())
     }
 
@@ -174,6 +195,7 @@ impl FusionDisplayBackend {
     pub fn set_z_order(&mut self, id: u32, z_order: u32) -> Result<(), FusionError> {
         let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
         surface.z_order = z_order;
+        self.dirty = true;
         Ok(())
     }
 
@@ -187,7 +209,6 @@ impl FusionDisplayBackend {
     ) -> Result<(), FusionError> {
         let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
 
-        // Validate dimensions match
         if surface.width != width || surface.height != height {
             return Err(FusionError::InvalidDimensions);
         }
@@ -197,19 +218,85 @@ impl FusionDisplayBackend {
             return Err(FusionError::InvalidPixelData);
         }
 
-        // Copy pixel data
         surface.pixels.copy_from_slice(pixels);
+        self.dirty = true;
         Ok(())
     }
 
-    /// Get all surface IDs sorted by z-order
-    pub fn surfaces_by_z_order(&self) -> Vec<u32> {
-        let mut ids: Vec<_> = self.surfaces.iter()
+    /// Get all visible surface IDs sorted by z-order for composition
+    pub fn surfaces_by_z_order(&self) -> Vec<(u32, &SurfaceData)> {
+        let mut surfaces: Vec<_> = self
+            .surfaces
+            .iter()
             .filter(|(_, s)| s.visible)
+            .map(|(id, s)| (*id, s))
             .collect();
-        
-        ids.sort_by_key(|(_, s)| s.z_order);
-        ids.iter().map(|(id, _)| **id).collect()
+
+        surfaces.sort_by_key(|(_, s)| s.z_order);
+        surfaces
+    }
+
+    /// Composite a single SHM buffer onto the framebuffer at given position
+    /// Used by the Wayland compositor integration layer
+    pub fn composite_shm_buffer(
+        &mut self,
+        buffer: &[u32],
+        buffer_width: u32,
+        buffer_height: u32,
+        dst_x: i32,
+        dst_y: i32,
+        src_x: u32,
+        src_y: u32,
+        src_w: u32,
+        src_h: u32,
+    ) {
+        for row in 0..src_h {
+            let fb_y = dst_y + row as i32;
+            if fb_y < 0 || fb_y >= self.framebuffer_height as i32 {
+                continue;
+            }
+
+            let src_row = src_y + row;
+            if src_row >= buffer_height {
+                break;
+            }
+
+            for col in 0..src_w {
+                let fb_x = dst_x + col as i32;
+                if fb_x < 0 || fb_x >= self.framebuffer_width as i32 {
+                    continue;
+                }
+
+                let src_col = src_x + col;
+                if src_col >= buffer_width {
+                    break;
+                }
+
+                let src_idx = (src_row * buffer_width + src_col) as usize;
+                if src_idx >= buffer.len() {
+                    continue;
+                }
+
+                let pixel = buffer[src_idx];
+                if pixel == 0 {
+                    continue; // Skip fully transparent pixels
+                }
+
+                let fb_idx = (fb_y as u32 * self.framebuffer_width + fb_x as u32) as usize;
+                let fb_size = (self.framebuffer_width * self.framebuffer_height) as usize;
+
+                if fb_idx < fb_size {
+                    unsafe {
+                        self.display.pixel_put(fb_x as u32, fb_y as u32, pixel);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get mutable access to the underlying display
+    pub fn display_mut(&mut self) -> &mut VesaDisplay {
+        &mut self.display
     }
 }
 
@@ -227,7 +314,7 @@ impl DisplayBackend for FusionDisplayBackend {
         if self.surfaces.contains_key(&surface_id.0) {
             return Err(FusionError::SurfaceNotFound);
         }
-        
+
         let surface = SurfaceData::new(width, height)?;
         self.surfaces.insert(surface_id.0, surface);
         Ok(())
@@ -298,7 +385,7 @@ impl DisplayBackend for FusionDisplayBackend {
         _surface_id: SurfaceId,
         _damage: Option<Rect>,
     ) -> Result<(), Self::Error> {
-        // No-op for now - just accept commit requests
+        // Accept commit - actual composition happens during flush
         Ok(())
     }
 
@@ -312,7 +399,6 @@ impl DisplayBackend for FusionDisplayBackend {
     ) -> Result<(), Self::Error> {
         let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
 
-        // Validate dimensions match
         if surface.width != width || surface.height != height {
             return Err(FusionError::InvalidDimensions);
         }
@@ -322,55 +408,59 @@ impl DisplayBackend for FusionDisplayBackend {
             return Err(FusionError::InvalidPixelData);
         }
 
-        // Copy pixel data
         surface.pixels.copy_from_slice(pixels);
+        self.dirty = true;
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
+fn flush(&mut self) -> Result<(), Self::Error> {
+        if !self.dirty {
+            return Ok(());
+        }
+
+        // Clone visible surface data to avoid borrow conflicts
+        let sorted: Vec<(u32, SurfaceData)> = {
+            let mut tmp: Vec<_> = self
+                .surfaces
+                .iter()
+                .filter(|(_, s)| s.visible && s.x >= 0 && s.y >= 0)
+                .map(|(id, s)| (*id, s.clone()))
+                .collect();
+            tmp.sort_by_key(|(_, s)| s.z_order);
+            tmp
+        };
+
+        // Safe: display clear is separate from pixel writes
         self.display.clear(COMPOSITOR_CLEAR_COLOR);
-        
-        // Composite all surfaces to the framebuffer, sorted by z-order
-        let surface_ids = self.surfaces_by_z_order();
-        
-        for surface_id in surface_ids {
-            if let Some(surface) = self.surfaces.get(&surface_id) {
-                if surface.visible && surface.x >= 0 && surface.y >= 0 {
-                    // Draw each row of the surface to the framebuffer
-                    let start_x = surface.x as u32;
-                    let start_y = surface.y as u32;
-                    
-                    for row in 0..surface.height {
-                        let fb_y = start_y + row;
-                        
-                        // Skip if row is out of bounds
-                        if fb_y >= self.framebuffer_height {
-                            break;
-                        }
-                        
-                        for col in 0..surface.width {
-                            let fb_x = start_x + col;
-                            
-                            // Skip if column is out of bounds
-                            if fb_x >= self.framebuffer_width {
-                                continue;
-                            }
-                            
-                            let pixel_idx = (row * surface.width + col) as usize;
-                            if pixel_idx < surface.pixels.len() {
-                                let pixel = surface.pixels[pixel_idx];
-                                // Only write non-transparent pixels (alpha check)
-                                if pixel != 0 {
-                                    let _ = self.display.pixel_put(fb_x, fb_y, pixel);
-                                }
-                            }
+
+        for (_id, surface) in &sorted {
+            for row in 0..surface.height {
+                let fb_y = surface.y + row as i32;
+                if fb_y >= self.framebuffer_height as i32 {
+                    break;
+                }
+                for col in 0..surface.width {
+                    let fb_x = surface.x + col as i32;
+                    if fb_x >= self.framebuffer_width as i32 {
+                        continue;
+                    }
+                    let pixel_idx = (row * surface.width + col) as usize;
+                    if pixel_idx < surface.pixels.len() {
+                        let pixel = surface.pixels[pixel_idx];
+                        if pixel != 0 {
+                            let _ = self.display.pixel_put(
+                                fb_x as u32,
+                                fb_y as u32,
+                                pixel,
+                            );
                         }
                     }
                 }
             }
         }
-        
+
         self.display.swap_buffer();
+        self.dirty = false;
         Ok(())
     }
 }

@@ -18,6 +18,13 @@ extern "C" uint32_t rust_sys_dup(uint32_t oldfd);
 extern "C" uint32_t rust_sys_lseek(uint32_t fd, uint32_t offset, uint32_t whence);
 extern "C" uint32_t rust_sys_pipe(uint32_t pipefd_ptr);
 extern "C" uint32_t rust_sys_execve(uint32_t path_ptr);
+// Socket syscalls
+extern "C" int32_t rust_sys_socket(int32_t domain, int32_t socket_type, int32_t protocol);
+extern "C" int32_t rust_sys_bind(int32_t fd, const void* addr, uint32_t addr_len);
+extern "C" int32_t rust_sys_listen(int32_t fd, int32_t backlog);
+extern "C" int32_t rust_sys_accept(int32_t fd);
+extern "C" int32_t rust_sys_connect(int32_t fd, const void* addr, uint32_t addr_len);
+extern "C" int32_t rust_sys_close_socket(int32_t fd);
 
 // Syscall dispatcher - routes syscalls to handlers
 extern "C" uint32_t syscall_dispatcher(uint32_t syscall_no, 
@@ -69,6 +76,24 @@ extern "C" uint32_t syscall_dispatcher(uint32_t syscall_no,
             break;
         case SYS_EXECVE:
             result = rust_sys_execve(arg0);
+            break;
+        case SYS_SOCKET:
+            result = (uint32_t)(int32_t)rust_sys_socket((int32_t)arg0, (int32_t)arg1, (int32_t)arg2);
+            break;
+        case SYS_BIND:
+            result = (uint32_t)(int32_t)rust_sys_bind((int32_t)arg0, (const void*)arg1, (uint32_t)arg2);
+            break;
+        case SYS_LISTEN:
+            result = (uint32_t)(int32_t)rust_sys_listen((int32_t)arg0, (int32_t)arg1);
+            break;
+        case SYS_ACCEPT:
+            result = (uint32_t)(int32_t)rust_sys_accept((int32_t)arg0);
+            break;
+        case SYS_CONNECT:
+            result = (uint32_t)(int32_t)rust_sys_connect((int32_t)arg0, (const void*)arg1, (uint32_t)arg2);
+            break;
+        case SYS_CLOSE_SOCKET:
+            result = (uint32_t)(int32_t)rust_sys_close_socket((int32_t)arg0);
             break;
         default:
             serial_print("[Syscall] Unknown syscall number\n");

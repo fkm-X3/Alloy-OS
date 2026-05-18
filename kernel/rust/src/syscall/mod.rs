@@ -391,48 +391,53 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
 /// Socket syscall - creates a new socket
 #[no_mangle]
 pub extern "C" fn rust_sys_socket(domain: i32, socket_type: i32, protocol: i32) -> i32 {
-    unsafe { ffi::serial_print(b"[Syscall] sys_socket called\n\0".as_ptr()); }
-    // Placeholder: return error until full socket support is implemented
-    -1
+    crate::net::socket_create(domain, socket_type, protocol)
 }
 
 /// Bind syscall - binds socket to address
 #[no_mangle]
 pub extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
-    unsafe { ffi::serial_print(b"[Syscall] sys_bind called\n\0".as_ptr()); }
-    // Placeholder: return error until full socket support is implemented
-    -1
+    if addr.is_null() || addr_len < 2 {
+        return -1;
+    }
+    let path_bytes = unsafe { core::slice::from_raw_parts(addr.add(2) as *const u8, (addr_len - 2) as usize) };
+    let path = match core::str::from_utf8(path_bytes) {
+        Ok(s) => s,
+        Err(_) => return -1,
+    };
+    crate::net::socket_bind(fd, path)
 }
 
 /// Listen syscall - listens for connections on socket
 #[no_mangle]
 pub extern "C" fn rust_sys_listen(fd: i32, backlog: i32) -> i32 {
-    unsafe { ffi::serial_print(b"[Syscall] sys_listen called\n\0".as_ptr()); }
-    // Placeholder: return error until full socket support is implemented
-    -1
+    crate::net::socket_listen(fd, backlog)
 }
 
 /// Accept syscall - accepts a connection on a listening socket
 #[no_mangle]
 pub extern "C" fn rust_sys_accept(fd: i32) -> i32 {
-    unsafe { ffi::serial_print(b"[Syscall] sys_accept called\n\0".as_ptr()); }
-    // Placeholder: return error until full socket support is implemented
-    -1
+    crate::net::socket_accept(fd)
 }
 
 /// Connect syscall - connects socket to an address
 #[no_mangle]
 pub extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
-    unsafe { ffi::serial_print(b"[Syscall] sys_connect called\n\0".as_ptr()); }
-    // Placeholder: return error until full socket support is implemented
-    -1
+    if addr.is_null() || addr_len < 2 {
+        return -1;
+    }
+    let path_bytes = unsafe { core::slice::from_raw_parts(addr.add(2) as *const u8, (addr_len - 2) as usize) };
+    let path = match core::str::from_utf8(path_bytes) {
+        Ok(s) => s,
+        Err(_) => return -1,
+    };
+    crate::net::socket_connect(fd, path)
 }
 
 /// Close socket syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_close_socket(fd: i32) -> i32 {
-     unsafe { ffi::serial_print(b"[Syscall] sys_close_socket called\n\0".as_ptr()); }
-     rust_sys_close(fd as u32) as i32
+     crate::net::socket_close(fd)
 }
 
 /// Invoke a syscall (for testing/internal use)
@@ -442,11 +447,10 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     unsafe {
         core::arch::asm!(
             "int 0x80",
-            in("eax") num as u32,
-            in("ebx") arg0,
+            inlateout("eax") num as u32 => result,
+            inlateout("ebx") arg0 => _,
             in("ecx") arg1,
             in("edx") arg2,
-            lateout("eax") result,
         );
     }
     result

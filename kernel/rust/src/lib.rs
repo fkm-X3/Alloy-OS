@@ -23,6 +23,7 @@ pub mod syscall;
 pub mod elf;
 pub mod graphics;
 pub mod fusion;
+pub mod net;
 pub mod display_server;
 
 use core::panic::PanicInfo;

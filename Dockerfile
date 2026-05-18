@@ -37,7 +37,9 @@ WORKDIR /workspace
 
 COPY build-toolchain.sh /workspace/build-toolchain.sh
 RUN chmod +x /workspace/build-toolchain.sh \
- && sed -i 's/\r$//' /workspace/build-toolchain.sh
+ && sed -i 's/\r$//' /workspace/build-toolchain.sh \
+ && /workspace/build-toolchain.sh \
+ && rm -rf ~/toolchain-build
 
 COPY . /workspace
 

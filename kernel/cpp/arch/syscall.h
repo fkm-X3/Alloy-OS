@@ -16,6 +16,12 @@
 #define SYS_LSEEK   9
 #define SYS_PIPE    10
 #define SYS_EXECVE  11
+#define SYS_SOCKET    12
+#define SYS_BIND      13
+#define SYS_LISTEN    14
+#define SYS_ACCEPT    15
+#define SYS_CONNECT   16
+#define SYS_CLOSE_SOCKET 17
 
 // Syscall dispatcher (called from assembly stub)
 extern "C" uint32_t syscall_dispatcher(uint32_t syscall_no, 

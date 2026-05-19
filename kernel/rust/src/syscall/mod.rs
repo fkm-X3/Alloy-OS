@@ -30,6 +30,7 @@ pub enum SyscallNumber {
     Accept = 15,
     Connect = 16,
     CloseSocket = 17,
+    HasPendingConnections = 18,
 }
 
 /// sys_exit - Terminate the current task
@@ -438,6 +439,12 @@ pub extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr
 #[no_mangle]
 pub extern "C" fn rust_sys_close_socket(fd: i32) -> i32 {
      crate::net::socket_close(fd)
+}
+
+/// Has pending connections syscall
+#[no_mangle]
+pub extern "C" fn rust_sys_has_pending_connections(fd: i32) -> i32 {
+    crate::net::socket_has_pending_connections(fd)
 }
 
 /// Invoke a syscall (for testing/internal use)

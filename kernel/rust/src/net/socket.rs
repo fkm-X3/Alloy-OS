@@ -123,6 +123,13 @@ impl SocketTable {
         }
         None
     }
+
+    fn has_pending_connections(&self, fd: u32) -> bool {
+        match self.get(fd) {
+            Some(s) => !s.pending_connections.is_empty(),
+            None => false,
+        }
+    }
 }
 
 static SOCKET_TABLE: SpinLock<Option<SocketTable>> = SpinLock::new(None);
@@ -388,5 +395,21 @@ pub fn socket_close(fd: i32) -> i32 {
             0
         }
         None => -1,
+    }
+}
+
+pub fn socket_has_pending_connections(fd: i32) -> i32 {
+    if fd < 0 {
+        return 0;
+    }
+    let ufd = fd as u32;
+
+    ensure_table();
+    let guard = SOCKET_TABLE.lock();
+    let table = guard.as_ref().unwrap();
+    if table.has_pending_connections(ufd) {
+        1
+    } else {
+        0
     }
 }

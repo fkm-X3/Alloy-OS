@@ -157,11 +157,7 @@ impl UnixSocket {
         };
 
         if client_fd < 0 {
-            // Fallback: return a placeholder FD
-            unsafe {
-                ffi::serial_print(b"[Wayland Socket] accept() syscall not available, returning placeholder\n\0".as_ptr());
-            }
-            return Ok(4); // Placeholder client FD
+            return Err(WaylandError::AcceptFailed);
         }
 
         unsafe {
@@ -169,6 +165,20 @@ impl UnixSocket {
         }
 
         Ok(client_fd as u32)
+    }
+
+    /// Check if the socket has pending connections waiting to be accepted
+    pub fn has_pending_connections(&self) -> bool {
+        let fd = match self.fd {
+            Some(f) => f,
+            None => return false,
+        };
+
+        let result = unsafe {
+            crate::syscall::rust_sys_has_pending_connections(fd as i32)
+        };
+
+        result == 1
     }
 
     /// Connect to an existing socket (for client-side usage)

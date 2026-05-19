@@ -26,6 +26,7 @@ Some(table::SyscallNumber::Socket) => unsafe { crate::syscall::rust_sys_socket(e
          Some(table::SyscallNumber::Accept) => unsafe { crate::syscall::rust_sys_accept(ebx as i32) as u32 },
          Some(table::SyscallNumber::Connect) => unsafe { crate::syscall::rust_sys_connect(ebx as i32, ecx as *const core::ffi::c_void, edx as u32) as u32 },
          Some(table::SyscallNumber::CloseSocket) => unsafe { crate::syscall::rust_sys_close_socket(ebx as i32) as u32 },
+         Some(table::SyscallNumber::HasPendingConnections) => unsafe { crate::syscall::rust_sys_has_pending_connections(ebx as i32) as u32 },
         None => {
             // Unknown syscall number - return sentinel error code
             core::u32::MAX

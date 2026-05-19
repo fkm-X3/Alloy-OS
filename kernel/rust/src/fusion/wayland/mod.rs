@@ -342,6 +342,14 @@ self.registry_handler.remove_client(client_id);
         self.socket.is_some()
     }
 
+    /// Check if server socket has pending connections
+    pub fn has_pending_connections(&self) -> bool {
+        match &self.socket {
+            Some(socket) => socket.has_pending_connections(),
+            None => false,
+        }
+    }
+
     /// Get reference to display handler
     pub fn display_handler(&self) -> &DisplayHandler {
         &self.display_handler

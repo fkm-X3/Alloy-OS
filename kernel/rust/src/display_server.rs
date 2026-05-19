@@ -1024,7 +1024,7 @@ fn run_cosmos(display: VesaDisplay, bootstrap_report: CosmosBootstrapReport) -> 
 
     loop {
         // Accept Wayland client connections
-        if wayland_server.is_listening() {
+        if wayland_server.is_listening() && wayland_server.has_pending_connections() {
             let _ = wayland_server.accept_client();
         }
 

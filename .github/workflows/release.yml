@@ -5,355 +5,78 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version_bump:
-        description: 'Version bump type (patch, minor, major)'
-        required: false
-        default: 'patch'
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-      create_tag:
-        description: 'Create a new tag and release'
-        required: false
-        default: true
-        type: boolean
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      previous_tag: ${{ steps.version.outputs.previous_tag }}
-      is_new_tag: ${{ steps.version.outputs.is_new_tag }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Determine version
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-            IS_NEW_TAG="true"
-          else
-            IS_NEW_TAG="false"
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            CURRENT_VERSION="${LATEST_TAG#v}"
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-            BUMP="${{ github.event.inputs.version_bump || 'patch' }}"
-            case "$BUMP" in
-              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-              patch) PATCH=$((PATCH + 1)) ;;
-            esac
-            VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          fi
-
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
-          echo "is_new_tag=$IS_NEW_TAG" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION (previous: $PREVIOUS_TAG)"
-
-      - name: Create tag if dispatch
-        if: ${{ !startsWith(github.ref, 'refs/tags/') && github.event.inputs.create_tag == 'true' }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
-          git push origin "${{ steps.version.outputs.version }}"
-
-  build:
-    needs: prepare
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            kernel/rust/target/
-          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            rust-${{ runner.os }}-
-
-      - name: Build release in Docker
-        uses: ./.github/actions/docker-ci
-        with:
-          command: |
-            make clean
-            make iso
-            echo "Build Date: $(date)" > build/BUILD_INFO.txt
-            echo "Commit: ${{ github.sha }}" >> build/BUILD_INFO.txt
-            echo "Tag: ${{ needs.prepare.outputs.version }}" >> build/BUILD_INFO.txt
-            cat build/BUILD_INFO.txt
-
-      - name: Create release archive
-        run: |
-          cd build
-          tar -czf alloy-os-${{ needs.prepare.outputs.version }}.tar.gz alloy.iso alloy.elf BUILD_INFO.txt
-          sha256sum alloy-os-${{ needs.prepare.outputs.version }}.tar.gz > alloy-os-${{ needs.prepare.outputs.version }}.tar.gz.sha256
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: alloy-os-release
-          path: |
-            build/alloy.iso
-            build/alloy.elf
-            build/alloy-os-*.tar.gz
-            build/alloy-os-*.tar.gz.sha256
-            build/BUILD_INFO.txt
-          retention-days: 90
-
-  changelog:
-    needs: prepare
-    runs-on: ubuntu-latest
-    outputs:
-      release_body: ${{ steps.generate.outputs.release_body }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        id: generate
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          PREVIOUS_TAG="${{ needs.prepare.outputs.previous_tag }}"
-
-          REPO="${{ github.repository }}"
-          REPO_URL="https://github.com/${REPO}"
-
-          # Date range
-          if [ -n "$PREVIOUS_TAG" ]; then
-            PREV_DATE=$(git log -1 --format='%ci' "$PREVIOUS_TAG")
-            SINCE="$PREVIOUS_TAG"
-          else
-            PREV_DATE="inception"
-            SINCE=""
-          fi
-
-          # Get commits in range
-          if [ -n "$SINCE" ]; then
-            COMMITS=$(git log "${SINCE}..HEAD" --format='%H|%s|%an|%ae' 2>/dev/null || git log --format='%H|%s|%an|%ae')
-          else
-            COMMITS=$(git log --format='%H|%s|%an|%ae')
-          fi
-
-          # Count commits
-          COMMIT_COUNT=$(echo "$COMMITS" | grep -c '|' || echo "0")
-
-          # Get merged PRs in range
-          if [ -n "$SINCE" ]; then
-            MERGE_COMMITS=$(git log "${SINCE}..HEAD" --merges --format='%H|%s|%an' 2>/dev/null || echo "")
-          else
-            MERGE_COMMITS=$(git log --merges --format='%H|%s|%an' || echo "")
-          fi
-
-          PR_COUNT=$(echo "$MERGE_COMMITS" | grep -c '|' || echo "0")
-
-          # Get contributors with stats
-          declare -A CONTRIB_COMMITS
-          declare -A CONTRIB_ADDITIONS
-          declare -A CONTRIB_DELETIONS
-
-          while IFS='|' read -r hash subject author email; do
-            [ -z "$hash" ] && continue
-            CONTRIB_COMMITS["$author"]=$(( ${CONTRIB_COMMITS["$author"]:-0} + 1 ))
-
-            STATS=$(git show --stat --format='' "$hash" 2>/dev/null | tail -1)
-            if echo "$STATS" | grep -q 'changed'; then
-              ADD=$(echo "$STATS" | grep -oP '\d+(?= insertion)' || echo "0")
-              DEL=$(echo "$STATS" | grep -oP '\d+(?= deletion)' || echo "0")
-              CONTRIB_ADDITIONS["$author"]=$(( ${CONTRIB_ADDITIONS["$author"]:-0} + ${ADD:-0} ))
-              CONTRIB_DELETIONS["$author"]=$(( ${CONTRIB_DELETIONS["$author"]:-0} + ${DEL:-0} ))
-            fi
-          done <<< "$COMMITS"
-
-          # Build contributors table
-          CONTRIB_TABLE="| Contributor | Commits | Lines Added | Lines Removed |\n"
-          CONTRIB_TABLE+="|---|---|---|---|\n"
-
-          TOTAL_ADDITIONS=0
-          TOTAL_DELETIONS=0
-
-          for author in "${!CONTRIB_COMMITS[@]}"; do
-            COMMITS=${CONTRIB_COMMITS[$author]}
-            ADDS=${CONTRIB_ADDITIONS[$author]:-0}
-            DELS=${CONTRIB_DELETIONS[$author]:-0}
-            CONTRIB_TABLE+="| ${author} | ${COMMITS} | +${ADDS} | -${DELS} |\n"
-            TOTAL_ADDITIONS=$((TOTAL_ADDITIONS + ADDS))
-            TOTAL_DELETIONS=$((TOTAL_DELETIONS + DELS))
-          done
-
-          CONTRIB_COUNT=${#CONTRIB_COMMITS[@]}
-
-          # Categorize commits
-          FEATURES=""
-          FIXES=""
-          DOCS=""
-          CHORES=""
-          OTHER=""
-
-          while IFS='|' read -r hash subject author email; do
-            [ -z "$subject" ] && continue
-            # Skip merge commits for categorization
-            if echo "$subject" | grep -qi '^merge'; then
-              continue
-            fi
-
-            SHORT_HASH="${hash:0:7}"
-            COMMIT_LINK="[${SHORT_HASH}](${REPO_URL}/commit/${hash})"
-
-            if echo "$subject" | grep -qiE '^(feat|feature)[\(:]'; then
-              FEATURES+="  - ${subject} (${COMMIT_LINK})\n"
-            elif echo "$subject" | grep -qiE '^(fix|bug|hotfix)[\(:]'; then
-              FIXES+="  - ${subject} (${COMMIT_LINK})\n"
-            elif echo "$subject" | grep -qiE '^(docs|doc)[\(:]'; then
-              DOCS+="  - ${subject} (${COMMIT_LINK})\n"
-            elif echo "$subject" | grep -qiE '^(chore|ci|build|refactor|style|test)[\(:]'; then
-              CHORES+="  - ${subject} (${COMMIT_LINK})\n"
-            else
-              OTHER+="  - ${subject} (${COMMIT_LINK})\n"
-            fi
-          done <<< "$COMMITS"
-
-          # Get PR details
-          PR_LIST=""
-          if [ -n "$MERGE_COMMITS" ]; then
-            while IFS='|' read -r hash subject author; do
-              [ -z "$subject" ] && continue
-              # Try to extract PR number
-              PR_NUM=$(echo "$subject" | grep -oP '#\K\d+' || echo "")
-              if [ -n "$PR_NUM" ]; then
-                PR_LIST+="  - [#${PR_NUM}](${REPO_URL}/pull/${PR_NUM}) ${subject}\n"
-              else
-                SHORT_HASH="${hash:0:7}"
-                PR_LIST+="  - ${subject} ([${SHORT_HASH}](${REPO_URL}/commit/${hash}))\n"
-              fi
-            done <<< "$MERGE_COMMITS"
-          fi
-
-          # Build release body
-          BODY="# Alloy OS ${VERSION}
-
-## Summary
-- **Release date**: $(date '+%Y-%m-%d')
-- **Commits since last release**: ${COMMIT_COUNT}
-- **Merged pull requests**: ${PR_COUNT}
-- **Contributors**: ${CONTRIB_COUNT}
-- **Total lines changed**: +${TOTAL_ADDITIONS} / -${TOTAL_DELETIONS}
-
-## Changelog
-"
-
-          if [ -n "$FEATURES" ]; then
-            BODY+="### Features
-${FEATURES}
-"
-          fi
-
-          if [ -n "$FIXES" ]; then
-            BODY+="### Bug Fixes
-${FIXES}
-"
-          fi
-
-          if [ -n "$DOCS" ]; then
-            BODY+="### Documentation
-${DOCS}
-"
-          fi
-
-          if [ -n "$CHORES" ]; then
-            BODY+="### Maintenance
-${CHORES}
-"
-          fi
-
-          if [ -n "$OTHER" ]; then
-            BODY+="### Other Changes
-${OTHER}
-"
-          fi
-
-          if [ -n "$PR_LIST" ]; then
-            BODY+="### Merged Pull Requests
-${PR_LIST}
-"
-          fi
-
-          BODY+="## Contributors
-
-${CONTRIB_TABLE}
-"
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            BODY+="## Full Changelog
-[${PREVIOUS_TAG}...${VERSION}](${REPO_URL}/compare/${PREVIOUS_TAG}...${VERSION})
-"
-          else
-            BODY+="## Full Changelog
-[All commits](${REPO_URL}/commits/main)
-"
-          fi
-
-          # Escape for GitHub Actions output
-          BODY="${BODY//'%'/'%25'}"
-          BODY="${BODY//$'\n'/'%0A'}"
-          BODY="${BODY//$'\r'/'%0D'}"
-
-          echo "release_body=$BODY" >> $GITHUB_OUTPUT
-
-          # Also save to file for debugging
-          echo -e "${{ needs.prepare.outputs.version }}" > CHANGELOG_VERSION.txt
-          echo -e "$BODY" | sed 's/%0A/\n/g; s/%25/%/g' > CHANGELOG.md
-          cat CHANGELOG.md
-
-      - name: Upload changelog
-        uses: actions/upload-artifact@v7
-        with:
-          name: changelog
-          path: |
-            CHANGELOG.md
-            CHANGELOG_VERSION.txt
-          retention-days: 30
-
   release:
-    needs: [prepare, build, changelog]
     runs-on: ubuntu-latest
-    if: ${{ needs.prepare.outputs.is_new_tag == 'true' || github.event.inputs.create_tag == 'true' }}
+    
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v7
-        with:
-          pattern: alloy-os-release
-          merge-multiple: true
+    - name: Checkout code
+      uses: actions/checkout@v6
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            alloy.iso
-            alloy-os-*.tar.gz
-            alloy-os-*.tar.gz.sha256
-            BUILD_INFO.txt
-          body: ${{ needs.changelog.outputs.release_body }}
-          draft: false
-          prerelease: ${{ contains(needs.prepare.outputs.version, 'rc') || contains(needs.prepare.outputs.version, 'beta') || contains(needs.prepare.outputs.version, 'alpha') }}
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Cache Rust dependencies
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          kernel/rust/target/
+        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+        restore-keys: |
+          rust-${{ runner.os }}-
+    
+    - name: Build release in Docker
+      uses: ./.github/actions/docker-ci
+      with:
+        command: |
+          make clean
+          make iso
+          echo "Build Date: $(date)" > build/BUILD_INFO.txt
+          echo "Commit: ${{ github.sha }}" >> build/BUILD_INFO.txt
+          echo "Tag: ${{ github.ref_name }}" >> build/BUILD_INFO.txt
+          cat build/BUILD_INFO.txt
+    
+    - name: Create release archive
+      run: |
+        cd build
+        tar -czf alloy-os-${{ github.ref_name }}.tar.gz alloy.iso alloy.elf BUILD_INFO.txt
+        sha256sum alloy-os-${{ github.ref_name }}.tar.gz > alloy-os-${{ github.ref_name }}.tar.gz.sha256
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: alloy-os-release
+        path: |
+          build/alloy.iso
+          build/alloy.elf
+          build/alloy-os-*.tar.gz
+          build/alloy-os-*.tar.gz.sha256
+          build/BUILD_INFO.txt
+        retention-days: 90
+    
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v3
+      with:
+        files: |
+          build/alloy.iso
+          build/alloy-os-*.tar.gz
+          build/alloy-os-*.tar.gz.sha256
+          build/BUILD_INFO.txt
+        body: |
+          # Alloy OS ${{ github.ref_name }}
+          
+          ## Downloads
+          - `alloy.iso` - Bootable ISO image
+          - `alloy-os-${{ github.ref_name }}.tar.gz` - Complete release package
+          
+          ## Checksums
+          See `alloy-os-${{ github.ref_name }}.tar.gz.sha256` for SHA256 checksum
+          
+          ## Running
+          ```bash
+          qemu-system-i386 -cdrom alloy.iso -serial stdio
+          ```
+        draft: false
+        prerelease: false

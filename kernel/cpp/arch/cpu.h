@@ -3,7 +3,10 @@
 
 #include "../boot/types.h"
 
-// CPU feature flags (from CPUID)
+// Architecture-specific CPU feature flags
+
+#ifdef ARCH_I686
+// i686 CPUID feature flags (from EDX of CPUID leaf 1)
 #define CPU_FEATURE_FPU     (1 << 0)   // Floating Point Unit
 #define CPU_FEATURE_VME     (1 << 1)   // Virtual Mode Extensions
 #define CPU_FEATURE_DE      (1 << 2)   // Debugging Extensions
@@ -28,10 +31,43 @@
 #define CPU_FEATURE_SSE     (1 << 25)  // SSE instructions
 #define CPU_FEATURE_SSE2    (1 << 26)  // SSE2 instructions
 
+#elif defined(ARCH_X86_64)
+// x86_64 CPUID feature flags (same as i686, plus additional)
+#define CPU_FEATURE_FPU     (1 << 0)
+#define CPU_FEATURE_SSE     (1 << 25)
+#define CPU_FEATURE_SSE2    (1 << 26)
+#define CPU_FEATURE_SSE3    (1 << 0)   // ECX bit 0
+#define CPU_FEATURE_SSSE3   (1 << 9)   // ECX bit 9
+#define CPU_FEATURE_SSE41   (1 << 19)  // ECX bit 19
+#define CPU_FEATURE_SSE42   (1 << 20)  // ECX bit 20
+#define CPU_FEATURE_AVX     (1 << 28)  // ECX bit 28
+#define CPU_FEATURE_AES     (1 << 25)  // ECX bit 25
+
+#elif defined(ARCH_AARCH64)
+// ARM64 feature flags (from ID_AA64ISAR0_EL1, etc.)
+#define CPU_FEATURE_AES     (1 << 0)
+#define CPU_FEATURE_SHA1    (1 << 1)
+#define CPU_FEATURE_SHA2    (1 << 2)
+#define CPU_FEATURE_CRC32   (1 << 3)
+#define CPU_FEATURE_ATOMICS (1 << 4)
+#define CPU_FEATURE_RDM     (1 << 5)
+#define CPU_FEATURE_SHA512  (1 << 6)
+#define CPU_FEATURE_DP      (1 << 7)
+
+#else
+// Default to i686 for backward compatibility
+#define CPU_FEATURE_FPU     (1 << 0)
+#define CPU_FEATURE_TSC     (1 << 4)
+#define CPU_FEATURE_MSR     (1 << 5)
+#define CPU_FEATURE_APIC    (1 << 9)
+#define CPU_FEATURE_SSE     (1 << 25)
+#define CPU_FEATURE_SSE2    (1 << 26)
+#endif
+
 // CPU information structure
 struct cpu_info {
-    char vendor[13];        // CPU vendor string (e.g., "GenuineIntel")
-    uint32_t features;      // Feature flags from CPUID
+    char vendor[16];        // CPU vendor string
+    uint32_t features;      // Feature flags
     uint32_t family;        // Processor family
     uint32_t model;         // Processor model
     uint32_t stepping;      // Stepping ID

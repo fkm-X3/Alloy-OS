@@ -1,0 +1,14 @@
+[package]
+name = "alloy-kernel-hal"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "alloy_kernel_hal"
+path = "src/lib.rs"
+
+[features]
+default = ["i686"]
+i686 = []
+x86_64 = []
+aarch64 = []

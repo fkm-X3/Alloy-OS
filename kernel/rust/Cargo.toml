@@ -7,12 +7,16 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [features]
-default = []
-debug-alloc = []  # Enable verbose allocation logging
+default = ["i686"]
+i686 = ["alloy-kernel-hal/i686"]
+x86_64 = ["alloy-kernel-hal/x86_64"]
+aarch64 = ["alloy-kernel-hal/aarch64"]
+debug-alloc = []
 
 [dependencies]
 alloy-os-display = { path = "../../os/display" }
 alloy-os-cosmos-de = { path = "../../os/cosmos-de" }
+alloy-kernel-hal = { path = "../hal" }
 
 [profile.dev]
 panic = "abort"

@@ -1,22 +1,67 @@
 # Alloy Kernel Makefile
 
-# Architecture
-ARCH ?= x86_64
-TARGET ?= i686-alloy
+# Architecture selection (default: i686 for testing)
+# Supported: i686, x86_64 (placeholder), aarch64 (minimal)
+ARCH ?= i686
+
+# Architecture-specific configuration
+ifeq ($(ARCH),i686)
+    TARGET = i686-alloy
+    CROSS_PREFIX = $(HOME)/.local/i686-elf/bin/i686-elf-
+    AS = nasm
+    ASFLAGS = -f elf32
+    CFLAGS_ARCH = -m32 -DARCH_I686
+    LDFLAGS_ARCH = -m elf_i386
+    QEMU = qemu-system-i386
+    QEMU_FLAGS = -serial stdio
+    RUST_TARGET = i686-alloy.json
+    RUST_FEATURES = --features i686
+    LINKER = kernel/linker.ld
+    BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot.asm
+    ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
+else ifeq ($(ARCH),x86_64)
+    TARGET = x86_64-alloy
+    CROSS_PREFIX = $(HOME)/.local/x86_64-elf/bin/x86_64-elf-
+    AS = nasm
+    ASFLAGS = -f elf64
+    CFLAGS_ARCH = -m64 -DARCH_X86_64
+    LDFLAGS_ARCH = -m elf_x86_64
+    QEMU = qemu-system-x86_64
+    QEMU_FLAGS = -serial stdio
+    RUST_TARGET = x86_64-alloy.json
+    RUST_FEATURES = --features x86_64
+    LINKER = kernel/linker_x86_64.ld
+    BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
+    ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
+else ifeq ($(ARCH),aarch64)
+    TARGET = aarch64-alloy
+    CROSS_PREFIX = $(HOME)/.local/aarch64-elf/bin/aarch64-elf-
+    AS = $(CROSS_PREFIX)gcc
+    ASFLAGS = -c -march=armv8-a
+    CFLAGS_ARCH = -march=armv8-a -DARCH_AARCH64
+    LDFLAGS_ARCH = -m aarch64elf
+    QEMU = qemu-system-aarch64
+    QEMU_FLAGS = -machine virt -cpu cortex-a53 -serial stdio -kernel
+    RUST_TARGET = aarch64-alloy.json
+    RUST_FEATURES = --features aarch64
+    LINKER = kernel/linker_aarch64.ld
+    BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
+    ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
+else
+    $(error Unsupported architecture: $(ARCH). Use i686, x86_64, or aarch64)
+endif
 
 # Cross-compiler toolchain
-AS = nasm
-CC = $(HOME)/.local/i686-elf/bin/i686-elf-gcc
-CXX = $(HOME)/.local/i686-elf/bin/i686-elf-g++
-LD = $(HOME)/.local/i686-elf/bin/i686-elf-ld
+CC = $(CROSS_PREFIX)gcc
+CXX = $(CROSS_PREFIX)g++
+LD = $(CROSS_PREFIX)ld
 RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-ASFLAGS = -f elf32
-CFLAGS = -m32 -ffreestanding -nostdlib -fno-builtin -fno-exceptions -fno-rtti -Wall -Wextra -O2 -Ikernel/cpp
+CFLAGS = $(CFLAGS_ARCH) -ffreestanding -nostdlib -fno-builtin -fno-exceptions -fno-rtti -Wall -Wextra -O2 -Ikernel/cpp
 CXXFLAGS = $(CFLAGS) -fno-use-cxa-atexit
-LDFLAGS = -m elf_i386 -T kernel/linker.ld
+LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories
 BUILD_DIR = build
@@ -29,12 +74,7 @@ MM_DIR = $(KERNEL_CPP_DIR)/mm
 RUST_FFI_DIR = $(KERNEL_CPP_DIR)/rust
 
 # Source files
-ASM_SOURCES = $(BOOT_DIR)/multiboot2.asm \
-              $(BOOT_DIR)/boot.asm \
-              $(ARCH_DIR)/gdt_flush.asm \
-              $(ARCH_DIR)/idt_stubs.asm \
-              $(ARCH_DIR)/context_switch.asm \
-              $(ARCH_DIR)/syscall_entry.asm
+ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
 CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(KERNEL_CPP_DIR)/arch/cpu.cpp \
@@ -52,7 +92,8 @@ CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
               $(MM_DIR)/vmm.cpp
 
 # Object files
-ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(ASM_SOURCES))
+ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
+ASM_OBJECTS += $(patsubst %.S,$(BUILD_DIR)/%.o,$(filter %.S,$(ASM_SOURCES)))
 CPP_OBJECTS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
 RUST_LIB = $(BUILD_DIR)/kernel/rust/liballoy_kernel_rust.a
 OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
@@ -61,7 +102,7 @@ OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run
+.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch
 
 all: $(KERNEL_ELF)
 
@@ -69,21 +110,27 @@ iso: $(KERNEL_ISO)
 
 # Link kernel
 $(KERNEL_ELF): $(OBJECTS) $(RUST_LIB)
-	@echo "Linking kernel..."
+	@echo "Linking kernel ($(ARCH))..."
 	@mkdir -p $(dir $@)
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS) $(RUST_LIB)
 	@echo "Kernel built successfully: $@"
 
 # Build Rust library
 $(RUST_LIB): $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
-	@echo "Building Rust kernel library..."
+	@echo "Building Rust kernel library ($(ARCH))..."
 	@mkdir -p $(BUILD_DIR)/kernel/rust
-	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target i686-alloy.json -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
-	@cp $(KERNEL_RUST_DIR)/target/i686-alloy/release/liballoy_kernel_rust.a $(RUST_LIB)
+	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target $(RUST_TARGET) -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
+	@cp $(KERNEL_RUST_DIR)/target/$(TARGET)/release/liballoy_kernel_rust.a $(RUST_LIB)
 	@echo "Rust library built: $(RUST_LIB)"
 
-# Assemble .asm files
+# Assemble .asm files (NASM)
 $(BUILD_DIR)/%.o: %.asm
+	@echo "Assembling $<..."
+	@mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
+# Assemble .S files (GAS)
+$(BUILD_DIR)/%.o: %.S
 	@echo "Assembling $<..."
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
@@ -94,7 +141,7 @@ $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Create bootable ISO
+# Create bootable ISO (x86 only)
 $(KERNEL_ISO): $(KERNEL_ELF)
 	@echo "Creating ISO image..."
 	@mkdir -p $(BUILD_DIR)/isodir/boot/grub
@@ -105,10 +152,10 @@ $(KERNEL_ISO): $(KERNEL_ELF)
 
 # Run in QEMU
 run: $(KERNEL_ISO)
-	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -no-reboot -no-shutdown -D qemu.log
+	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
 
 output: $(KERNEL_ISO)
-	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -display none -no-reboot -no-shutdown -D qemu.log
+	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
 
 # Boot headless and auto-capture desktop shell screenshot (PNG)
 screenshot: $(KERNEL_ISO)
@@ -124,7 +171,7 @@ mouse-screenshot: $(KERNEL_ISO)
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)
-	qemu-system-i386 -cdrom $(KERNEL_ISO) -serial stdio -s -S
+	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -s -S
 
 # Clean build artifacts
 clean:
@@ -140,6 +187,22 @@ lazy:
 	make iso
 	@echo "Run 'make run' to test."
 
+# Print architecture configuration
+print-arch:
+	@echo "ARCH = $(ARCH)"
+	@echo "TARGET = $(TARGET)"
+	@echo "CC = $(CC)"
+	@echo "CXX = $(CXX)"
+	@echo "LD = $(LD)"
+	@echo "AS = $(AS)"
+	@echo "ASFLAGS = $(ASFLAGS)"
+	@echo "CFLAGS_ARCH = $(CFLAGS_ARCH)"
+	@echo "LDFLAGS_ARCH = $(LDFLAGS_ARCH)"
+	@echo "QEMU = $(QEMU)"
+	@echo "RUST_TARGET = $(RUST_TARGET)"
+	@echo "RUST_FEATURES = $(RUST_FEATURES)"
+	@echo "ARCH_DIR = $(ARCH_DIR)"
+
 # Print variables for debugging
 print-%:
 	@echo $* = $($*)
@@ -148,7 +211,7 @@ print-%:
 docker-build:
 	@echo "Building Alloy OS Docker image..."
 	docker build -t alloy-os-dev:latest .
-	@echo "Docker image built: alloy-os:latest"
+	@echo "Docker image built: alloy-os-dev:latest"
 
 docker-build-prod:
 		@echo "Building Alloy OS Docker image..."

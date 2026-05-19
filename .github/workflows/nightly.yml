@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -25,7 +25,7 @@ jobs:
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -52,7 +52,7 @@ jobs:
           echo "Type: Nightly Pre-release" >> build-artifacts/BUILD_INFO.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.vars.outputs.tag }}
@@ -66,6 +66,7 @@ jobs:
             ```bash
             qemu-system-i386 -cdrom alloy.iso -serial stdio
             ```
+          generate_release_notes: true #
           draft: false
           prerelease: true
           files: |

@@ -3,9 +3,14 @@
 version = 4
 
 [[package]]
+name = "alloy-kernel-hal"
+version = "0.1.0"
+
+[[package]]
 name = "alloy-kernel-rust"
 version = "0.1.0"
 dependencies = [
+ "alloy-kernel-hal",
  "alloy-os-cosmos-de",
  "alloy-os-display",
 ]

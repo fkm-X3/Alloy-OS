@@ -4,6 +4,7 @@ use core::fmt;
 use crate::apps::window_manager::{WindowId, WindowManager, WindowOptions, WindowState};
 use crate::protocol::{ClientId, DisplayRequest, DisplayResponse, PixelFormat, SurfaceId};
 use crate::server::{DisplayBackend, DisplayServer, ServerError};
+use crate::theme::effects;
 
 pub const SHELL_CLIENT_ID: ClientId = ClientId::new(4096);
 pub const PANEL_HEIGHT: u32 = 30;
@@ -588,17 +589,7 @@ impl DesktopShell {
     }
 
     fn build_background_pixels(width: u32, height: u32) -> Result<Vec<u32>, DesktopShellError> {
-        let mut pixels = Self::allocate_pixels(width, height, 0xFF0B0D12)?;
-        for y in 0..height {
-            let shade = 0x12 + ((y.saturating_mul(0x26) / height.max(1)) & 0x3F);
-            let row_color = 0xFF000000 | (shade << 16) | (shade << 8) | (shade + 0x10).min(0xFF);
-            let row_start = (y * width) as usize;
-            let row_end = row_start.saturating_add(width as usize).min(pixels.len());
-            for pixel in pixels[row_start..row_end].iter_mut() {
-                *pixel = row_color;
-            }
-        }
-        Ok(pixels)
+        Ok(effects::build_gradient_background(width, height))
     }
 
     fn build_panel_pixels(&self) -> Result<Vec<u32>, DesktopShellError> {

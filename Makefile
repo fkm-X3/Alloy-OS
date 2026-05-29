@@ -53,50 +53,47 @@ endif
 
 # Cross-compiler toolchain
 CC = $(CROSS_PREFIX)gcc
-CXX = $(CROSS_PREFIX)g++
 LD = $(CROSS_PREFIX)ld
 RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -ffreestanding -nostdlib -fno-builtin -fno-exceptions -fno-rtti -Wall -Wextra -O2 -Ikernel/cpp
-CXXFLAGS = $(CFLAGS) -fno-use-cxa-atexit
+CFLAGS = $(CFLAGS_ARCH) -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories
 BUILD_DIR = build
 BOOT_DIR = boot
-KERNEL_CPP_DIR = kernel/cpp
+KERNEL_C_DIR = kernel/c
 KERNEL_RUST_DIR = kernel/rust
-ARCH_DIR = $(KERNEL_CPP_DIR)/arch/$(ARCH)
-DRIVERS_DIR = $(KERNEL_CPP_DIR)/drivers
-MM_DIR = $(KERNEL_CPP_DIR)/mm
-RUST_FFI_DIR = $(KERNEL_CPP_DIR)/rust
+ARCH_DIR = $(KERNEL_C_DIR)/arch/$(ARCH)
+DRIVERS_DIR = $(KERNEL_C_DIR)/drivers
+MM_DIR = $(KERNEL_C_DIR)/mm
 
 # Source files
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
-CPP_SOURCES = $(KERNEL_CPP_DIR)/boot/main.cpp \
-              $(KERNEL_CPP_DIR)/arch/cpu.cpp \
-              $(KERNEL_CPP_DIR)/arch/syscall.cpp \
-              $(ARCH_DIR)/gdt.cpp \
-              $(ARCH_DIR)/idt.cpp \
-              $(DRIVERS_DIR)/serial.cpp \
-              $(DRIVERS_DIR)/vga.cpp \
-              $(DRIVERS_DIR)/vesa.cpp \
-              $(DRIVERS_DIR)/keyboard.cpp \
-              $(DRIVERS_DIR)/mouse.cpp \
-              $(DRIVERS_DIR)/timer.cpp \
-              $(MM_DIR)/pmm.cpp \
-              $(MM_DIR)/paging.cpp \
-              $(MM_DIR)/vmm.cpp
+C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
+            $(KERNEL_C_DIR)/arch/cpu.c \
+            $(KERNEL_C_DIR)/arch/syscall.c \
+            $(ARCH_DIR)/gdt.c \
+            $(ARCH_DIR)/idt.c \
+            $(MM_DIR)/pmm.c \
+            $(MM_DIR)/paging.c \
+            $(MM_DIR)/vmm.c \
+            $(DRIVERS_DIR)/serial.c \
+            $(DRIVERS_DIR)/vga.c \
+            $(DRIVERS_DIR)/vesa.c \
+            $(DRIVERS_DIR)/keyboard.c \
+            $(DRIVERS_DIR)/mouse.c \
+            $(DRIVERS_DIR)/timer.c
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
 ASM_OBJECTS += $(patsubst %.S,$(BUILD_DIR)/%.o,$(filter %.S,$(ASM_SOURCES)))
-CPP_OBJECTS = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
+C_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 RUST_LIB = $(BUILD_DIR)/kernel/rust/liballoy_kernel_rust.a
-OBJECTS = $(ASM_OBJECTS) $(CPP_OBJECTS)
+OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 
 # Output
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
@@ -135,11 +132,11 @@ $(BUILD_DIR)/%.o: %.S
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# Compile .cpp files
-$(BUILD_DIR)/%.o: %.cpp
+# Compile .c files
+$(BUILD_DIR)/%.o: %.c
 	@echo "Compiling $<..."
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 # Create bootable ISO (x86 only)
 $(KERNEL_ISO): $(KERNEL_ELF)
@@ -192,7 +189,6 @@ print-arch:
 	@echo "ARCH = $(ARCH)"
 	@echo "TARGET = $(TARGET)"
 	@echo "CC = $(CC)"
-	@echo "CXX = $(CXX)"
 	@echo "LD = $(LD)"
 	@echo "AS = $(AS)"
 	@echo "ASFLAGS = $(ASFLAGS)"

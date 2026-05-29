@@ -49,6 +49,6 @@ jobs:
         
         # Check for potential null pointer issues
         echo "=== Checking for null pointer patterns ==="
-        grep -rn "nullptr\|NULL" kernel/cpp/ || echo "None found"
+        grep -rn "nullptr\|NULL" kernel/c/ || echo "None found"
         
         echo "Quick check complete!"

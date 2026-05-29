@@ -119,7 +119,7 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
 <h2>Repository layout</h2>
 
 <ul>
-  <li><code>kernel/cpp</code> - early boot, drivers, paging, and handoff code</li>
+  <li><code>kernel/c</code> - early boot, drivers, paging, and handoff code</li>
   <li><code>kernel/rust</code> - Rust kernel entry, Fusion integration, and display-server runtime</li>
   <li><code>os/display</code> - shared display server library, apps, protocol, and backend abstractions</li>
   <li><code>os/cosmos-de</code> - Cosmos DE dependency scaffold built on <code>alloy-os-display</code></li>

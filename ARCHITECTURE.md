@@ -121,9 +121,9 @@ kernel/
 ## Adding a New Architecture
 
 1. Create `kernel/hal/src/arch/<arch>/mod.rs`
-2. Create `kernel/cpp/arch/<arch>/` with C++ stubs
+2. Create `kernel/c/arch/<arch>/` with C stubs
 3. Create `kernel/rust/<arch>-alloy.json` target spec
 4. Create `kernel/linker_<arch>.ld` linker script
 5. Add architecture to Makefile conditional
 6. Add feature flag to `kernel/hal/Cargo.toml`
-7. Update `kernel/cpp/arch/context.h` with register layout
+7. Update `kernel/c/arch/context.h` with register layout

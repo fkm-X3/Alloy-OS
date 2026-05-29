@@ -29,7 +29,7 @@ cd ~/toolchain-build
 # Build Binutils
 if [ ! -f "$PREFIX/bin/$TARGET-ld" ]; then
     echo "Building binutils..."
-    wget -nc https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VERSION.tar.gz
+    wget -nc --retry-connrefused --waitretry=10 --read-timeout=30 --timeout=30 --tries=5 https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VERSION.tar.gz
     tar -xf binutils-$BINUTILS_VERSION.tar.gz
     mkdir -p build-binutils
     cd build-binutils
@@ -44,7 +44,7 @@ fi
 # Build GCC
 if [ ! -f "$PREFIX/bin/$TARGET-gcc" ]; then
     echo "Building GCC..."
-    wget -nc https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.gz
+    wget -nc --retry-connrefused --waitretry=10 --read-timeout=30 --timeout=30 --tries=5 https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.gz
     tar -xf gcc-$GCC_VERSION.tar.gz
     mkdir -p build-gcc
     cd build-gcc

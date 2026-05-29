@@ -73,9 +73,21 @@ jobs:
 
       - name: Build cross-compiler
         if: matrix.language == 'cpp' && steps.cache-cross-compiler.outputs.cache-hit != 'true'
+        env:
+          SKIP_TOOLCHAIN_DEPS: 1
         run: |
           chmod +x build-toolchain.sh
-          ./build-toolchain.sh
+          for i in 1 2 3; do
+            echo "--- build-toolchain.sh attempt $i ---"
+            if ./build-toolchain.sh; then
+              echo "Cross-compiler built successfully."
+              exit 0
+            fi
+            echo "Attempt $i failed. Retrying in 10s..."
+            sleep 10
+          done
+          echo "ERROR: Failed to build cross-compiler after 3 attempts."
+          exit 1
 
       - name: Install Rust nightly
         if: matrix.language == 'cpp'

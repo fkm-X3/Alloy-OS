@@ -11,6 +11,12 @@
 
 <h2>Current state</h2>
 
+<p align="center">
+  <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/codeql-advanced.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/codeql-advanced.yml/badge.svg" alt="Advanced CodeQL Analysis"></a>
+  <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/build-and-test.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/build-and-test.yml/badge.svg" alt="Build and Test Kernel"></a>
+  <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/rust-clippy.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/rust-clippy.yml/badge.svg" alt="rust-clippy analyze"></a>
+</p>
+
 <p>
 Alloy OS boots the Rust display server in the Iced-primary software-rendered mode. Fusion is the compositor/backend layer.
 </p>

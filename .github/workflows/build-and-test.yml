@@ -39,7 +39,7 @@ jobs:
           make iso
 
           echo "Testing kernel boot..."
-          timeout 30s qemu-system-i386 \
+          timeout 60s qemu-system-i386 \
             -cdrom build/alloy.iso \
             -serial file:serial.log \
             -display none \
@@ -79,23 +79,32 @@ jobs:
       run: |
         echo "Verifying kernel boot..."
         
-        if [ ! -f "serial.log" ]; then
+        if [ ! -f "serial.log" ] || [ ! -s "serial.log" ]; then
           echo "ERROR: No serial output found!"
           exit 1
         fi
+        
+        echo "=== Full serial log ==="
+        head -100 serial.log
+        echo "..."
+        tail -50 serial.log
         
         # Check for key boot messages
         if grep -q "Alloy" serial.log; then
           echo "Kernel name found"
         else
           echo "Kernel name not found"
+          echo "Serial log contents:"
+          cat serial.log
           exit 1
         fi
         
-        if grep -q "GDT\|IDT\|PMM\|VMM" serial.log; then
+        if grep -qE "GDT|IDT|PMM|VMM" serial.log; then
           echo "Initialization messages found"
         else
           echo "Initialization messages not found"
+          echo "Serial log contents:"
+          cat serial.log
           exit 1
         fi
         

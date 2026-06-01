@@ -19,6 +19,17 @@ runs:
         path: ~/.local/i686-elf
         key: i686-elf-gcc-${{ runner.os }}-v1
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Cache Docker layers
+      uses: actions/cache@v5
+      with:
+        path: /tmp/.buildx-cache
+        key: docker-${{ runner.os }}-${{ hashFiles('Dockerfile', 'build-toolchain.sh') }}
+        restore-keys: |
+          docker-${{ runner.os }}-
+
     - name: Build image and run command
       shell: bash
       env:
@@ -29,7 +40,11 @@ runs:
         cd "$GITHUB_WORKSPACE"
         mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$HOME/.local/i686-elf"
 
-        docker build --pull -t "${{ inputs.image-tag }}" -f Dockerfile .
+        docker buildx build --load \
+          --cache-from=type=local,src=/tmp/.buildx-cache \
+          --cache-to=type=local,dest=/tmp/.buildx-cache-new,mode=max \
+          -t "${{ inputs.image-tag }}" \
+          -f Dockerfile .
 
         docker run --rm \
           -e HOME=/root \
@@ -44,3 +59,6 @@ runs:
           -w /workspace \
           "${{ inputs.image-tag }}" \
           bash -lc 'set -euo pipefail; if [ ! -x /root/.local/i686-elf/bin/i686-elf-gcc ]; then SKIP_TOOLCHAIN_DEPS=1 bash /workspace/build-toolchain.sh; fi; eval "$DOCKER_COMMAND"'
+
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache

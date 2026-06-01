@@ -15,7 +15,6 @@ debug-alloc = []
 
 [dependencies]
 alloy-os-display = { path = "../../os/display" }
-alloy-os-cosmos-de = { path = "../../os/cosmos-de" }
 alloy-kernel-hal = { path = "../hal" }
 
 [profile.dev]

@@ -230,7 +230,7 @@ def run_capture(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Boot QEMU, wait for the first presented Cosmos desktop frame marker, "
+            "Boot QEMU, wait for the first presented desktop frame marker, "
             "then capture screenshot to PNG."
         )
     )

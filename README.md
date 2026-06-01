@@ -6,17 +6,13 @@
 </div>
 
 <p align="center">
-  <em>Kernel boot, Fusion display, Wayland support, and the Cosmos-default desktop runtime all live in this repo.</em>
+  <em>Kernel boot, Fusion display, Wayland support, and desktop runtime all live in this repo.</em>
 </p>
 
 <h2>Current state</h2>
 
 <p>
-Alloy OS boots the Rust display server in <code>BootUiMode::Cosmos</code> by default. Fusion is the compositor/backend layer, and <code>BootUiMode::IcedPrimary</code> remains available for non-default runtime testing.
-</p>
-
-<p>
-Cosmos DE lives under <code>os/cosmos-de</code> as a local path dependency. It builds on the shared <code>alloy-os-display</code> library and Fusion Wayland support.
+Alloy OS boots the Rust display server in the Iced-primary software-rendered mode. Fusion is the compositor/backend layer.
 </p>
 
 <h2>Build and run</h2>
@@ -122,7 +118,7 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
   <li><code>kernel/c</code> - early boot, drivers, paging, and handoff code</li>
   <li><code>kernel/rust</code> - Rust kernel entry, Fusion integration, and display-server runtime</li>
   <li><code>os/display</code> - shared display server library, apps, protocol, and backend abstractions</li>
-  <li><code>os/cosmos-de</code> - Cosmos DE dependency scaffold built on <code>alloy-os-display</code></li>
+
   <li><code>boot</code> - bootloader and assembly entry pieces</li>
   <li><code>tools</code> - screenshot and smoke-test helpers</li>
 </ul>
@@ -141,6 +137,6 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
 
 <ul>
   <li>The display-server + window-manager path is still gated behind the existing boot flow.</li>
-  <li>Cosmos is the default runtime path, while desktop-environment work under <code>os/cosmos-de</code> remains incremental.</li>
+
   <li>The repo currently builds around the kernel + shared display library split instead of a Cargo workspace root.</li>
 </ul>

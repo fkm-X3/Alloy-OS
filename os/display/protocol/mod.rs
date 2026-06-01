@@ -240,7 +240,7 @@ impl fmt::Display for ProtocolError {
 pub type CapabilityFlags = u32;
 pub const CAPABILITY_NONE: CapabilityFlags = 0;
 pub const CAPABILITY_WAYLAND: CapabilityFlags = 1 << 0;
-pub const CAPABILITY_COSMOS: CapabilityFlags = 1 << 1;
+
 pub const CAPABILITY_SESSION: CapabilityFlags = 1 << 2;
 pub const CAPABILITY_INPUT: CapabilityFlags = 1 << 3;
 
@@ -335,7 +335,7 @@ pub fn validate_request(request: &DisplayRequest) -> Result<(), ProtocolError> {
             }
         }
         DisplayRequest::SetClientCapabilities { capabilities } => {
-            let allowed = CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_SESSION | CAPABILITY_INPUT | CAPABILITY_NONE;
+            let allowed = CAPABILITY_WAYLAND | CAPABILITY_SESSION | CAPABILITY_INPUT | CAPABILITY_NONE;
             if (*capabilities & !allowed) != 0 {
                 return Err(ProtocolError::InvalidCapability);
             }

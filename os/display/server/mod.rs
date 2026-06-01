@@ -13,7 +13,7 @@ use core::fmt;
 use crate::protocol::{
      ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, ProtocolError, Rect,
      SessionBoundary, SessionConfig, SessionId, SessionType, SurfaceId, validate_request,
-     CAPABILITY_SESSION, CAPABILITY_WAYLAND, CAPABILITY_COSMOS, CAPABILITY_INPUT,
+     CAPABILITY_SESSION, CAPABILITY_WAYLAND, CAPABILITY_INPUT,
  };
 
 /// Set the session boundary from bootstrap configuration.
@@ -409,7 +409,7 @@ impl<B: DisplayBackend> DisplayServer<B> {
             1 => SessionType::Userland,
             _ => return Err(ServerError::InvalidSession),
         };
-        let allowed = CAPABILITY_SESSION | CAPABILITY_WAYLAND | CAPABILITY_COSMOS | CAPABILITY_INPUT;
+        let allowed = CAPABILITY_SESSION | CAPABILITY_WAYLAND | CAPABILITY_INPUT;
         if (capabilities & !allowed) != 0 {
             return Err(ServerError::SessionDenied);
         }

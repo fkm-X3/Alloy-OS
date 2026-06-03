@@ -397,7 +397,7 @@ pub extern "C" fn rust_sys_socket(domain: i32, socket_type: i32, protocol: i32) 
 
 /// Bind syscall - binds socket to address
 #[no_mangle]
-pub extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
+pub unsafe extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }
@@ -423,7 +423,7 @@ pub extern "C" fn rust_sys_accept(fd: i32) -> i32 {
 
 /// Connect syscall - connects socket to an address
 #[no_mangle]
-pub extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
+pub unsafe extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }

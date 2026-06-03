@@ -290,8 +290,8 @@ pub fn socket_create(domain: i32, socket_type: i32, protocol: i32) -> i32 {
     unsafe { socket(domain, socket_type, protocol) }
 }
 
-pub fn socket_bind(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
-    unsafe { bind_socket(fd, addr, addr_len) }
+pub unsafe fn socket_bind(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
+    bind_socket(fd, addr, addr_len)
 }
 
 pub fn socket_listen(fd: i32, backlog: i32) -> i32 {
@@ -302,8 +302,8 @@ pub fn socket_accept(fd: i32) -> i32 {
     unsafe { accept_socket(fd) }
 }
 
-pub fn socket_connect(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
-    unsafe { connect_socket(fd, addr, addr_len) }
+pub unsafe fn socket_connect(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
+    connect_socket(fd, addr, addr_len)
 }
 
 pub fn socket_close(fd: i32) -> i32 {

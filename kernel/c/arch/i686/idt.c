@@ -296,7 +296,7 @@ void irq_handler(struct interrupt_frame* frame) {
     outb(PIC1_COMMAND, 0x20);
 }
 
-extern uint64_t timer_get_uptime_ms();
+extern uint64_t timer_get_uptime_ms_ffi();
 uint64_t get_system_uptime_ms() {
-    return timer_get_uptime_ms();
+    return timer_get_uptime_ms_ffi();
 }

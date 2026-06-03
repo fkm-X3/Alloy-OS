@@ -33,18 +33,18 @@ void timer_init_ffi(uint32_t frequency) {
     serial_print("[Timer] PIT initialized\n");
 }
 
-uint64_t timer_get_ticks() {
+uint64_t timer_get_ticks_ffi() {
     return g_timer_ticks;
 }
 
-uint64_t timer_get_uptime_ms() {
+uint64_t timer_get_uptime_ms_ffi() {
     if (g_timer_frequency == 0) {
         return 0;
     }
     return (g_timer_ticks * 1000) / g_timer_frequency;
 }
 
-uint32_t timer_get_frequency() {
+uint32_t timer_get_frequency_ffi() {
     return g_timer_frequency;
 }
 

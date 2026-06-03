@@ -1,10 +1,10 @@
 use alloc::boxed::Box;
 
-use alloy_os_display::apps::window_manager::{InputOutcome, WindowId, WindowManager, WindowOptions};
-use alloy_os_display::protocol::{
+use alloy_display_kernel::apps::window_manager::{InputOutcome, WindowId, WindowManager, WindowOptions};
+use alloy_display_kernel::protocol::{
      ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, SurfaceId,
 };
-use alloy_os_display::server::{DisplayBackend, DisplayServer};
+use alloy_display_kernel::server::{DisplayBackend, DisplayServer};
 
 use crate::ffi;
 use crate::fusion::backend::FusionDisplayBackend;

@@ -37,7 +37,7 @@ updates:
           - "*"
 
   - package-ecosystem: "cargo"
-    directory: "/os/display"
+    directory: "/Alloy-DE/alloy-display-kernel"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -48,9 +48,9 @@ updates:
       - "dependencies"
       - "rust"
     commit-message:
-      prefix: "deps(os-display)"
+      prefix: "deps(display-kernel)"
     groups:
-      os-display:
+      display-kernel:
         patterns:
           - "*"
 

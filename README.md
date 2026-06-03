@@ -123,7 +123,7 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
 <ul>
   <li><code>kernel/c</code> - early boot, drivers, paging, and handoff code</li>
   <li><code>kernel/rust</code> - Rust kernel entry, Fusion integration, and display-server runtime</li>
-  <li><code>os/display</code> - shared display server library, apps, protocol, and backend abstractions</li>
+  <li><code>Alloy-DE/alloy-display-kernel</code> - shared display server library, apps, protocol, and backend abstractions</li>
 
   <li><code>boot</code> - bootloader and assembly entry pieces</li>
   <li><code>tools</code> - screenshot and smoke-test helpers</li>
@@ -132,8 +132,8 @@ Mouse input is relative PS/2 input, so click inside the QEMU window to grab poin
 <h2>Validation</h2>
 
 <ul>
-  <li><code>cd os/display &amp;&amp; cargo test --manifest-path Cargo.toml</code></li>
-  <li><code>cd os/display &amp;&amp; cargo test --manifest-path Cargo.toml &lt;test_name&gt;</code></li>
+<li><code>cd Alloy-DE &amp;&amp; cargo test -p alloy-display-kernel</code></li>
+<li><code>cd Alloy-DE &amp;&amp; cargo test -p alloy-display-kernel &lt;test_name&gt;</code></li>
   <li><code>cd kernel/rust &amp;&amp; cargo +nightly fmt --check</code></li>
   <li><code>cd kernel/rust &amp;&amp; cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc</code></li>
   <li><code>nasm -f elf32 -o /dev/null &lt;file.asm&gt;</code></li>

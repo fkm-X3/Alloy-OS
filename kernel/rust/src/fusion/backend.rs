@@ -5,8 +5,8 @@
 
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use alloy_os_display::server::DisplayBackend;
-use alloy_os_display::protocol::{SurfaceId, PixelFormat, Rect};
+use alloy_display_kernel::server::DisplayBackend;
+use alloy_display_kernel::protocol::{SurfaceId, PixelFormat, Rect};
 use crate::graphics::vesa::VesaDisplay;
 use crate::graphics::Display;
 

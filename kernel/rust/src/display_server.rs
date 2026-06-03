@@ -557,7 +557,8 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
 
 fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     serial_log(b"[DisplayServer] Bootstrapping Iced-primary runtime\n\0");
-    let (display_width, display_height) = display.get_resolution();
+    let display_width = display.framebuffer().width();
+    let display_height = display.framebuffer().height();
 
     let backend = FusionDisplayBackend::new(display);
     let mut server = DisplayServer::new(backend);

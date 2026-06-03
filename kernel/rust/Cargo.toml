@@ -14,7 +14,7 @@ aarch64 = ["alloy-kernel-hal/aarch64"]
 debug-alloc = []
 
 [dependencies]
-alloy-display-kernel = { path = "../Alloy-DE/alloy-display-kernel" }
+alloy-display-kernel = { path = "../../Alloy-DE/alloy-display-kernel" }
 alloy-kernel-hal = { path = "../hal" }
 
 [profile.dev]

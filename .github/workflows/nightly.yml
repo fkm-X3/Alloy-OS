@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Generate Version Tag
         id: vars
@@ -32,7 +33,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             kernel/rust/target/
-          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'Alloy-DE/**/Cargo.lock', 'Alloy-DE/**/Cargo.toml') }}
           restore-keys: |
             rust-${{ runner.os }}-
 

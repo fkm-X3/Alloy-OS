@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          submodules: recursive
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -106,9 +108,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             kernel/rust/target/
-          key: rust-${{ runner.os }}-codeql-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: |
-            rust-${{ runner.os }}-codeql-
+        key: rust-${{ runner.os }}-codeql-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'Alloy-DE/**/Cargo.lock', 'Alloy-DE/**/Cargo.toml') }}
+        restore-keys: |
+          rust-${{ runner.os }}-codeql-
 
       - name: Set PATH
         if: matrix.language == 'cpp'

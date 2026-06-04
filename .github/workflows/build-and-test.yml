@@ -14,7 +14,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
-  CI_IMAGE: ${{ github.repository | lower }}-ci:latest
+  CI_IMAGE: ${{ github.repository }}-ci:latest
 
 jobs:
   build:

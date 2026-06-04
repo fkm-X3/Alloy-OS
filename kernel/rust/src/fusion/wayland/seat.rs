@@ -335,7 +335,7 @@ impl SeatManager {
 
         self.bindings
             .entry(client_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(seat_binding_id, binding);
 
         seat_binding_id

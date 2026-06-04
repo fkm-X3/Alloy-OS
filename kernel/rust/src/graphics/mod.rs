@@ -420,8 +420,8 @@ pub trait Display {
         color: u32,
     ) -> Result<(), Self::Error> {
         let (dx, dy) = (
-            (x2 as i32 - x1 as i32).abs() as u32,
-            (y2 as i32 - y1 as i32).abs() as u32,
+            (x2 as i32 - x1 as i32).unsigned_abs(),
+            (y2 as i32 - y1 as i32).unsigned_abs(),
         );
 
         let (sx, sy) = (

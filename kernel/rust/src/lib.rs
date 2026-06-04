@@ -29,45 +29,45 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
         let msg = err.serial_message();
         ffi::serial_print(msg.as_ptr());
         let code = err.code();
-        ffi::serial_print(b" (code: \0".as_ptr());
+        ffi::serial_print(c" (code: ".as_ptr() as *const u8);
         for &byte in code.as_bytes() {
             ffi::vga_putchar(byte);
         }
-        ffi::serial_print(b")\n\0".as_ptr());
+        ffi::serial_print(c")\n".as_ptr() as *const u8);
     }
 }
 
 #[no_mangle]
 pub extern "C" fn rust_main() {
     unsafe {
-        ffi::serial_print(b"[Rust] Kernel entry - starting Display Server\n\0".as_ptr());
+        ffi::serial_print(c"[Rust] Kernel entry - starting Display Server\n".as_ptr() as *const u8);
         ffi::vga_clear();
     }
 
     crate::fs::vfs_init();
-    unsafe { ffi::serial_print(b"[VFS] initialized\n\0".as_ptr()); }
+    unsafe { ffi::serial_print(c"[VFS] initialized\n".as_ptr() as *const u8); }
 
     if let Some(display) = graphics::vesa::VesaDisplay::new() {
         unsafe {
-            ffi::serial_print(b"[Rust] VESA display initialized, booting display server\n\0".as_ptr());
+            ffi::serial_print(c"[Rust] VESA display initialized, booting display server\n".as_ptr() as *const u8);
         }
 
         match display_server::run(display) {
             Ok(()) => {
                 unsafe {
-                    ffi::serial_print(b"[Rust] Display server exited normally\n\0".as_ptr());
+                    ffi::serial_print(c"[Rust] Display server exited normally\n".as_ptr() as *const u8);
                 }
             }
             Err(err) => {
                 log_display_server_error(err);
                 unsafe {
-                    ffi::serial_print(b"[Rust] Display server boot failed\n\0".as_ptr());
+                    ffi::serial_print(c"[Rust] Display server boot failed\n".as_ptr() as *const u8);
                 }
             }
         }
     } else {
         unsafe {
-            ffi::serial_print(b"[Rust] Failed to initialize VESA display (headless mode)\n\0".as_ptr());
+            ffi::serial_print(c"[Rust] Failed to initialize VESA display (headless mode)\n".as_ptr() as *const u8);
         }
     }
 }

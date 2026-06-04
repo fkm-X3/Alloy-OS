@@ -182,12 +182,11 @@ impl FramebufferInfo {
 
         // Check color masks are reasonable for the bit depth
         match self.bits_per_pixel {
-            8 => {
+            8
                 // For 8-bit indexed, masks may be 0 or represent VGA palette
-                if self.red_mask != 0 && self.red_mask != 0xFF {
+                if self.red_mask != 0 && self.red_mask != 0xFF => {
                     return Err(FramebufferError::InvalidColorMasks);
                 }
-            }
             16 => {
                 // RGB565: standard masks
                 if self.red_mask != 0xF800 && self.red_mask != 0 {
@@ -200,12 +199,11 @@ impl FramebufferInfo {
                     return Err(FramebufferError::InvalidColorMasks);
                 }
             }
-            24 | 32 => {
+            24 | 32
                 // RGB888 or ARGB8888: more flexible, just check they're not all zero
-                if self.red_mask == 0 && self.green_mask == 0 && self.blue_mask == 0 {
+                if self.red_mask == 0 && self.green_mask == 0 && self.blue_mask == 0 => {
                     return Err(FramebufferError::InvalidColorMasks);
                 }
-            }
             _ => {}
         }
 
@@ -324,7 +322,7 @@ impl Framebuffer {
             let base = self.info.address as *mut u8;
             match self.info.bits_per_pixel {
                 8 => {
-                    let ptr = base.add(offset) as *mut u8;
+                    let ptr = base.add(offset);
                     *ptr = (native_color & 0xFF) as u8;
                 }
                 16 => {

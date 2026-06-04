@@ -39,20 +39,20 @@ pub fn vfs_init() {
     }
     // Create /dev/console vnode for serial output
     if let Ok(_id) = vfs_open("/dev/console", 0, 0) {
-        unsafe { crate::ffi::serial_print(b"[VFS] /dev/console created\n\0".as_ptr()); }
+        unsafe { crate::ffi::serial_print(c"[VFS] /dev/console created\n".as_ptr() as *const u8); }
     }
 
     // Embed a built-in hello test binary into the VFS if present at build time.
     // This uses include_bytes! to bundle the prebuilt userland binary located at ../../hello
     // relative to the kernel/rust crate directory. If it doesn't exist, this is a no-op.
     let hello_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../hello"));
-    if hello_bytes.len() > 0 {
+    if !hello_bytes.is_empty() {
         if let Ok(id) = vfs_open("/hello", 0, 0) {
             // store the file contents
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, hello_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(b"[VFS] /hello embedded into VFS\n\0".as_ptr()); }
+                unsafe { crate::ffi::serial_print(c"[VFS] /hello embedded into VFS\n".as_ptr() as *const u8); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/hello", 0, 0) {
@@ -105,7 +105,7 @@ pub fn vfs_open(path: &str, _flags: u32, _mode: u32) -> Result<u64, i32> {
 pub fn vfs_read_all(vnode_id: u64) -> Option<Vec<u8>> {
     let guard = VFS_STATE.lock();
     let state = guard.as_ref()?;
-    state.data.get(&vnode_id).map(|v| v.clone())
+    state.data.get(&vnode_id).cloned()
 }
 
 /// Read from vnode into user buffer
@@ -120,7 +120,7 @@ pub fn vfs_read(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usize
         let available = vec.len() - *offset;
         let to_copy = core::cmp::min(available, len);
         unsafe {
-            if let Ok(_) = copy_to_user(user_buf_ptr, &vec[*offset..(*offset+to_copy)]) {
+            if copy_to_user(user_buf_ptr, &vec[*offset..(*offset+to_copy)]).is_ok() {
                 *offset += to_copy;
                 return to_copy as isize;
             }
@@ -142,7 +142,7 @@ pub fn vfs_write(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usiz
             // Copy from user and print to serial
             let mut tmp = vec![0u8; len];
             unsafe {
-                if let Err(_) = copy_from_user(user_buf_ptr, &mut tmp) {
+                if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
                     return -1;
                 }
                 // Null-terminate for serial_print
@@ -163,7 +163,7 @@ pub fn vfs_write(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usiz
         }
         let mut tmp = vec![0u8; len];
         unsafe {
-            if let Err(_) = copy_from_user(user_buf_ptr, &mut tmp) {
+            if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
                 return -1;
             }
         }

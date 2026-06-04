@@ -3,24 +3,27 @@ pub mod pointer;
 
 // Utility helpers for kernel (moved from utils.rs)
 
+#[allow(dead_code)]
 const USER_SPACE_LIMIT: usize = 0xC0000000usize; // conservative user-space upper bound (3GB)
+#[allow(dead_code)]
 const USER_MAX_COPY: usize = 1024 * 1024; // 1MB max per copy to avoid large accidental copies
 
 use crate::ffi;
 
 /// Helper to check that a user range is plausibly valid by comparing against VMM's next virt addr.
+#[allow(dead_code)]
 fn user_range_check(start: usize, len: usize) -> bool {
     if start >= USER_SPACE_LIMIT { return false; }
     if len == 0 { return true; }
     if len > USER_MAX_COPY { return false; }
-    if start.checked_add(len).map_or(true, |end| end > USER_SPACE_LIMIT) { return false; }
+    if start.checked_add(len).is_none_or(|end| end > USER_SPACE_LIMIT) { return false; }
     // Ensure end is below vmm_get_next_virt_addr() which represents allocated virtual space
     let next = unsafe { ffi::vmm_get_next_virt_addr() } as usize;
-    if start.checked_add(len).map_or(true, |end| end > next) { return false; }
+    if start.checked_add(len).is_none_or(|end| end > next) { return false; }
 
     // Additionally, verify that each page in the range is mapped (non-zero physical address)
     const PAGE_SIZE: usize = 0x1000;
-    let end = start.checked_add(len).unwrap_or(usize::MAX);
+    let end = start.saturating_add(len);
     let mut addr = start & !(PAGE_SIZE - 1);
     let mut pages_checked = 0;
     while addr < end {

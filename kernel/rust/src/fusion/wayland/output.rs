@@ -210,7 +210,7 @@ impl OutputManager {
 
         self.bindings
             .entry(client_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(output_id, binding);
 
         output_id

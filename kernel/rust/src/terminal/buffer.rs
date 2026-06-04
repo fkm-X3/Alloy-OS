@@ -1,6 +1,6 @@
-/// Line buffer with editing support
-/// 
-/// Provides a fixed-size buffer for line input with cursor tracking
+//! Line buffer with editing support
+//! 
+//! Provides a fixed-size buffer for line input with cursor tracking
 
 const BUFFER_SIZE: usize = 256;
 
@@ -8,6 +8,12 @@ pub struct LineBuffer {
     buffer: [u8; BUFFER_SIZE],
     cursor: usize,
     length: usize,
+}
+
+impl Default for LineBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LineBuffer {

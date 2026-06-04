@@ -1,6 +1,6 @@
-/// Command history management for terminal
-/// 
-/// Provides a ring buffer to store and navigate through command history
+//! Command history management for terminal
+//! 
+//! Provides a ring buffer to store and navigate through command history
 
 extern crate alloc;
 use alloc::string::String;
@@ -16,6 +16,12 @@ pub struct CommandHistory {
     browse_pos: Option<usize>,
     /// Total commands stored (up to HISTORY_SIZE)
     count: usize,
+}
+
+impl Default for CommandHistory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CommandHistory {

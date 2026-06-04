@@ -1,8 +1,8 @@
-/// Global allocator implementation for Rust kernel
-/// 
-/// This allocator uses a two-tier strategy:
-/// - Slab allocator for small objects (<= 1024 bytes)
-/// - Heap allocator for larger objects
+//! Global allocator implementation for Rust kernel
+//! 
+//! This allocator uses a two-tier strategy:
+//! - Slab allocator for small objects (<= 1024 bytes)
+//! - Heap allocator for larger objects
 
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::{AtomicBool, Ordering, fence};
@@ -90,20 +90,20 @@ pub fn get_stats() -> ((usize, usize), (usize, usize)) {
 
 /// Print allocation statistics to serial (non-intrusive)
 pub fn print_stats() {
-    let ((slab_alloc, slab_free), (heap_alloc, heap_free)) = get_stats();
+    let ((_slab_alloc, _slab_free), (_heap_alloc, _heap_free)) = get_stats();
     
     unsafe {
         use crate::ffi;
-        ffi::serial_print(b"\n=== Allocator Statistics ===\n\0".as_ptr());
-        ffi::serial_print(b"Slab allocator:\n\0".as_ptr());
-        ffi::serial_print(b"  Objects allocated: \0".as_ptr());
-        ffi::serial_print(b"  Objects freed: \0".as_ptr());
-        ffi::serial_print(b"  Net objects: \0".as_ptr());
+        ffi::serial_print(c"\n=== Allocator Statistics ===\n".as_ptr() as *const u8);
+        ffi::serial_print(c"Slab allocator:\n".as_ptr() as *const u8);
+        ffi::serial_print(c"  Objects allocated: ".as_ptr() as *const u8);
+        ffi::serial_print(c"  Objects freed: ".as_ptr() as *const u8);
+        ffi::serial_print(c"  Net objects: ".as_ptr() as *const u8);
         
-        ffi::serial_print(b"\nHeap allocator:\n\0".as_ptr());
-        ffi::serial_print(b"  Bytes allocated: \0".as_ptr());
-        ffi::serial_print(b"  Bytes freed: \0".as_ptr());
-        ffi::serial_print(b"  Net bytes: \0".as_ptr());
-        ffi::serial_print(b"===========================\n\n\0".as_ptr());
+        ffi::serial_print(c"\nHeap allocator:\n".as_ptr() as *const u8);
+        ffi::serial_print(c"  Bytes allocated: ".as_ptr() as *const u8);
+        ffi::serial_print(c"  Bytes freed: ".as_ptr() as *const u8);
+        ffi::serial_print(c"  Net bytes: ".as_ptr() as *const u8);
+        ffi::serial_print(c"===========================\n\n".as_ptr() as *const u8);
     }
 }

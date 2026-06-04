@@ -749,11 +749,10 @@ fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> 
                 DisplayEvent::FocusChanged { surface_id: None } => {
                     serial_log(b"[DisplayServer] Focus cleared\n\0");
                 }
-                DisplayEvent::SurfaceDestroyed { surface_id } => {
-                    if surface_id == runtime.binding.surface_id {
+                DisplayEvent::SurfaceDestroyed { surface_id }
+                    if surface_id == runtime.binding.surface_id => {
                         serial_log(b"[DisplayServer] Iced primary surface destroyed\n\0");
                     }
-                }
                 _ => {}
             }
         }

@@ -141,11 +141,11 @@ impl CompositorHandler {
         self.object_id_map.insert(object_id, surface_id);
         self.client_surfaces
             .entry(client_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(surface_id, ());
 
         unsafe {
-            crate::ffi::serial_print(b"[Wayland Compositor] Created surface\n\0".as_ptr());
+            crate::ffi::serial_print(c"[Wayland Compositor] Created surface\n".as_ptr() as *const u8);
         }
 
         Ok(CompositorResponse::SurfaceCreated {

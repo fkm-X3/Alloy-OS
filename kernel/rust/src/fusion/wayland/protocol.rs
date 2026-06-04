@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
 use super::compositor_handler::{CompositorHandler, CompositorResponse, SurfaceResponse};
-use super::buffer_handler::{ShmBufferHandler, ShmHandlerResponse, ShmPoolHandlerResponse};
+use super::buffer_handler::{ShmBufferHandler, ShmPoolHandlerResponse};
 use super::registry_handler::{RegistryHandler, RegistryResponse};
 use super::display_handler::{DisplayHandler, DisplayResponse};
 
@@ -110,7 +110,7 @@ impl WaylandMessage {
         let length = u16::from_le_bytes(length_le) as usize;
 
         // Validate length
-        if length < MESSAGE_HEADER_SIZE || length > 4096 {
+        if !(MESSAGE_HEADER_SIZE..=4096).contains(&length) {
             return Err(WaylandError::ProtocolViolation);
         }
 
@@ -244,22 +244,19 @@ impl ProtocolHandler {
                             }
                             Err(e) => {
                                 unsafe {
-                                    crate::ffi::serial_print(b"[Wayland Protocol] Unhandled object request\n\0".as_ptr());
+                                    crate::ffi::serial_print(c"[Wayland Protocol] Unhandled object request\n".as_ptr() as *const u8);
                                 }
                                 return Err(e);
                             }
                         }
                     }
                     Err(e) => return Err(e),
-                    Ok(r) => {
-                        self.handle_surface_response(message.object_id.0, r);
-                    }
                 }
             }
             _ => {
                 // Extended object IDs - try buffer handler for shared memory objects
                 unsafe {
-                    crate::ffi::serial_print(b"[Wayland Protocol] Extended object routing\n\0".as_ptr());
+                    crate::ffi::serial_print(c"[Wayland Protocol] Extended object routing\n".as_ptr() as *const u8);
                 }
                 let _ = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
             }

@@ -3,7 +3,6 @@
 //! Provides a simple renderer that can draw Iced components directly to
 //! framebuffer pixel buffers. Uses basic primitives for text and shapes.
 
-use crate::fusion::terminal::TerminalSurface;
 
 /// Simple color representation (ARGB8888)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -269,7 +268,7 @@ fn integer_sqrt(n: u32) -> u32 {
         return 0;
     }
     let mut x = n;
-    let mut y = (x + 1) / 2;
+    let mut y = x.div_ceil(2);
     while y < x {
         x = y;
         y = (x + n / x) / 2;

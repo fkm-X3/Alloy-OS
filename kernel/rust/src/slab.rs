@@ -1,10 +1,9 @@
-/// Slab allocator for efficient small object allocation
-/// 
-/// Manages fixed-size blocks to reduce fragmentation and improve
-/// performance for common allocation sizes.
+//! Slab allocator for efficient small object allocation
+//! 
+//! Manages fixed-size blocks to reduce fragmentation and improve
+//! performance for common allocation sizes.
 
 use core::ptr::null_mut;
-use crate::ffi;
 
 /// Size classes for slab allocator (powers of 2)
 const SLAB_SIZES: [usize; 8] = [8, 16, 32, 64, 128, 256, 512, 1024];
@@ -250,6 +249,12 @@ pub struct SlabAllocator {
     caches: [SlabCache; 8],
 }
 
+impl Default for SlabAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SlabAllocator {
     /// Create a new slab allocator with all caches initialized to empty state
     /// All pointers are null, all counters are zero
@@ -276,7 +281,7 @@ impl SlabAllocator {
                 let result = cache.alloc();
                 if result.is_null() {
                     use crate::ffi;
-                    ffi::serial_print(b"[Slab] ERROR: Cache allocation failed!\n\0".as_ptr());
+                    ffi::serial_print(c"[Slab] ERROR: Cache allocation failed!\n".as_ptr() as *const u8);
                 }
                 return result;
             }

@@ -318,7 +318,7 @@ impl TextRenderer {
         let char_code = ch as u32;
 
         // ASCII range: 32 (space) to 126 (~)
-        if char_code < 32 || char_code > 126 {
+        if !(32..=126).contains(&char_code) {
             return Ok(());
         }
 

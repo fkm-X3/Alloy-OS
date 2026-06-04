@@ -10,6 +10,7 @@ use super::backend::FusionError;
 
 // Font metrics: 5x7 characters with 9-pixel line height
 const CHAR_WIDTH_PIXELS: u32 = 5;
+#[allow(dead_code)]
 const CHAR_HEIGHT_PIXELS: u32 = 7;
 const LINE_HEIGHT_PIXELS: u32 = 9;
 

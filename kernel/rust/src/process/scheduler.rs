@@ -13,11 +13,17 @@ pub struct Scheduler {
     current_task: Option<Box<Task>>,
 }
 
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scheduler {
     /// Create a new scheduler
     pub fn new() -> Self {
         unsafe {
-            ffi::serial_print(b"[Scheduler] Initializing round-robin scheduler\n\0".as_ptr());
+            ffi::serial_print(c"[Scheduler] Initializing round-robin scheduler\n".as_ptr() as *const u8);
         }
         
         Scheduler {
@@ -37,7 +43,7 @@ impl Scheduler {
         let mut scheduler = SCHEDULER.lock();
         if let Some(ref mut sched) = *scheduler {
             unsafe {
-                ffi::serial_print(b"[Scheduler] Adding task to ready queue\n\0".as_ptr());
+                ffi::serial_print(c"[Scheduler] Adding task to ready queue\n".as_ptr() as *const u8);
             }
             sched.ready_queue.push_back(task);
         }
@@ -89,10 +95,10 @@ impl Scheduler {
             sched.current_task = Some(next);
 
             // Prepare old boxed task to be used for context switching
-            let mut old_box_opt = old_opt; // may be None for first run
+            let old_box_opt = old_opt; // may be None for first run
 
             unsafe {
-                ffi::serial_print(b"[Scheduler] Preparing context switch\n\0".as_ptr());
+                ffi::serial_print(c"[Scheduler] Preparing context switch\n".as_ptr() as *const u8);
             }
 
             // Drop lock before performing context switch
@@ -104,11 +110,11 @@ impl Scheduler {
                 let old_ctx_ptr: *mut crate::process::task::CpuContext = old_box.context_mut() as *mut _;
 
                 unsafe {
-                    ffi::serial_print(b"[Scheduler] Calling context_switch\n\0".as_ptr());
+                    ffi::serial_print(c"[Scheduler] Calling context_switch\n".as_ptr() as *const u8);
                     // This will save registers into old_ctx and restore new_ctx, jumping to new task.
                     ffi::context_switch(old_ctx_ptr, new_ctx_ptr);
                     // When we return here, we are back in the old context.
-                    ffi::serial_print(b"[Scheduler] Returned from context_switch (old context)\n\0".as_ptr());
+                    ffi::serial_print(c"[Scheduler] Returned from context_switch (old context)\n".as_ptr() as *const u8);
                 }
 
                 // After returning, re-acquire scheduler lock and push old task back if runnable
@@ -120,7 +126,7 @@ impl Scheduler {
                             sched.ready_queue.push_back(old_box);
                         }
                         TaskState::Terminated => {
-                            unsafe { ffi::serial_print(b"[Scheduler] Old task terminated after switch\n\0".as_ptr()); }
+                            unsafe { ffi::serial_print(c"[Scheduler] Old task terminated after switch\n".as_ptr() as *const u8); }
                             drop(old_box);
                         }
                         _ => {
@@ -132,7 +138,7 @@ impl Scheduler {
             } else {
                 // No old context: this is the initial switch into first task. Simply return and let the new task execute.
                 // Control flow: caller should arrange to jump into the new task. For simplicity, do nothing here.
-                unsafe { ffi::serial_print(b"[Scheduler] No old task, initial run\n\0".as_ptr()); }
+                unsafe { ffi::serial_print(c"[Scheduler] No old task, initial run\n".as_ptr() as *const u8); }
             }
         }
     }
@@ -140,7 +146,7 @@ impl Scheduler {
     /// Yield CPU to another task (for cooperative multitasking)
     pub fn yield_cpu() {
         unsafe {
-            ffi::serial_print(b"[Scheduler] Task yielding CPU\n\0".as_ptr());
+            ffi::serial_print(c"[Scheduler] Task yielding CPU\n".as_ptr() as *const u8);
         }
 
         // Use schedule() which performs proper context switching between tasks
@@ -164,9 +170,9 @@ impl Scheduler {
 
     /// External hook for page fault handling from C++
     #[no_mangle]
-    pub extern "C" fn rust_handle_page_fault(addr: u32, err: u32) {
+    pub extern "C" fn rust_handle_page_fault(_addr: u32, _err: u32) {
         unsafe {
-            crate::ffi::serial_print(b"[Scheduler] rust_handle_page_fault invoked\n\0".as_ptr());
+            crate::ffi::serial_print(c"[Scheduler] rust_handle_page_fault invoked\n".as_ptr() as *const u8);
         }
 
         // Mark current task as terminated
@@ -174,7 +180,7 @@ impl Scheduler {
         if let Some(ref mut sched) = *scheduler {
             if let Some(ref mut task) = sched.current_task {
                 task.set_state(TaskState::Terminated);
-                unsafe { crate::ffi::serial_print(b"[Scheduler] Marked current task as Terminated\n\0".as_ptr()); }
+                unsafe { crate::ffi::serial_print(c"[Scheduler] Marked current task as Terminated\n".as_ptr() as *const u8); }
             }
         }
 
@@ -185,8 +191,8 @@ impl Scheduler {
     /// Start the scheduler (never returns)
     pub fn start() -> ! {
         unsafe {
-            ffi::serial_print(b"[Scheduler] Starting scheduler with \0".as_ptr());
-            ffi::vga_println(b"\nStarting multitasking demo...\n\0".as_ptr());
+            ffi::serial_print(c"[Scheduler] Starting scheduler with ".as_ptr() as *const u8);
+            ffi::vga_println(c"\nStarting multitasking demo...\n".as_ptr() as *const u8);
         }
         
         // Get queue size
@@ -200,14 +206,14 @@ impl Scheduler {
         };
         
         unsafe {
-            ffi::serial_print(b" tasks in queue\n\0".as_ptr());
+            ffi::serial_print(c" tasks in queue\n".as_ptr() as *const u8);
         }
         
         if queue_size == 0 {
             unsafe {
-                ffi::serial_print(b"[Scheduler] ERROR: No tasks to run!\n\0".as_ptr());
+                ffi::serial_print(c"[Scheduler] ERROR: No tasks to run!\n".as_ptr() as *const u8);
                 ffi::vga_set_color(12, 0); // Red
-                ffi::vga_println(b"ERROR: No tasks in scheduler!\0".as_ptr());
+                ffi::vga_println(c"ERROR: No tasks in scheduler!".as_ptr() as *const u8);
             }
             loop {
                 unsafe { core::arch::asm!("hlt"); }
@@ -231,10 +237,10 @@ impl Scheduler {
                 drop(scheduler);
 
                 unsafe {
-                    ffi::serial_print(b"[Scheduler] Performing initial context_switch to first task\n\0".as_ptr());
+                    ffi::serial_print(c"[Scheduler] Performing initial context_switch to first task\n".as_ptr() as *const u8);
                     ffi::context_switch(&mut kernel_ctx as *mut _, new_ctx_ptr);
                     // When we return here, the task has finished or yielded back to kernel_ctx
-                    ffi::serial_print(b"[Scheduler] Returned from initial context_switch\n\0".as_ptr());
+                    ffi::serial_print(c"[Scheduler] Returned from initial context_switch\n".as_ptr() as *const u8);
                 }
 
                 // Re-acquire scheduler and continue scheduling loop
@@ -253,7 +259,7 @@ impl Scheduler {
 
         // Should never reach here; if it does, halt
         unsafe {
-            ffi::serial_print(b"[Scheduler] ERROR: Scheduler returned!\n\0".as_ptr());
+            ffi::serial_print(c"[Scheduler] ERROR: Scheduler returned!\n".as_ptr() as *const u8);
         }
         loop {
             unsafe { core::arch::asm!("hlt"); }

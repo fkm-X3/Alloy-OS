@@ -1,6 +1,6 @@
-/// Foreign Function Interface (FFI) to C++ kernel functions
-///
-/// This module provides safe Rust wrappers around C++ functions
+//! Foreign Function Interface (FFI) to C++ kernel functions
+//!
+//! This module provides safe Rust wrappers around C++ functions
 
 use core::ffi::c_void;
 use crate::process::CpuContext;

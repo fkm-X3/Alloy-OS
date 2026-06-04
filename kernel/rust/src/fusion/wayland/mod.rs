@@ -6,7 +6,6 @@
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use core::fmt;
 
 pub mod socket;
 pub mod protocol;
@@ -205,14 +204,14 @@ impl WaylandServer {
         self.socket = Some(socket);
 
         unsafe {
-            crate::ffi::serial_print(b"[Wayland] Server initialized at /run/user/1000/wayland-0\n\0".as_ptr());
+            crate::ffi::serial_print(c"[Wayland] Server initialized at /run/user/1000/wayland-0\n".as_ptr() as *const u8);
         }
 
         Ok(())
     }
 
 /// Initialize with framebuffer reference for compositor integration
-     pub fn init_with_framebuffer(&mut self, width: u32, height: u32) -> WaylandResult<()> {
+     pub fn init_with_framebuffer(&mut self, _width: u32, _height: u32) -> WaylandResult<()> {
          let display = VesaDisplay::new().ok_or(WaylandError::AllocationFailed)?;
          self.framebuffer = Some(FusionDisplayBackend::new(display));
          self.init()
@@ -232,7 +231,7 @@ impl WaylandServer {
             self.send_initial_globals(client_id);
 
             unsafe {
-                crate::ffi::serial_print(b"[Wayland] Accepted client connection\n\0".as_ptr());
+                crate::ffi::serial_print(c"[Wayland] Accepted client connection\n".as_ptr() as *const u8);
             }
 
             Ok(())
@@ -260,7 +259,7 @@ impl WaylandServer {
 
     /// Dispatch a message from a client
     pub fn dispatch_message(&mut self, client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
-        if self.clients.get(&client_id).is_some() {
+        if self.clients.contains_key(&client_id) {
             self.protocol_handler.handle_message(
                 client_id,
                 message,
@@ -297,7 +296,7 @@ impl WaylandServer {
 
         if let Some(backend) = self.framebuffer.as_mut() {
             let shm_mgr = self.shm_buffer_handler.shm_manager_mut();
-            let _ = CompositorIntegration::composite_frame(
+            CompositorIntegration::composite_frame(
                 backend,
                 shm_mgr,
                 &surfaces,
@@ -324,7 +323,7 @@ self.registry_handler.remove_client(client_id);
             self.compositor_handler.clear_surface_for_client(client_id);
 
             unsafe {
-                crate::ffi::serial_print(b"[Wayland] Client disconnected\n\0".as_ptr());
+                crate::ffi::serial_print(c"[Wayland] Client disconnected\n".as_ptr() as *const u8);
             }
             Ok(())
         } else {

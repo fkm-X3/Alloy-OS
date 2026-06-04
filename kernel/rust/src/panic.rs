@@ -1,7 +1,7 @@
-/// Panic handler for no_std Rust kernel
-/// 
-/// This module handles panics in the Rust kernel by printing
-/// panic information to serial output and halting the system.
+//! Panic handler for no_std Rust kernel
+//! 
+//! This module handles panics in the Rust kernel by printing
+//! panic information to serial output and halting the system.
 
 use core::panic::PanicInfo;
 use core::fmt::Write;
@@ -22,16 +22,16 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     let mut writer = SerialWriter;
     
     // Print panic banner to serial
-    let _ = write!(writer, "\n");
-    let _ = write!(writer, "╔═══════════════════════════════════╗\n");
-    let _ = write!(writer, "║    KERNEL PANIC - SYSTEM HALTED   ║\n");
+    let _ = writeln!(writer);
+    let _ = writeln!(writer, "╔═══════════════════════════════════╗");
+    let _ = writeln!(writer, "║    KERNEL PANIC - SYSTEM HALTED   ║");
     let _ = write!(writer, "╚═══════════════════════════════════╝\n\n");
     
     // Location information
     if let Some(location) = info.location() {
-        let _ = write!(
+        let _ = writeln!(
             writer,
-            "Location: {}:{}:{}\n",
+            "Location: {}:{}:{}",
             location.file(),
             location.line(),
             location.column()
@@ -42,7 +42,7 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     let _ = write!(writer, "Message:  {}\n\n", info.message());
     
     // Dump some CPU registers (simplified to avoid register pressure)
-    let _ = write!(writer, "Register dump:\n");
+    let _ = writeln!(writer, "Register dump:");
     unsafe {
         let esp: u32;
         let ebp: u32;
@@ -62,8 +62,8 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
             out(reg) eflags,
         );
         
-        let _ = write!(writer, "  EBP: 0x{:08X}  ESP: 0x{:08X}\n", ebp, esp);
-        let _ = write!(writer, "  EFLAGS: 0x{:08X}\n", eflags);
+        let _ = writeln!(writer, "  EBP: 0x{:08X}  ESP: 0x{:08X}", ebp, esp);
+        let _ = writeln!(writer, "  EFLAGS: 0x{:08X}", eflags);
     }
     
     let _ = write!(writer, "\nSystem halted. Please reboot.\n");
@@ -71,11 +71,11 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     // Also print to VGA
     unsafe {
         ffi::vga_set_color(4, 0); // Red text
-        ffi::vga_println(b"\n!!! KERNEL PANIC !!!\0".as_ptr());
-        if let Some(location) = info.location() {
-            ffi::vga_print(b"Location: \0".as_ptr());
+        ffi::vga_println(c"\n!!! KERNEL PANIC !!!".as_ptr() as *const u8);
+        if let Some(_location) = info.location() {
+            ffi::vga_print(c"Location: ".as_ptr() as *const u8);
         }
-        ffi::vga_println(b"Check serial output for details.\0".as_ptr());
+        ffi::vga_println(c"Check serial output for details.".as_ptr() as *const u8);
     }
     
     // Halt the system

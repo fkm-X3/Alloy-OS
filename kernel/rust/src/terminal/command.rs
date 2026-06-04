@@ -1,6 +1,6 @@
-/// Command system for terminal
-/// 
-/// Defines the Command trait and provides a registry for command lookup
+//! Command system for terminal
+//! 
+//! Defines the Command trait and provides a registry for command lookup
 
 extern crate alloc;
 use alloc::string::String;
@@ -45,7 +45,7 @@ fn print_size_line(label: &str, bytes: u64) {
     crate::ffi::vga_print_str(label);
     unsafe {
         crate::ffi::vga_print(&value_buf[value_start] as *const u8);
-        crate::ffi::vga_print(b" \0".as_ptr());
+        crate::ffi::vga_print(c" ".as_ptr() as *const u8);
         crate::ffi::vga_println(&unit_buf[0] as *const u8);
     }
 }
@@ -67,9 +67,9 @@ fn print_uptime_value(uptime_ms: u64) {
         unsafe {
             crate::ffi::vga_print(&days_str[days_start] as *const u8);
             if days == 1 {
-                crate::ffi::vga_print(b" day, \0".as_ptr());
+                crate::ffi::vga_print(c" day, ".as_ptr() as *const u8);
             } else {
-                crate::ffi::vga_print(b" days, \0".as_ptr());
+                crate::ffi::vga_print(c" days, ".as_ptr() as *const u8);
             }
         }
     }
@@ -82,18 +82,18 @@ fn print_uptime_value(uptime_ms: u64) {
         crate::ffi::vga_print(
             &hours_str[format::trim_leading_spaces(&hours_str)] as *const u8
         );
-        crate::ffi::vga_print(b":\0".as_ptr());
+        crate::ffi::vga_print(c":".as_ptr() as *const u8);
 
         if minutes < 10 {
-            crate::ffi::vga_print(b"0\0".as_ptr());
+            crate::ffi::vga_print(c"0".as_ptr() as *const u8);
         }
         crate::ffi::vga_print(
             &minutes_str[format::trim_leading_spaces(&minutes_str)] as *const u8
         );
-        crate::ffi::vga_print(b":\0".as_ptr());
+        crate::ffi::vga_print(c":".as_ptr() as *const u8);
 
         if seconds < 10 {
-            crate::ffi::vga_print(b"0\0".as_ptr());
+            crate::ffi::vga_print(c"0".as_ptr() as *const u8);
         }
         crate::ffi::vga_println(
             &seconds_str[format::trim_leading_spaces(&seconds_str)] as *const u8
@@ -116,6 +116,12 @@ pub trait Command {
 /// Command registry
 pub struct CommandRegistry {
     commands: BTreeMap<String, Box<dyn Command>>,
+}
+
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CommandRegistry {
@@ -218,7 +224,7 @@ impl Command for ClearCommand {
             // Clear screen by printing 25 empty lines
             crate::ffi::vga_set_color(0, 0);
             for _ in 0..25 {
-                crate::ffi::vga_println(b"\0".as_ptr());
+                crate::ffi::vga_println(c"".as_ptr() as *const u8);
             }
             crate::ffi::vga_set_color(7, 0);
         }
@@ -305,7 +311,7 @@ impl Command for SysinfoCommand {
         let mut vendor = [0u8; 13];
         unsafe {
             crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::ffi::vga_print(b"CPU Vendor: \0".as_ptr());
+            crate::ffi::vga_print(c"CPU Vendor: ".as_ptr() as *const u8);
             crate::ffi::vga_println(vendor.as_ptr());
         }
 
@@ -424,8 +430,8 @@ impl Command for TicksCommand {
         print_u64_decimal_line("Uptime (ms):    ", uptime_ms);
         print_u32_decimal_line("Frequency (Hz): ", frequency_hz);
 
-        if tick_count > 0 {
-            print_u64_decimal_line("Avg ms/tick:    ", uptime_ms / tick_count);
+        if let Some(avg) = uptime_ms.checked_div(tick_count) {
+            print_u64_decimal_line("Avg ms/tick:    ", avg);
         }
 
         Ok(())
@@ -463,17 +469,17 @@ impl Command for MeminfoCommand {
             // Total memory
             let (val_buf, unit_buf) = format::format_bytes(total_memory);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(b"  Total memory:     \0".as_ptr());
+            crate::ffi::vga_print(c"  Total memory:     ".as_ptr() as *const u8);
             crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(b" \0".as_ptr());
+            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
             crate::ffi::vga_println(&unit_buf[0] as *const u8);
             
             // Available memory
             let (val_buf, unit_buf) = format::format_bytes(available_memory);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(b"  Available memory: \0".as_ptr());
+            crate::ffi::vga_print(c"  Available memory: ".as_ptr() as *const u8);
             crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(b" \0".as_ptr());
+            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
             crate::ffi::vga_println(&unit_buf[0] as *const u8);
             
             // Frame statistics
@@ -481,13 +487,13 @@ impl Command for MeminfoCommand {
             let used_frames_str = format::u32_to_decimal(used_frames);
             let free_frames_str = format::u32_to_decimal(free_frames);
             
-            crate::ffi::vga_print(b"  Total frames:     \0".as_ptr());
+            crate::ffi::vga_print(c"  Total frames:     ".as_ptr() as *const u8);
             crate::ffi::vga_println(&total_frames_str[format::trim_leading_spaces(&total_frames_str)] as *const u8);
             
-            crate::ffi::vga_print(b"  Used frames:      \0".as_ptr());
+            crate::ffi::vga_print(c"  Used frames:      ".as_ptr() as *const u8);
             crate::ffi::vga_println(&used_frames_str[format::trim_leading_spaces(&used_frames_str)] as *const u8);
             
-            crate::ffi::vga_print(b"  Free frames:      \0".as_ptr());
+            crate::ffi::vga_print(c"  Free frames:      ".as_ptr() as *const u8);
             crate::ffi::vga_println(&free_frames_str[format::trim_leading_spaces(&free_frames_str)] as *const u8);
         }
         
@@ -503,20 +509,20 @@ impl Command for MeminfoCommand {
             
             // Heap start address
             let heap_start_hex = format::u32_to_hex(heap_start);
-            crate::ffi::vga_print(b"  Heap start:       \0".as_ptr());
+            crate::ffi::vga_print(c"  Heap start:       ".as_ptr() as *const u8);
             crate::ffi::vga_println(&heap_start_hex[0] as *const u8);
             
             // Heap size
             let (val_buf, unit_buf) = format::format_bytes(heap_size as u64);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(b"  Heap size:        \0".as_ptr());
+            crate::ffi::vga_print(c"  Heap size:        ".as_ptr() as *const u8);
             crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(b" \0".as_ptr());
+            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
             crate::ffi::vga_println(&unit_buf[0] as *const u8);
             
             // Allocated pages
             let allocated_pages_str = format::u32_to_decimal(allocated_pages);
-            crate::ffi::vga_print(b"  Allocated pages:  \0".as_ptr());
+            crate::ffi::vga_print(c"  Allocated pages:  ".as_ptr() as *const u8);
             crate::ffi::vga_println(&allocated_pages_str[format::trim_leading_spaces(&allocated_pages_str)] as *const u8);
         }
         
@@ -590,7 +596,7 @@ impl Command for CpuInfoCommand {
             // Get CPU vendor
             let mut vendor = [0u8; 13];
             crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::ffi::vga_print(b"Vendor:   \0".as_ptr());
+            crate::ffi::vga_print(c"Vendor:   ".as_ptr() as *const u8);
             crate::ffi::vga_println(vendor.as_ptr());
             
             // Get model info
@@ -603,40 +609,40 @@ impl Command for CpuInfoCommand {
             let model_str = format::u32_to_decimal(model);
             let stepping_str = format::u32_to_decimal(stepping);
             
-            crate::ffi::vga_print(b"Family:   \0".as_ptr());
+            crate::ffi::vga_print(c"Family:   ".as_ptr() as *const u8);
             crate::ffi::vga_println(&family_str[format::trim_leading_spaces(&family_str)] as *const u8);
             
-            crate::ffi::vga_print(b"Model:    \0".as_ptr());
+            crate::ffi::vga_print(c"Model:    ".as_ptr() as *const u8);
             crate::ffi::vga_println(&model_str[format::trim_leading_spaces(&model_str)] as *const u8);
             
-            crate::ffi::vga_print(b"Stepping: \0".as_ptr());
+            crate::ffi::vga_print(c"Stepping: ".as_ptr() as *const u8);
             crate::ffi::vga_println(&stepping_str[format::trim_leading_spaces(&stepping_str)] as *const u8);
             
             // Get features
             let features = crate::ffi::cpu_get_features_ffi();
             
-            crate::ffi::vga_println(b"\nFeatures:\0".as_ptr());
+            crate::ffi::vga_println(c"\nFeatures:".as_ptr() as *const u8);
             
             if features & CPU_FEATURE_FPU != 0 {
-                crate::ffi::vga_println(b"  [x] FPU   - Floating Point Unit\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] FPU   - Floating Point Unit".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_TSC != 0 {
-                crate::ffi::vga_println(b"  [x] TSC   - Time Stamp Counter\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] TSC   - Time Stamp Counter".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_PAE != 0 {
-                crate::ffi::vga_println(b"  [x] PAE   - Physical Address Extension\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] PAE   - Physical Address Extension".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_APIC != 0 {
-                crate::ffi::vga_println(b"  [x] APIC  - Advanced Programmable Interrupt Controller\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] APIC  - Advanced Programmable Interrupt Controller".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_MMX != 0 {
-                crate::ffi::vga_println(b"  [x] MMX   - MMX Instructions\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] MMX   - MMX Instructions".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_SSE != 0 {
-                crate::ffi::vga_println(b"  [x] SSE   - Streaming SIMD Extensions\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] SSE   - Streaming SIMD Extensions".as_ptr() as *const u8);
             }
             if features & CPU_FEATURE_SSE2 != 0 {
-                crate::ffi::vga_println(b"  [x] SSE2  - Streaming SIMD Extensions 2\0".as_ptr());
+                crate::ffi::vga_println(c"  [x] SSE2  - Streaming SIMD Extensions 2".as_ptr() as *const u8);
             }
         }
         

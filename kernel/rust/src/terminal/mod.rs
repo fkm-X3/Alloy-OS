@@ -1,7 +1,7 @@
-/// Terminal module for Alloy OS
-/// 
-/// Provides a full-featured terminal with command parsing, line editing,
-/// history, and built-in commands.
+//! Terminal module for Alloy OS
+//! 
+//! Provides a full-featured terminal with command parsing, line editing,
+//! history, and built-in commands.
 
 pub mod buffer;
 pub mod command;
@@ -20,6 +20,12 @@ pub struct Terminal {
     commands: Option<CommandRegistry>,  // Make optional for lazy init
     commands_initialized: bool,
     history: CommandHistory,
+}
+
+impl Default for Terminal {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Terminal {
@@ -70,25 +76,25 @@ impl Terminal {
             let cursor_pos = self.buffer.cursor_pos();
             
             // Save current cursor position
-            let save_x = ffi::vga_get_cursor_x();
+            let _save_x = ffi::vga_get_cursor_x();
             let save_y = ffi::vga_get_cursor_y();
             
             // Move to start position
             ffi::vga_set_cursor(start_x, save_y);
             
             // Print from cursor position to end
-            for (i, ch) in line[cursor_pos..].chars().enumerate() {
+            for ch in line[cursor_pos..].chars() {
                 ffi::vga_putchar(ch as u8);
             }
             
             // Clear to end of line (in case line got shorter)
-            let current_x = ffi::vga_get_cursor_x();
+            let _current_x = ffi::vga_get_cursor_x();
             while ffi::vga_get_cursor_x() < 80 {
                 ffi::vga_putchar(b' ');
             }
             
             // Restore cursor to correct position
-            let final_x = start_x + (self.buffer.len() - cursor_pos) as u8;
+            let _final_x = start_x + (self.buffer.len() - cursor_pos) as u8;
             ffi::vga_set_cursor(start_x + (cursor_pos as u8), save_y);
         }
     }
@@ -249,7 +255,7 @@ impl Terminal {
                 }
                 false
             }
-            c if c >= ' ' && c <= '~' => {
+            c if (' '..='~').contains(&c) => {
                 // Printable character - insert at cursor
                 if self.buffer.insert(c) {
                     let cursor_pos = self.buffer.cursor_pos();
@@ -287,7 +293,7 @@ impl Terminal {
         self.ensure_commands_initialized();
         
         // Parse command and arguments
-        let parts: alloc::vec::Vec<&str> = cmd_line.trim().split_whitespace().collect();
+        let parts: alloc::vec::Vec<&str> = cmd_line.split_whitespace().collect();
         if parts.is_empty() {
             return;
         }
@@ -315,7 +321,7 @@ impl Terminal {
         colors::print_banner();
         
         unsafe {
-            ffi::vga_println(b"\n\0".as_ptr());
+            ffi::vga_println(c"\n".as_ptr() as *const u8);
         }
         
         self.show_prompt();
@@ -324,13 +330,12 @@ impl Terminal {
         loop {
             if ffi::keyboard_has_key() {
                 let key = ffi::keyboard_read();
-                if key != 0 {
-                    if self.handle_input(key) {
+                if key != 0
+                    && self.handle_input(key) {
                         // Show new prompt
                         ffi::put_char('\n');
                         self.show_prompt();
                     }
-                }
             } else {
                 // Halt CPU until next interrupt to save power and prevent busy-waiting
                 unsafe {

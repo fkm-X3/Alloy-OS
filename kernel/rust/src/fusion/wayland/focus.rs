@@ -127,7 +127,7 @@ impl FocusManager {
 
     /// Get or create a seat's focus state
     pub fn get_seat_mut(&mut self, seat_id: SeatId) -> &mut FocusState {
-        self.seats.entry(seat_id).or_insert_with(FocusState::new)
+        self.seats.entry(seat_id).or_default()
     }
 
     /// Get a seat's focus state

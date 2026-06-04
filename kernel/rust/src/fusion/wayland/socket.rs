@@ -11,6 +11,7 @@ use super::WaylandError;
 /// Constants for Unix domain sockets
 const AF_UNIX: u32 = 1;
 const SOCK_STREAM: u32 = 1;
+#[allow(dead_code)]
 const PF_UNIX: u32 = 1;
 
 // Max backlog for listen queue
@@ -32,6 +33,7 @@ impl UnixSocket {
     /// Create a new Unix domain socket
     pub fn new() -> Result<Self, WaylandError> {
         // Attempt to use syscall first
+        #[allow(unused_unsafe)]
         let fd = unsafe {
             // socket(AF_UNIX, SOCK_STREAM, 0)
             let result = crate::syscall::rust_sys_socket(AF_UNIX as i32, SOCK_STREAM as i32, 0);
@@ -45,7 +47,7 @@ impl UnixSocket {
         match fd {
             Some(f) => {
                 unsafe {
-                    ffi::serial_print(b"[Wayland Socket] Created Unix domain socket via syscall\n\0".as_ptr());
+                    ffi::serial_print(c"[Wayland Socket] Created Unix domain socket via syscall\n".as_ptr() as *const u8);
                 }
                 Ok(Self {
                     fd: Some(f),
@@ -56,7 +58,7 @@ impl UnixSocket {
             }
             None => {
                 unsafe {
-                    ffi::serial_print(b"[Wayland Socket] Falling back to placeholder socket\n\0".as_ptr());
+                    ffi::serial_print(c"[Wayland Socket] Falling back to placeholder socket\n".as_ptr() as *const u8);
                 }
                 // Fallback for environments without full syscall support
                 Ok(Self {
@@ -94,7 +96,7 @@ impl UnixSocket {
 
         if result < 0 {
             unsafe {
-                ffi::serial_print(b"[Wayland Socket] bind() syscall failed, using fallback\n\0".as_ptr());
+                ffi::serial_print(c"[Wayland Socket] bind() syscall failed, using fallback\n".as_ptr() as *const u8);
             }
             // Mark as bound anyway for fallback mode
         }
@@ -107,11 +109,11 @@ impl UnixSocket {
         self.path = Some(stored_path);
 
         unsafe {
-            ffi::serial_print(b"[Wayland Socket] Bound to \0".as_ptr());
+            ffi::serial_print(c"[Wayland Socket] Bound to ".as_ptr() as *const u8);
             for byte in path.as_bytes().iter() {
                 ffi::vga_putchar(*byte);
             }
-            ffi::serial_print(b"\n\0".as_ptr());
+            ffi::serial_print(c"\n".as_ptr() as *const u8);
         }
 
         Ok(())
@@ -125,20 +127,21 @@ impl UnixSocket {
 
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
+        #[allow(unused_unsafe)]
         let result = unsafe {
             crate::syscall::rust_sys_listen(fd as i32, LISTEN_BACKLOG as i32)
         };
 
         if result < 0 {
             unsafe {
-                ffi::serial_print(b"[Wayland Socket] listen() syscall failed, using fallback\n\0".as_ptr());
+                ffi::serial_print(c"[Wayland Socket] listen() syscall failed, using fallback\n".as_ptr() as *const u8);
             }
         }
 
         self.listening = true;
 
         unsafe {
-            ffi::serial_print(b"[Wayland Socket] Listening for connections\n\0".as_ptr());
+            ffi::serial_print(c"[Wayland Socket] Listening for connections\n".as_ptr() as *const u8);
         }
 
         Ok(())
@@ -152,6 +155,7 @@ impl UnixSocket {
 
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
+        #[allow(unused_unsafe)]
         let client_fd = unsafe {
             crate::syscall::rust_sys_accept(fd as i32)
         };
@@ -161,7 +165,7 @@ impl UnixSocket {
         }
 
         unsafe {
-            ffi::serial_print(b"[Wayland Socket] Accepted connection on fd \0".as_ptr());
+            ffi::serial_print(c"[Wayland Socket] Accepted connection on fd ".as_ptr() as *const u8);
         }
 
         Ok(client_fd as u32)
@@ -174,6 +178,7 @@ impl UnixSocket {
             None => return false,
         };
 
+        #[allow(unused_unsafe)]
         let result = unsafe {
             crate::syscall::rust_sys_has_pending_connections(fd as i32)
         };
@@ -228,7 +233,7 @@ impl Drop for UnixSocket {
         if let Some(fd) = self.fd {
             unsafe {
                 crate::syscall::rust_sys_close_socket(fd as i32);
-                ffi::serial_print(b"[Wayland Socket] Closed socket\n\0".as_ptr());
+                ffi::serial_print(c"[Wayland Socket] Closed socket\n".as_ptr() as *const u8);
             }
         }
     }

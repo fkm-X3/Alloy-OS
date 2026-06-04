@@ -81,7 +81,7 @@ impl ShmBuffer {
         }
 
         // Check buffer size doesn't overflow
-        let bytes_per_pixel = self.format.bytes_per_pixel() as u32;
+        let _bytes_per_pixel = self.format.bytes_per_pixel() as u32;
         let required_size = self.offset
             .checked_add(self.height.saturating_mul(self.stride))
             .ok_or(WaylandError::ProtocolViolation)?;

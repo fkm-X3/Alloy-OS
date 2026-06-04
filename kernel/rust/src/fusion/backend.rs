@@ -65,6 +65,7 @@ impl SurfaceData {
         })
     }
 
+    #[allow(dead_code)]
     fn pixel_index(&self, x: u32, y: u32) -> Option<usize> {
         if x < self.width && y < self.height {
             Some((y as usize) * (self.width as usize) + (x as usize))
@@ -98,7 +99,7 @@ impl FusionDisplayBackend {
     /// Create a new Fusion display backend
     pub fn new(mut display: VesaDisplay) -> Self {
         let (width, height) = display.get_resolution();
-        let _ = display.clear(COMPOSITOR_CLEAR_COLOR);
+        display.clear(COMPOSITOR_CLEAR_COLOR);
         display.swap_buffer();
 
         FusionDisplayBackend {
@@ -123,7 +124,7 @@ impl FusionDisplayBackend {
 
     /// Clear the entire framebuffer
     pub fn clear_framebuffer(&mut self) {
-        let _ = self.display.clear(COMPOSITOR_CLEAR_COLOR);
+        self.display.clear(COMPOSITOR_CLEAR_COLOR);
         self.dirty = true;
     }
 
@@ -139,11 +140,13 @@ impl FusionDisplayBackend {
     }
 
     /// Get a mutable reference to a surface for rendering
+    #[allow(private_interfaces)]
     pub fn get_surface_mut(&mut self, id: u32) -> Option<&mut SurfaceData> {
         self.surfaces.get_mut(&id)
     }
 
     /// Get a reference to a surface
+    #[allow(private_interfaces)]
     pub fn get_surface(&self, id: u32) -> Option<&SurfaceData> {
         self.surfaces.get(&id)
     }
@@ -224,6 +227,7 @@ impl FusionDisplayBackend {
     }
 
     /// Get all visible surface IDs sorted by z-order for composition
+    #[allow(private_interfaces)]
     pub fn surfaces_by_z_order(&self) -> Vec<(u32, &SurfaceData)> {
         let mut surfaces: Vec<_> = self
             .surfaces
@@ -286,9 +290,7 @@ impl FusionDisplayBackend {
                 let fb_size = (self.framebuffer_width * self.framebuffer_height) as usize;
 
                 if fb_idx < fb_size {
-                    unsafe {
-                        self.display.pixel_put(fb_x as u32, fb_y as u32, pixel);
-                    }
+                    self.display.pixel_put(fb_x as u32, fb_y as u32, pixel);
                 }
             }
         }
@@ -448,7 +450,7 @@ fn flush(&mut self) -> Result<(), Self::Error> {
                     if pixel_idx < surface.pixels.len() {
                         let pixel = surface.pixels[pixel_idx];
                         if pixel != 0 {
-                            let _ = self.display.pixel_put(
+                            self.display.pixel_put(
                                 fb_x as u32,
                                 fb_y as u32,
                                 pixel,

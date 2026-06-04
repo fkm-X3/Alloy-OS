@@ -126,11 +126,11 @@ impl RegistryHandler {
         self.client_bindings.insert((client_id, global_name), object_id);
         self.client_objects
             .entry(client_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(object_id);
 
         unsafe {
-            crate::ffi::serial_print(b"[Wayland Registry] Handled bind request\n\0".as_ptr());
+            crate::ffi::serial_print(c"[Wayland Registry] Handled bind request\n".as_ptr() as *const u8);
         }
 
         Ok(RegistryResponse::Bound {
@@ -142,7 +142,7 @@ impl RegistryHandler {
     }
 
     /// Generate global events for a newly connected registry client
-    pub fn get_global_events_for_client(&self, client_id: ClientId, registry_id: u32) -> Vec<WaylandMessage> {
+    pub fn get_global_events_for_client(&self, _client_id: ClientId, registry_id: u32) -> Vec<WaylandMessage> {
         let mut events = Vec::new();
 
         for (name, global) in self.globals.iter() {
@@ -287,7 +287,7 @@ mod tests {
         let client_id = ClientId(1);
 
         // Simulate a bind creating client objects
-        handler.client_objects.entry(client_id).or_insert_with(Vec::new).push(100);
+        handler.client_objects.entry(client_id).or_default().push(100);
         handler.client_bindings.insert((client_id, 0), 100);
 
         handler.remove_client(client_id);

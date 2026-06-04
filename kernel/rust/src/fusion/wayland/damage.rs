@@ -46,17 +46,15 @@ impl DamageRect {
     /// Check if two rectangles are adjacent (share an edge)
     pub fn adjacent(&self, other: &DamageRect) -> bool {
         // Horizontally adjacent
-        if self.y == other.y && self.height == other.height {
-            if self.right() == other.x || other.right() == self.x {
+        if self.y == other.y && self.height == other.height
+            && (self.right() == other.x || other.right() == self.x) {
                 return true;
             }
-        }
         // Vertically adjacent
-        if self.x == other.x && self.width == other.width {
-            if self.bottom() == other.y || other.bottom() == self.y {
+        if self.x == other.x && self.width == other.width
+            && (self.bottom() == other.y || other.bottom() == self.y) {
                 return true;
             }
-        }
         false
     }
 

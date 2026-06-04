@@ -54,7 +54,7 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
 
     // Track loaded PT_LOAD segments to help compute phdr runtime address
     #[derive(Clone, Copy)]
-    struct LoadSeg { p_offset: u32, p_vaddr: u32, p_filesz: u32 };
+    struct LoadSeg { p_offset: u32, p_vaddr: u32, p_filesz: u32 }
     let mut loads: alloc::vec::Vec<LoadSeg> = alloc::vec::Vec::new();
 
     for i in 0..phnum {
@@ -69,9 +69,9 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
             // Align to page boundaries
             let page_size = 4096usize;
             let aligned_start = vaddr & !(page_size - 1);
-            let aligned_end = ((vaddr + memsz + page_size - 1) / page_size) * page_size;
+            let aligned_end = (vaddr + memsz).div_ceil(page_size) * page_size;
             let alloc_size = aligned_end - aligned_start;
-            let flags = (ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER) as u32;
+            let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
 
             // Allocate and map physical frames for each page, then copy file data
             let mut page_addr = aligned_start;
@@ -88,7 +88,7 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
                     let copy_from = page_offset;
                     let copy_len = core::cmp::min(page_size, filesz - copy_from);
                     unsafe {
-                        let dest = (page_addr + 0) as *mut u8;
+                        let dest = page_addr as *mut u8;
                         let src = image.as_ptr().add(ph.p_offset as usize + copy_from);
                         ptr::copy_nonoverlapping(src, dest, copy_len);
                     }
@@ -104,7 +104,7 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
     // Compute runtime phdr address if possible: find load segment that contains file offset e_phoff
     let mut phdr_vaddr: u32 = 0;
     for seg in loads.iter() {
-        let off = hdr.e_phoff as u32;
+        let off = hdr.e_phoff;
         if off >= seg.p_offset && off < seg.p_offset + seg.p_filesz {
             let delta = off - seg.p_offset;
             phdr_vaddr = seg.p_vaddr + delta;

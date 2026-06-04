@@ -1,6 +1,6 @@
-/// Number formatting utilities for no_std environment
-/// 
-/// Provides functions to convert numbers to strings without heap allocation
+//! Number formatting utilities for no_std environment
+//! 
+//! Provides functions to convert numbers to strings without heap allocation
 
 /// Convert a u32 to a decimal string
 /// Returns a fixed-size buffer with the number formatted

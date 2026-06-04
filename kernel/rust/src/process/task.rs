@@ -11,6 +11,12 @@ static NEXT_TASK_ID: AtomicU32 = AtomicU32::new(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TaskId(u32);
 
+impl Default for TaskId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskId {
     /// Generate a new unique task ID
     pub fn new() -> Self {
@@ -62,11 +68,17 @@ pub struct CpuContext {
     pub cr3: u32,
 }
 
+impl Default for CpuContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuContext {
     /// Create a zeroed context
     pub fn new() -> Self {
         // Default CR3 to kernel page directory
-        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() } as u32;
+        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() };
 
         CpuContext {
             eax: 0, ebx: 0, ecx: 0, edx: 0,
@@ -89,6 +101,7 @@ pub struct Task {
     id: TaskId,
     state: TaskState,
     context: Box<CpuContext>,
+    #[allow(dead_code)]
     stack: Option<Box<[u8; 4096]>>,  // 4KB kernel stack
     name: String,
     // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
@@ -113,12 +126,12 @@ impl Task {
         context.ebp = stack_top as u32;
         
         // Set entry point
-        context.eip = entry as u32;
+        context.eip = entry as usize as u32;
         
         unsafe {
-            ffi::serial_print(b"[Task] Created task with ID \0".as_ptr());
+            ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);
             // Print simple message without trying to print the name (causes issues)
-            ffi::serial_print(b"...\n\0".as_ptr());
+            ffi::serial_print(c"...\n".as_ptr() as *const u8);
         }
         
         let mut task = Task {
@@ -232,16 +245,16 @@ impl Task {
 impl Drop for Task {
     fn drop(&mut self) {
         unsafe {
-            ffi::serial_print(b"[Task] Dropping task\n\0".as_ptr());
+            ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
         }
 
         // If this task has its own page directory (CR3) different from the kernel's,
         // destroy it and free all user pages and page tables.
         let pd = self.context.cr3;
-        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() as u32 };
+        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
         if pd != 0 && pd != kernel_pd {
             unsafe {
-                ffi::serial_print(b"[Task] Destroying task page directory\n\0".as_ptr());
+                ffi::serial_print(c"[Task] Destroying task page directory\n".as_ptr() as *const u8);
                 ffi::paging_destroy_directory(pd);
             }
         }

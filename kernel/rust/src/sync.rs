@@ -1,6 +1,6 @@
-/// Synchronization primitives for the kernel
-/// 
-/// Provides interrupt-safe spinlocks and other synchronization tools
+//! Synchronization primitives for the kernel
+//! 
+//! Provides interrupt-safe spinlocks and other synchronization tools
 
 use core::sync::atomic::{AtomicBool, Ordering, fence};
 use core::cell::UnsafeCell;
@@ -23,7 +23,7 @@ impl<T> SpinLock<T> {
     }
     
     /// Acquire lock
-    pub fn lock(&self) -> SpinLockGuard<T> {
+    pub fn lock(&self) -> SpinLockGuard<'_, T> {
         // Acquire spinlock
         while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             core::hint::spin_loop();
@@ -91,7 +91,7 @@ impl<T> SpinlockIRQ<T> {
     
     /// Acquire lock (disables interrupts)
     /// Returns previous interrupt state and lock guard
-    pub fn lock(&self) -> SpinlockIRQGuard<T> {
+    pub fn lock(&self) -> SpinlockIRQGuard<'_, T> {
         // Disable interrupts
         let flags = self.disable_interrupts();
         

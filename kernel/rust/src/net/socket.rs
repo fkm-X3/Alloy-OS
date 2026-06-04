@@ -12,6 +12,7 @@ const MAX_SOCKETS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SocketState {
+    #[allow(dead_code)]
     Free,
     Created,
     Bound,
@@ -22,7 +23,9 @@ enum SocketState {
 #[derive(Debug)]
 struct SocketInner {
     state: SocketState,
+    #[allow(dead_code)]
     domain: i32,
+    #[allow(dead_code)]
     socket_type: i32,
     bound_path: Option<String>,
     pending_connections: VecDeque<u32>,

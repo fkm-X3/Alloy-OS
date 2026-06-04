@@ -61,7 +61,7 @@ pub fn composite_frame(
          shm_manager: &mut ShmManager,
          surfaces: &[(u32, &SurfaceState)],
      ) {
-        let _ = backend.clear_framebuffer();
+        backend.clear_framebuffer();
 
         for (_z_order, surface) in surfaces {
             let surface = *surface;
@@ -113,13 +113,13 @@ pub fn composite_frame(
 
     /// Composite with explicit buffer and damage information
 pub fn composite_surface(
-         backend: &mut FusionDisplayBackend,
+         _backend: &mut FusionDisplayBackend,
          buffer: &ShmBuffer,
          damage: &[DamageRect],
          surface_x: i32,
          surface_y: i32,
-         surface_width: u32,
-         surface_height: u32,
+         _surface_width: u32,
+         _surface_height: u32,
      ) -> Result<(), &'static str> {
         if damage.is_empty() {
             return Ok(());
@@ -180,7 +180,7 @@ pub fn composite_surface(
         dst_y: i32,
     ) -> Result<(), &'static str> {
         let _kernel_addr = buffer.kernel_vaddr.ok_or("Buffer not mapped")?;
-        let _bytes_per_pixel = buffer.format.bytes_per_pixel() as usize;
+        let _bytes_per_pixel = buffer.format.bytes_per_pixel();
         let _stride = buffer.stride as usize;
         let _ = (src_x, src_y, src_w, src_h, dst_x, dst_y);
         Ok(())
@@ -212,6 +212,12 @@ pub fn composite_surface(
     /// Get total frames composited
     pub fn frames_composited(&self) -> u64 {
         self.frames_composited
+    }
+}
+
+impl Default for CompositorIntegration {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -275,20 +281,20 @@ impl FormatConverter {
 
     #[inline]
     pub fn alpha_blend(src: u32, dst: u32) -> u32 {
-        let src_a = ((src >> 24) & 0xFF) as u32;
+        let src_a = (src >> 24) & 0xFF;
         if src_a == 255 { return src; }
         if src_a == 0 { return dst; }
-        let dst_a = ((dst >> 24) & 0xFF) as u32;
+        let dst_a = (dst >> 24) & 0xFF;
         let src_alpha = src_a;
         let dst_alpha = dst_a * (255 - src_a) / 255;
         let out_alpha = src_alpha + dst_alpha;
         if out_alpha == 0 { return 0; }
-        let src_r = ((src >> 16) & 0xFF) as u32;
-        let src_g = ((src >> 8) & 0xFF) as u32;
-        let src_b = (src & 0xFF) as u32;
-        let dst_r = ((dst >> 16) & 0xFF) as u32;
-        let dst_g = ((dst >> 8) & 0xFF) as u32;
-        let dst_b = (dst & 0xFF) as u32;
+        let src_r = (src >> 16) & 0xFF;
+        let src_g = (src >> 8) & 0xFF;
+        let src_b = src & 0xFF;
+        let dst_r = (dst >> 16) & 0xFF;
+        let dst_g = (dst >> 8) & 0xFF;
+        let dst_b = dst & 0xFF;
         let r = (src_r * src_alpha + dst_r * dst_alpha) / out_alpha;
         let g = (src_g * src_alpha + dst_g * dst_alpha) / out_alpha;
         let b = (src_b * src_alpha + dst_b * dst_alpha) / out_alpha;

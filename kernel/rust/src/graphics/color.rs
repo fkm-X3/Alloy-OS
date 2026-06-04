@@ -278,7 +278,7 @@ fn linear_to_srgb(linear: f32) -> u8 {
         // Simplified approximation: use sqrt as an approximation for 1/2.4 power
         1.055 * linear_sqrt(linear) - 0.055
     };
-    let clamped = if v < 0.0 { 0.0 } else if v > 1.0 { 1.0 } else { v };
+    let clamped = v.clamp(0.0, 1.0);
     (clamped * 255.0) as u8
 }
 

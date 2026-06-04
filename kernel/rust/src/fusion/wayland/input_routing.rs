@@ -8,7 +8,7 @@ use core::fmt;
 
 use super::surface::SurfaceId;
 use super::focus::{FocusManager, SeatId};
-use super::seat::{SeatManager, ButtonState, ModifierState, button_codes};
+use super::seat::{SeatManager, ButtonState, ModifierState};
 
 /// Input routing error
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

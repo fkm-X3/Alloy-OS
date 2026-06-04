@@ -1,7 +1,7 @@
-/// Heap allocator module
-/// 
-/// Provides a proper heap allocator with better granularity than
-/// the page-based allocator. Uses a linked list of free blocks.
+//! Heap allocator module
+//! 
+//! Provides a proper heap allocator with better granularity than
+//! the page-based allocator. Uses a linked list of free blocks.
 
 use core::ptr::null_mut;
 use core::alloc::Layout;
@@ -46,7 +46,7 @@ impl BlockHeader {
         }
         
         // Check size is properly aligned
-        if self.size % MIN_BLOCK_SIZE != 0 {
+        if !self.size.is_multiple_of(MIN_BLOCK_SIZE) {
             return false;
         }
         
@@ -78,6 +78,12 @@ pub struct HeapAllocator {
     total_freed: usize,
 }
 
+impl Default for HeapAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HeapAllocator {
     /// Create a new heap allocator with empty free list and zero counters
     /// This is safe because all pointers start as null and counters as zero
@@ -93,7 +99,7 @@ impl HeapAllocator {
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let align = layout.align().max(HEAP_ALIGN);
         if align > HEAP_ALIGN {
-            ffi::serial_print(b"[Heap] ERROR: Unsupported allocation alignment\n\0".as_ptr());
+            ffi::serial_print(c"[Heap] ERROR: Unsupported allocation alignment\n".as_ptr() as *const u8);
             return null_mut();
         }
 
@@ -109,14 +115,14 @@ impl HeapAllocator {
         }
         
         // No suitable block found, allocate new pages from VMM
-        let pages_needed = (total_size + 4095) / 4096;
+        let pages_needed = total_size.div_ceil(4096);
         let alloc_size = pages_needed * 4096;
         
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
         let ptr = ffi::vmm_alloc_region(alloc_size as u32, flags) as *mut u8;
         
         if ptr.is_null() {
-            ffi::serial_print(b"[Heap] ERROR: VMM allocation failed!\n\0".as_ptr());
+            ffi::serial_print(c"[Heap] ERROR: VMM allocation failed!\n".as_ptr() as *const u8);
             return null_mut();
         }
         
@@ -150,10 +156,10 @@ impl HeapAllocator {
         if !(*header).is_valid() {
             // Detailed corruption reporting
             use crate::ffi;
-            ffi::serial_print(b"[Heap] CRITICAL: Heap corruption detected!\n\0".as_ptr());
-            ffi::serial_print(b"  Pointer: \0".as_ptr());
-            ffi::serial_print(b"  Expected magic: 0xDEADBEEF\n\0".as_ptr());
-            ffi::serial_print(b"  Actual magic: \0".as_ptr());
+            ffi::serial_print(c"[Heap] CRITICAL: Heap corruption detected!\n".as_ptr() as *const u8);
+            ffi::serial_print(c"  Pointer: ".as_ptr() as *const u8);
+            ffi::serial_print(c"  Expected magic: 0xDEADBEEF\n".as_ptr() as *const u8);
+            ffi::serial_print(c"  Actual magic: ".as_ptr() as *const u8);
             
             panic!("Heap corruption at {:p}", ptr);
         }

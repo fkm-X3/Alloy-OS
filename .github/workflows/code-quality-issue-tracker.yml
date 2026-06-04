@@ -47,7 +47,6 @@ jobs:
               -Zbuild-std=core,alloc \
               -Zjson-target-spec \
               2>&1 | tee /workspace/clippy_output.txt || true
-              2>&1 | tee /workspace/clippy_output.txt || true
             cd /workspace
 
             # Extract clippy counts from output

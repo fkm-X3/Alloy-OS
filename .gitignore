@@ -1,85 +1,54 @@
-# --- General / Shared Compilations ---
-# Object files and Libraries
+# --- Build outputs ---
+build/
+target/
+debug/
+
+# --- Object files / libraries ---
 *.o
 *.obj
-*.slo
-*.lo
-*.ko
 *.elf
-*.lib
 *.a
-*.la
-*.lai
+*.lib
 *.so
-*.so.*
 *.dylib
 *.dll
-
-# Executables and Linker Output
 *.exe
 *.out
-*.app
-*.i*86
-*.x86_64
 *.hex
-*.ilk
 *.map
-*.exp
-
-# Debugging and Information
 *.pdb
 *.dSYM/
-*.su
-*.idb
-*.dwo
-*.d
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# --- Rust Specific ---
-debug/
-target/
+# --- Rust ---
 **/*.rs.bk
 **/mutants.out*/
 
-# --- C / C++ Specific ---
-# Build Directories
-build/
-Build/
-build-*/
-vcpkg_installed/
+# --- Accidentally-tracked artifacts ---
+hello
+kernel/rust/check_output.txt
 
-# CMake
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-install_manifest.txt 
-compile_commands.json
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Fortran & Kernel
-*.mod*
-*.smod
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# --- Temporary & Tools ---
-*.tmp 
-*.log 
-*.bak 
-*.swp 
-Testing/
-.cache/
-#.idea/
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
 
-# --- Msc ---
-docs/
-terminal.txt
-image.png
-readme.txt
-plan.md
+# --- Logs / temp ---
+*.log
+*.tmp
+*.bak
+logs/
+
+# --- QEMU ---
+qemu.log

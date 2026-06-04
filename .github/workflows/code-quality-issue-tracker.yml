@@ -45,6 +45,8 @@ jobs:
             cargo +nightly clippy \
               --target i686-alloy.json \
               -Zbuild-std=core,alloc \
+              -Zjson-target-spec \
+              2>&1 | tee /workspace/clippy_output.txt || true
               2>&1 | tee /workspace/clippy_output.txt || true
             cd /workspace
 

@@ -51,7 +51,7 @@ jobs:
     - name: Build kernel
       uses: ./.github/actions/docker-ci
       with:
-        pull: true
+        pull: false
         image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
         command: |
           make
@@ -107,7 +107,7 @@ jobs:
     - name: Boot test in Docker
       uses: ./.github/actions/docker-ci
       with:
-        pull: true
+        pull: false
         image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
         command: |
           echo "Testing kernel boot..."

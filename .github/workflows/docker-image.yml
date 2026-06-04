@@ -12,7 +12,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  CI_IMAGE: ${{ github.repository }}-ci
+  CI_IMAGE: ${{ lower(github.repository) }}-ci
 
 jobs:
   build:

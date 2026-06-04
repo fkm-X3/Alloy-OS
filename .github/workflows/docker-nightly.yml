@@ -11,7 +11,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/alloy-os-nightly
+  IMAGE_NAME: ${{ lower(github.repository_owner) }}/alloy-os-nightly
 
 jobs:
   build-and-push:

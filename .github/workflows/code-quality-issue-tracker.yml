@@ -46,7 +46,12 @@ jobs:
               --target i686-alloy.json \
               -Zbuild-std=core,alloc \
               -Zjson-target-spec \
-              2>&1 | tee /workspace/clippy_output.txt || true
+              2>&1 | tee /workspace/clippy_output.txt
+            exit_code=$?
+            cd /workspace
+            if [ $exit_code -ne 0 ] && [ $exit_code -ne 101 ]; then
+              exit $exit_code
+            fi
             cd /workspace
 
             # Extract clippy counts from output

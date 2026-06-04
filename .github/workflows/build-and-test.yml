@@ -7,6 +7,10 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -16,21 +20,9 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
       with:
-        submodules: recursive
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v5
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          kernel/rust/target/
-        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'Alloy-DE/**/Cargo.lock', 'Alloy-DE/**/Cargo.toml') }}
-        restore-keys: |
-          rust-${{ runner.os }}-
+        fetch-depth: 1
 
     - name: Build and test in Docker
       uses: ./.github/actions/docker-ci
@@ -49,79 +41,49 @@ jobs:
             -no-shutdown \
             -D qemu.log || true
 
-    - name: Show boot logs
-      if: always()
-      run: |
-        echo "=== QEMU Log ==="
-        cat qemu.log || echo "No QEMU log found"
-
-        echo "=== Serial Log ==="
-        cat serial.log || echo "No serial log found"
-    
     - name: Verify build artifacts
+      if: always()
       run: |
         echo "Checking build artifacts..."
         ls -lh build/
-        
         if [ ! -f "build/alloy.elf" ]; then
           echo "ERROR: Kernel ELF not found!"
           exit 1
         fi
-        
         if [ ! -f "build/alloy.iso" ]; then
           echo "ERROR: Kernel ISO not found!"
           exit 1
         fi
-        
         echo "Build artifacts verified!"
         file build/alloy.elf
         file build/alloy.iso
     
     - name: Verify boot success
+      if: always()
       run: |
-        echo "Verifying kernel boot..."
-        
         if [ ! -f "serial.log" ] || [ ! -s "serial.log" ]; then
           echo "ERROR: No serial output found!"
           exit 1
         fi
-        
-        echo "=== Full serial log ==="
+        echo "=== Boot log ==="
         head -100 serial.log
-        echo "..."
+        echo "... (truncated) ..."
         tail -50 serial.log
-        
-        # Check for key boot messages
-        if grep -q "Alloy" serial.log; then
-          echo "Kernel name found"
-        else
-          echo "Kernel name not found"
-          echo "Serial log contents:"
+        if ! grep -q "Alloy" serial.log; then
+          echo "ERROR: Kernel name not found"
           cat serial.log
           exit 1
         fi
-        
-        if grep -qE "GDT|IDT|PMM|VMM" serial.log; then
-          echo "Initialization messages found"
-        else
-          echo "Initialization messages not found"
-          echo "Serial log contents:"
+        if ! grep -qE "GDT|IDT|PMM|VMM" serial.log; then
+          echo "ERROR: Init messages not found"
           cat serial.log
           exit 1
         fi
-        
-        # Check for Rust entry
-        if grep -q "rust_main\|Rust" serial.log; then
-          echo "Rust layer initialized"
-        else
-          echo "Rust layer not detected (may be normal)"
-        fi
-        
         echo "Boot verification passed!"
     
-    - name: Upload build artifacts
+    - name: Upload artifacts
       if: always()
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@v4
       with:
         name: kernel-build
         path: |
@@ -130,14 +92,3 @@ jobs:
           serial.log
           qemu.log
         retention-days: 7
-    
-    - name: Upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v7
-      with:
-        name: failure-logs
-        path: |
-          serial.log
-          qemu.log
-          build/
-        retention-days: 14

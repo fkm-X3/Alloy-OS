@@ -4,18 +4,22 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   syntax-check:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
       with:
-        submodules: recursive
+        fetch-depth: 1
 
     - name: Cache Rust dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry/index/
@@ -40,17 +44,3 @@ jobs:
           cd kernel/rust
           cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
           cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
-    
-    - name: Check for common issues
-      run: |
-        echo "Checking for common issues..."
-        
-        # Check for TODO/FIXME comments
-        echo "=== TODOs and FIXMEs ==="
-        grep -rn "TODO\|FIXME" kernel/ || echo "None found"
-        
-        # Check for potential null pointer issues
-        echo "=== Checking for null pointer patterns ==="
-        grep -rn "nullptr\|NULL" kernel/c/ || echo "None found"
-        
-        echo "Quick check complete!"

@@ -5,6 +5,10 @@ on:
     - cron: '0 0 */3 * *'
   workflow_dispatch:
 
+concurrency:
+  group: docker-nightly
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/alloy-os-nightly
@@ -20,10 +24,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          submodules: recursive
+          fetch-depth: 1
 
       - name: Generate build metadata
         id: meta
@@ -45,10 +48,10 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Cache Docker layers
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: buildx-${{ runner.os }}-${{ github.sha }}
+          key: buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'build-toolchain.sh') }}
           restore-keys: |
             buildx-${{ runner.os }}-
 

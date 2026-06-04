@@ -1,9 +1,13 @@
-name: Scheduled Nightly Release
+name: Nightly Release
 
 on:
   schedule:
     - cron: '0 0 */3 * *'
   workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -13,9 +17,9 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: recursive
 
       - name: Generate Version Tag
@@ -24,18 +28,6 @@ jobs:
           TAG_NAME="nightly-$(date +'%Y.%m.%d')-${{ github.run_number }}"
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            kernel/rust/target/
-          key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'Alloy-DE/**/Cargo.lock', 'Alloy-DE/**/Cargo.toml') }}
-          restore-keys: |
-            rust-${{ runner.os }}-
 
       - name: Build release in Docker
         uses: ./.github/actions/docker-ci

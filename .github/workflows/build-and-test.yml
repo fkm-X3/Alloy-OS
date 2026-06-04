@@ -14,7 +14,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
-  CI_IMAGE: ${{ lower(github.repository) }}-ci:latest
 
 jobs:
   build:
@@ -45,6 +44,9 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set lowercase image tag
+      run: echo "CI_IMAGE=${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_ENV
 
     - name: Build kernel
       uses: ./.github/actions/docker-ci

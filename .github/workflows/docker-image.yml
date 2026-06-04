@@ -12,7 +12,6 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  CI_IMAGE: ${{ lower(github.repository) }}-ci
 
 jobs:
   build:
@@ -31,6 +30,9 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set lowercase image tag
+      run: echo "CI_IMAGE=${GITHUB_REPOSITORY,,}-ci" >> $GITHUB_ENV
 
     - name: Build and push
       uses: docker/build-push-action@v6

@@ -96,7 +96,9 @@ jobs:
 
       - name: Load quality results
         id: quality
-        run: cat quality.env >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/docker-ci
+        with:
+          command: cat /workspace/quality.env >> "$GITHUB_OUTPUT"
 
       - name: Check thresholds
         id: threshold

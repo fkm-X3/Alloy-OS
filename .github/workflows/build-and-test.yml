@@ -13,33 +13,47 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  CI_IMAGE: ${{ github.repository }}-ci:latest
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
+      packages: read
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
 
-    - name: Build and test in Docker
+    - name: Cache Rust target directories
+      uses: actions/cache@v4
+      with:
+        path: |
+          kernel/rust/target
+          Alloy-DE/alloy-display-kernel/target
+        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Alloy-DE/alloy-display-kernel/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
+        restore-keys: |
+          cargo-target-${{ runner.os }}-
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build kernel
       uses: ./.github/actions/docker-ci
       with:
+        pull: true
+        image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
         command: |
-          make clean
           make
           make iso
-
-          echo "Testing kernel boot..."
-          timeout 60s qemu-system-i386 \
-            -cdrom build/alloy.iso \
-            -serial file:serial.log \
-            -display none \
-            -no-reboot \
-            -no-shutdown \
-            -D qemu.log || true
 
     - name: Verify build artifacts
       if: always()
@@ -57,7 +71,52 @@ jobs:
         echo "Build artifacts verified!"
         file build/alloy.elf
         file build/alloy.iso
-    
+
+    - name: Upload build artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-build
+        path: |
+          build/alloy.elf
+          build/alloy.iso
+        retention-days: 7
+
+  boot-test:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: kernel-build
+
+    - name: Log in to GHCR
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Boot test in Docker
+      uses: ./.github/actions/docker-ci
+      with:
+        pull: true
+        image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
+        command: |
+          echo "Testing kernel boot..."
+          timeout 20s qemu-system-i386 \
+            -cdrom build/alloy.iso \
+            -serial file:serial.log \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            -D qemu.log || true
+
     - name: Verify boot success
       if: always()
       run: |
@@ -80,15 +139,13 @@ jobs:
           exit 1
         fi
         echo "Boot verification passed!"
-    
-    - name: Upload artifacts
+
+    - name: Upload boot logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-build
+        name: boot-logs
         path: |
-          build/alloy.elf
-          build/alloy.iso
           serial.log
           qemu.log
         retention-days: 7

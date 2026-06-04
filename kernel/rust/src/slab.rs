@@ -274,6 +274,10 @@ impl SlabAllocator {
     }
     
     /// Allocate from appropriate slab cache
+    ///
+    /// # Safety
+    /// Caller must ensure `size` and `align` are non-zero. Returns a pointer to
+    /// uninitialized memory; the caller is responsible for validity.
     pub unsafe fn alloc(&mut self, size: usize, align: usize) -> *mut u8 {
         // Find appropriate size class
         for cache in &mut self.caches {
@@ -292,6 +296,10 @@ impl SlabAllocator {
     }
     
     /// Free to appropriate slab cache
+    ///
+    /// # Safety
+    /// `ptr` must have been returned by a previous call to [`SlabAllocator::alloc`]
+    /// with matching `size` and `align`, and must not have been freed already.
     pub unsafe fn free(&mut self, ptr: *mut u8, size: usize, align: usize) {
         // Find appropriate size class
         for cache in &mut self.caches {

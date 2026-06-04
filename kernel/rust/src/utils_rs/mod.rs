@@ -43,6 +43,10 @@ fn user_range_check(start: usize, len: usize) -> bool {
 
 /// Copy from a user pointer (u32 virtual address) into a kernel buffer.
 /// Copies up to the provided buffer length; returns Ok(bytes_copied) or Err(-1) if nothing could be copied.
+///
+/// # Safety
+/// `user_ptr` must point to a valid, readable region in the user address space
+/// of at least `buf.len()` bytes. The caller must ensure the region is mapped.
 pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32> {
     if user_ptr == 0 { return Err(-1); }
     let mut remaining = buf.len();
@@ -76,6 +80,10 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
 
 /// Copy into a user pointer from a kernel buffer.
 /// Writes up to buf.len(); returns Ok(bytes_written) or Err(-1) if nothing could be written.
+///
+/// # Safety
+/// `user_ptr` must point to a valid, writable region in the user address space
+/// of at least `buf.len()` bytes. The caller must ensure the region is mapped.
 pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
     if user_ptr == 0 { return Err(-1); }
     let mut remaining = buf.len();

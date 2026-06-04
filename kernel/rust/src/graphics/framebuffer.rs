@@ -121,6 +121,7 @@ impl FramebufferInfo {
     /// # Returns
     ///
     /// `Ok(FramebufferInfo)` if all parameters are valid, or an error otherwise.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         address: u32,
         width: u32,

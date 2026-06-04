@@ -5,18 +5,29 @@
 //! - Heap allocator for larger objects
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, Ordering, fence};
 use crate::heap::HeapAllocator;
 use crate::slab::SlabAllocator;
+
+/// Wrapper to make `UnsafeCell` `Sync` when access is guarded by `ALLOC_LOCK`.
+struct AllocCell<T>(UnsafeCell<T>);
+unsafe impl<T> Sync for AllocCell<T> {}
+
+impl<T> AllocCell<T> {
+    fn get(&self) -> *mut T {
+        self.0.get()
+    }
+}
 
 /// Global lock for allocator (simple spinlock)
 static ALLOC_LOCK: AtomicBool = AtomicBool::new(false);
 
 /// Slab allocator for small objects
-static mut SLAB_ALLOCATOR: SlabAllocator = SlabAllocator::new();
+static SLAB_ALLOCATOR: AllocCell<SlabAllocator> = AllocCell(UnsafeCell::new(SlabAllocator::new()));
 
 /// Heap allocator for larger objects
-static mut HEAP_ALLOCATOR: HeapAllocator = HeapAllocator::new();
+static HEAP_ALLOCATOR: AllocCell<HeapAllocator> = AllocCell(UnsafeCell::new(HeapAllocator::new()));
 
 /// Acquire allocator lock with memory barriers
 fn lock() {
@@ -41,12 +52,12 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         lock();
         
-        let result = if SLAB_ALLOCATOR.can_allocate(layout.size(), layout.align()) {
+        let result = if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
             // Use slab allocator for small objects
-            SLAB_ALLOCATOR.alloc(layout.size(), layout.align())
+            unsafe { (*SLAB_ALLOCATOR.get()).alloc(layout.size(), layout.align()) }
         } else {
             // Use heap allocator for larger objects
-            HEAP_ALLOCATOR.alloc(layout)
+            unsafe { (*HEAP_ALLOCATOR.get()).alloc(layout) }
         };
         
         unlock();
@@ -56,10 +67,10 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         lock();
         
-        if SLAB_ALLOCATOR.can_allocate(layout.size(), layout.align()) {
-            SLAB_ALLOCATOR.free(ptr, layout.size(), layout.align());
+        if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
+            unsafe { (*SLAB_ALLOCATOR.get()).free(ptr, layout.size(), layout.align()); }
         } else {
-            HEAP_ALLOCATOR.dealloc(ptr, layout);
+            unsafe { (*HEAP_ALLOCATOR.get()).dealloc(ptr, layout); }
         }
         
         unlock();
@@ -81,8 +92,8 @@ fn alloc_error_handler(layout: Layout) -> ! {
 pub fn get_stats() -> ((usize, usize), (usize, usize)) {
     unsafe {
         lock();
-        let slab_stats = SLAB_ALLOCATOR.stats();
-        let heap_stats = HEAP_ALLOCATOR.stats();
+        let slab_stats = (*SLAB_ALLOCATOR.get()).stats();
+        let heap_stats = (*HEAP_ALLOCATOR.get()).stats();
         unlock();
         (slab_stats, heap_stats)
     }

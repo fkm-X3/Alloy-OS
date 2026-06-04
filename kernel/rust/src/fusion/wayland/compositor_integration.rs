@@ -169,6 +169,7 @@ pub fn composite_surface(
     }
 
     /// Direct SHM buffer to framebuffer blit
+    #[allow(clippy::too_many_arguments)]
     pub fn blit_shm_to_framebuffer(
         &mut self,
         buffer: &ShmBuffer,

@@ -165,6 +165,10 @@ pub fn vga_println_str(s: &str) {
 }
 
 /// Safely print C-string to serial (with null check)
+///
+/// # Safety
+/// `s` must be a valid null-terminated C string pointer or null.
+/// If non-null, every byte up to and including the null terminator must be readable.
 pub unsafe fn serial_print_safe(s: *const u8) {
     if !s.is_null() {
         serial_print(s);
@@ -172,6 +176,10 @@ pub unsafe fn serial_print_safe(s: *const u8) {
 }
 
 /// Safely print C-string to VGA (with null check)
+///
+/// # Safety
+/// `s` must be a valid null-terminated C string pointer or null.
+/// If non-null, every byte up to and including the null terminator must be readable.
 pub unsafe fn vga_print_safe(s: *const u8) {
     if !s.is_null() {
         vga_print(s);
@@ -179,6 +187,10 @@ pub unsafe fn vga_print_safe(s: *const u8) {
 }
 
 /// Safely print C-string line to VGA (with null check)
+///
+/// # Safety
+/// `s` must be a valid null-terminated C string pointer or null.
+/// If non-null, every byte up to and including the null terminator must be readable.
 pub unsafe fn vga_println_safe(s: *const u8) {
     if !s.is_null() {
         vga_println(s);
@@ -290,6 +302,8 @@ pub fn socket_create(domain: i32, socket_type: i32, protocol: i32) -> i32 {
     unsafe { socket(domain, socket_type, protocol) }
 }
 
+/// # Safety
+/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
 pub unsafe fn socket_bind(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
     bind_socket(fd, addr, addr_len)
 }
@@ -302,6 +316,8 @@ pub fn socket_accept(fd: i32) -> i32 {
     unsafe { accept_socket(fd) }
 }
 
+/// # Safety
+/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
 pub unsafe fn socket_connect(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
     connect_socket(fd, addr, addr_len)
 }

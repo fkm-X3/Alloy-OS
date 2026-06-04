@@ -8,6 +8,10 @@ use alloc::vec::Vec;
 use crate::terminal::Terminal;
 use super::backend::FusionError;
 
+/// Error returned when [`TerminalSurface::handle_input`] fails
+#[derive(Debug)]
+pub struct TerminalInputError;
+
 // Font metrics: 5x7 characters with 9-pixel line height
 const CHAR_WIDTH_PIXELS: u32 = 5;
 #[allow(dead_code)]
@@ -126,12 +130,11 @@ impl TerminalSurface {
     }
 
     /// Render surface (syncs pixels to display)
-    pub fn render(&mut self) -> Result<(), ()> {
+    pub fn render(&mut self) {
         // Sync pixels to surface for display_server compatibility
         if self.surface.pixels.len() == self.pixels.len() {
             self.surface.pixels.copy_from_slice(&self.pixels);
         }
-        Ok(())
     }
 
     /// Clear surface with color
@@ -142,14 +145,14 @@ impl TerminalSurface {
     }
 
     /// Handle terminal input
-    pub fn handle_input(&mut self, key: u8) -> Result<(), ()> {
+    pub fn handle_input(&mut self, key: u8) -> Result<(), TerminalInputError> {
         if !self._terminal.is_null() {
             unsafe {
                 (*self._terminal).handle_input(key);
             }
             Ok(())
         } else {
-            Err(())
+            Err(TerminalInputError)
         }
     }
 

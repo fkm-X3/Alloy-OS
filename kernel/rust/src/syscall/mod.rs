@@ -163,7 +163,7 @@ pub extern "C" fn rust_sys_close(fd: u32) -> u32 {
     unsafe { ffi::serial_print(c"[Syscall] sys_close called\n".as_ptr() as *const u8); }
     match Scheduler::with_current_task_mut(|task| task.close_fd(fd)) {
         Some(Ok(())) => 0,
-        Some(Err(())) => u32::MAX,
+        Some(Err(_)) => u32::MAX,
         None => u32::MAX,
     }
 }
@@ -395,6 +395,10 @@ pub extern "C" fn rust_sys_socket(domain: i32, socket_type: i32, protocol: i32) 
 }
 
 /// Bind syscall - binds socket to address
+///
+/// # Safety
+/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
+/// The address family byte at `addr[0..1]` must be readable.
 #[no_mangle]
 pub unsafe extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {
@@ -421,6 +425,10 @@ pub extern "C" fn rust_sys_accept(fd: i32) -> i32 {
 }
 
 /// Connect syscall - connects socket to an address
+///
+/// # Safety
+/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
+/// The address family byte at `addr[0..1]` must be readable.
 #[no_mangle]
 pub unsafe extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {

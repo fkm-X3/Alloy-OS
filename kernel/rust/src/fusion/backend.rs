@@ -242,6 +242,7 @@ impl FusionDisplayBackend {
 
     /// Composite a single SHM buffer onto the framebuffer at given position
     /// Used by the Wayland compositor integration layer
+    #[allow(clippy::too_many_arguments)]
     pub fn composite_shm_buffer(
         &mut self,
         buffer: &[u32],

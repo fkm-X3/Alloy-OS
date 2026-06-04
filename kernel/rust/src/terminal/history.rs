@@ -115,6 +115,7 @@ impl CommandHistory {
     
     /// Navigate to next (newer) command in history
     /// Returns the command string if available, None if at the end (most recent)
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<&str> {
         if self.count == 0 {
             return None;

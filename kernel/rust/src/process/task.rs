@@ -4,6 +4,10 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::ffi;
 
+/// Error returned when closing a file descriptor fails
+#[derive(Debug)]
+pub struct FdCloseError;
+
 // Task ID counter for unique task IDs
 static NEXT_TASK_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -197,12 +201,12 @@ impl Task {
     }
 
     /// Close a file descriptor
-    pub fn close_fd(&mut self, fd: u32) -> Result<(), ()> {
+    pub fn close_fd(&mut self, fd: u32) -> Result<(), FdCloseError> {
         if (fd as usize) < self.fds.len() {
             self.fds[fd as usize] = None;
             Ok(())
         } else {
-            Err(())
+            Err(FdCloseError)
         }
     }
     

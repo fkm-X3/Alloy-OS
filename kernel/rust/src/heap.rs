@@ -96,6 +96,10 @@ impl HeapAllocator {
     }
     
     /// Allocate a block from the heap
+    ///
+    /// # Safety
+    /// Caller must ensure `layout` has non-zero size. Returns a pointer to
+    /// uninitialized memory; the caller is responsible for validity and alignment.
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let align = layout.align().max(HEAP_ALIGN);
         if align > HEAP_ALIGN {
@@ -145,6 +149,10 @@ impl HeapAllocator {
     }
     
     /// Deallocate a block
+    ///
+    /// # Safety
+    /// `ptr` must have been returned by a previous call to [`alloc`] with the
+    /// same `layout`, and must not have been deallocated already.
     pub unsafe fn dealloc(&mut self, ptr: *mut u8, _layout: Layout) {
         if ptr.is_null() {
             return;

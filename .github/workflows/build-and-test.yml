@@ -93,6 +93,12 @@ jobs:
       packages: read
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:

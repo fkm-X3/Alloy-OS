@@ -104,6 +104,10 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: kernel-build
+        path: ${{ github.workspace }}
+
+    - name: List workspace contents
+      run: find ${{ github.workspace }} -name '*.iso' -o -name '*.elf' 2>/dev/null | head -20
 
     - name: Install QEMU
       run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86
@@ -111,7 +115,7 @@ jobs:
     - name: Boot test
       run: |
         echo "Testing kernel boot..."
-        ls -lh build/alloy.iso
+        test -f build/alloy.iso && echo "ISO found" || echo "ISO NOT FOUND"
         timeout 60s qemu-system-i386 \
           -cdrom build/alloy.iso \
           -serial file:serial.log \

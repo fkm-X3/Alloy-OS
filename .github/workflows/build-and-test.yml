@@ -47,13 +47,14 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set lowercase image tag
-      run: echo "CI_IMAGE=${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_ENV
+      id: set-image
+      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
 
     - name: Build kernel
       uses: ./.github/actions/docker-ci
       with:
         pull: false
-        image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
+        image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |
           make
           make iso
@@ -111,11 +112,15 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Set lowercase image tag
+      id: set-image
+      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
+
     - name: Boot test in Docker
       uses: ./.github/actions/docker-ci
       with:
         pull: false
-        image-tag: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}
+        image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |
           echo "Testing kernel boot..."
           timeout 20s qemu-system-i386 \

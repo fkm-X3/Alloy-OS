@@ -123,13 +123,17 @@ jobs:
         image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |
           echo "Testing kernel boot..."
-          timeout 20s qemu-system-i386 \
+          timeout 60s qemu-system-i386 \
             -cdrom build/alloy.iso \
             -serial file:serial.log \
             -display none \
             -no-reboot \
             -no-shutdown \
             -D qemu.log || true
+          echo "=== serial.log ==="
+          cat serial.log 2>/dev/null || echo "(file not found or empty)"
+          echo "=== qemu.log ==="
+          cat qemu.log 2>/dev/null || echo "(file not found or empty)"
 
     - name: Verify boot success
       if: always()

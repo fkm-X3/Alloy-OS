@@ -105,35 +105,24 @@ jobs:
       with:
         name: kernel-build
 
-    - name: Log in to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install QEMU
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86
 
-    - name: Set lowercase image tag
-      id: set-image
-      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
-
-    - name: Boot test in Docker
-      uses: ./.github/actions/docker-ci
-      with:
-        pull: false
-        image-tag: ${{ steps.set-image.outputs.image-tag }}
-        command: |
-          echo "Testing kernel boot..."
-          timeout 60s qemu-system-i386 \
-            -cdrom build/alloy.iso \
-            -serial file:serial.log \
-            -display none \
-            -no-reboot \
-            -no-shutdown \
-            -D qemu.log || true
-          echo "=== serial.log ==="
-          cat serial.log 2>/dev/null || echo "(file not found or empty)"
-          echo "=== qemu.log ==="
-          cat qemu.log 2>/dev/null || echo "(file not found or empty)"
+    - name: Boot test
+      run: |
+        echo "Testing kernel boot..."
+        ls -lh build/alloy.iso
+        timeout 60s qemu-system-i386 \
+          -cdrom build/alloy.iso \
+          -serial file:serial.log \
+          -display none \
+          -no-reboot \
+          -no-shutdown \
+          -D qemu.log || true
+        echo "=== serial.log ==="
+        cat serial.log 2>/dev/null || echo "(file not found or empty)"
+        echo "=== qemu.log ==="
+        cat qemu.log 2>/dev/null || echo "(file not found or empty)"
 
     - name: Verify boot success
       if: always()

@@ -115,18 +115,34 @@ jobs:
     - name: Boot test
       run: |
         echo "Testing kernel boot..."
-        test -f build/alloy.iso && echo "ISO found" || echo "ISO NOT FOUND"
+        echo "Current directory: $(pwd)"
+        echo "Workspace: ${{ github.workspace }}"
+        
+        # Find the ISO file
+        ISO_FILE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
+        
+        if [ -z "$ISO_FILE" ]; then
+          echo "ERROR: alloy.iso not found!"
+          find ${{ github.workspace }} -type f -name "*.iso" -o -name "*.elf" | head -20
+          exit 1
+        fi
+        
+        echo "Found ISO: $ISO_FILE"
+        ls -lh "$ISO_FILE"
+        
+        # Run QEMU with serial output to file
         timeout 60s qemu-system-i386 \
-          -cdrom build/alloy.iso \
+          -cdrom "$ISO_FILE" \
           -serial file:serial.log \
           -display none \
           -no-reboot \
           -no-shutdown \
           -D qemu.log || true
+        
         echo "=== serial.log ==="
         cat serial.log 2>/dev/null || echo "(file not found or empty)"
         echo "=== qemu.log ==="
-        cat qemu.log 2>/dev/null || echo "(file not found or empty)"
+        tail -50 qemu.log 2>/dev/null || echo "(file not found or empty)"
 
     - name: Verify boot success
       if: always()

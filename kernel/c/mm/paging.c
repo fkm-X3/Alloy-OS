@@ -9,6 +9,7 @@ extern uint32_t _kernel_end;
 
 static struct page_directory kernel_dir __attribute__((aligned(4096)));
 static struct page_table kernel_pts[4] __attribute__((aligned(4096)));
+static uint32_t kernel_directory_phys;
 
 #define PT_VIRT_BASE 0x00C00000
 #define PT_VIRT_MAP_TABLE_INDEX 3
@@ -29,6 +30,7 @@ void paging_init() {
     serial_print("Paging: Initializing paging...\n");
 
     g_paging.kernel_directory = &kernel_dir;
+    kernel_directory_phys = (uint32_t)&kernel_dir;
 
     for (int i = 0; i < 1024; i++) {
         g_paging.kernel_directory->entries[i] = 0;
@@ -224,4 +226,8 @@ bool paging_switch_to_directory(uint32_t pd_phys) {
     asm volatile ("mov %0, %%cr3" :: "r"(pd_phys));
 
     return true;
+}
+
+uint32_t paging_get_kernel_directory_phys() {
+    return kernel_directory_phys;
 }

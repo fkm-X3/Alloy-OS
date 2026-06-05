@@ -43,6 +43,7 @@ uint32_t paging_get_physical_address(uint32_t virt_addr);
 uint32_t paging_create_directory_phys();
 void paging_destroy_directory(uint32_t pd_phys);
 bool paging_switch_to_directory(uint32_t pd_phys);
+uint32_t paging_get_kernel_directory_phys();
 
 #ifdef __cplusplus
 }

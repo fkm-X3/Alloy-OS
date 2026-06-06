@@ -32,9 +32,11 @@ impl Scheduler {
         }
     }
     
-    /// Initialize the global scheduler
+    /// Initialize the global scheduler with an idle task
     pub fn init() {
-        let scheduler = Self::new();
+        let mut scheduler = Self::new();
+        let idle = Box::new(Task::new_idle());
+        scheduler.ready_queue.push_back(idle);
         *SCHEDULER.lock() = Some(scheduler);
     }
     
@@ -191,33 +193,8 @@ impl Scheduler {
     /// Start the scheduler (never returns)
     pub fn start() -> ! {
         unsafe {
-            ffi::serial_print(c"[Scheduler] Starting scheduler with ".as_ptr() as *const u8);
-            ffi::vga_println(c"\nStarting multitasking demo...\n".as_ptr() as *const u8);
-        }
-        
-        // Get queue size
-        let queue_size = {
-            let scheduler = SCHEDULER.lock();
-            if let Some(ref sched) = *scheduler {
-                sched.ready_queue.len()
-            } else {
-                0
-            }
-        };
-        
-        unsafe {
-            ffi::serial_print(c" tasks in queue\n".as_ptr() as *const u8);
-        }
-        
-        if queue_size == 0 {
-            unsafe {
-                ffi::serial_print(c"[Scheduler] ERROR: No tasks to run!\n".as_ptr() as *const u8);
-                ffi::vga_set_color(12, 0); // Red
-                ffi::vga_println(c"ERROR: No tasks in scheduler!".as_ptr() as *const u8);
-            }
-            loop {
-                unsafe { core::arch::asm!("hlt"); }
-            }
+            ffi::serial_print(c"[Scheduler] Starting scheduler\n".as_ptr() as *const u8);
+            ffi::vga_println(c"\nStarting multitasking...\n".as_ptr() as *const u8);
         }
         
         // Schedule and prepare first task

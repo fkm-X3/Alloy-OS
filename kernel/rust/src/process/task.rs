@@ -112,6 +112,10 @@ pub struct Task {
     fds: [Option<(u64, usize)>; 32],
     // Program break for userland heap (brk/sbrk)
     heap_break: u32,
+    // MLFQ priority (0 = highest, larger = lower)
+    priority: u8,
+    // Timer ticks consumed in current quantum
+    ticks_used: u32,
 }
 
 
@@ -148,6 +152,8 @@ impl Task {
             name: String::from(name),
             fds: [None; 32],
             heap_break: 0x01000000,
+            priority: 0,
+            ticks_used: 0,
         };
 
         // Try to open /dev/console for stdout/stderr (fd 1 and 2) if available
@@ -239,12 +245,16 @@ impl Task {
             name,
             fds,
             heap_break,
+            priority: 0,
+            ticks_used: 0,
         }
     }
 
-    /// Create the idle task (special task with no real work)
+    /// Create the idle task (special task with no real work, lowest priority)
     pub fn new_idle() -> Self {
-        Self::new(idle_task_entry, "idle")
+        let mut task = Self::new(idle_task_entry, "idle");
+        task.priority = 3;
+        task
     }
     
     /// Get task ID
@@ -275,6 +285,26 @@ impl Task {
     /// Get immutable reference to CPU context
     pub fn context(&self) -> &CpuContext {
         &self.context
+    }
+
+    pub fn priority(&self) -> u8 {
+        self.priority
+    }
+
+    pub fn set_priority(&mut self, prio: u8) {
+        self.priority = prio;
+    }
+
+    pub fn ticks_used(&self) -> u32 {
+        self.ticks_used
+    }
+
+    pub fn increment_ticks(&mut self) {
+        self.ticks_used = self.ticks_used.saturating_add(1);
+    }
+
+    pub fn reset_ticks_used(&mut self) {
+        self.ticks_used = 0;
     }
 }
 

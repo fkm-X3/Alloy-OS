@@ -58,7 +58,7 @@ RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
+CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories

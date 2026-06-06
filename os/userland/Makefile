@@ -4,7 +4,7 @@ ARCH ?= i686
 ifeq ($(ARCH),i686)
     CC = i686-elf-gcc
     LD = i686-elf-ld
-    CFLAGS = -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
+    CFLAGS = -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
     LDFLAGS = -T userland.ld -static -nostdlib
 endif
 

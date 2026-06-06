@@ -50,4 +50,5 @@ uint32_t timer_get_frequency_ffi() {
 
 void timer_handler() {
     g_timer_ticks++;
+    rust_timer_tick();
 }

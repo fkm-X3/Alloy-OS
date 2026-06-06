@@ -29,6 +29,7 @@ uint64_t timer_get_ticks_ffi();
 uint64_t timer_get_uptime_ms_ffi();
 uint32_t timer_get_frequency_ffi();
 void timer_handler();
+void rust_timer_tick();
 
 #ifdef __cplusplus
 }

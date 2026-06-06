@@ -22,7 +22,6 @@ syscall_entry:
     push eax
     
     ; Push syscall number and args for C dispatcher
-    ; Syscall number is in EAX (already pushed)
     push edi    ; arg4
     push esi    ; arg3
     push edx    ; arg2
@@ -30,11 +29,16 @@ syscall_entry:
     push ebx    ; arg0
     push eax    ; syscall number
     
-    ; Call C++ dispatcher
+    ; Push pointer to INT 0x80 frame (ss, esp, eflags, cs, eip on original stack)
+    ; After 6 arg pushes (24 bytes) + 7 saved regs (28 bytes) = 52 bytes
+    lea eax, [esp + 52]
+    push eax    ; arg5 = int80_frame pointer
+    
+    ; Call C dispatcher
     call syscall_dispatcher
     
-    ; Clean up pushed arguments (6 * 4 = 24 bytes)
-    add esp, 24
+    ; Clean up pushed arguments (7 * 4 = 28 bytes)
+    add esp, 28
     
     ; EAX now contains return value from syscall_dispatcher
     ; Save it temporarily

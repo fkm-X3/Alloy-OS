@@ -31,6 +31,7 @@ pub enum SyscallNumber {
     Connect = 16,
     CloseSocket = 17,
     HasPendingConnections = 18,
+    Brk = 19,
 }
 
 /// sys_exit - Terminate the current task
@@ -454,17 +455,65 @@ pub extern "C" fn rust_sys_has_pending_connections(fd: i32) -> i32 {
     crate::net::socket_has_pending_connections(fd)
 }
 
+/// sys_brk - Set the program break (heap end) for the current task.
+/// If addr is 0, return the current break. Otherwise, try to extend/shrink
+/// the heap to the given address. Returns the new program break on success,
+/// or !0 on failure.
+#[no_mangle]
+pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
+    let current_break = crate::process::Scheduler::with_current_task_mut(|task| {
+        task.heap_break()
+    }).unwrap_or(0);
+
+    if addr == 0 {
+        return current_break;
+    }
+
+    let page = |x: u32| x & !0xFFF;
+    let page_ceil = |x: u32| (x + 0xFFF) & !0xFFF;
+
+    let old_brk = current_break;
+    let new_brk = core::cmp::max(addr, 0x01000000);
+
+    let old_page = page_ceil(old_brk);
+    let new_page = page_ceil(new_brk);
+
+    if new_page > old_page {
+        let alloc_start = old_page;
+        let alloc_size = new_page - old_page;
+        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
+        let ptr = unsafe { ffi::vmm_alloc_region(alloc_size, flags) };
+        if ptr.is_null() {
+            return u32::MAX;
+        }
+    } else if new_page < old_page {
+        let free_start = new_page;
+        let free_size = old_page - new_page;
+        unsafe { ffi::vmm_free_region(free_start as *mut core::ffi::c_void, free_size); }
+    }
+
+    let _ = crate::process::Scheduler::with_current_task_mut(|task| {
+        task.set_heap_break(new_brk);
+    });
+
+    new_brk
+}
+
 /// Invoke a syscall (for testing/internal use)
 #[allow(dead_code)]
 pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     let result: u32;
     unsafe {
         core::arch::asm!(
+            "push ebx",
+            "mov ebx, {1}",
             "int 0x80",
+            "pop ebx",
             inlateout("eax") num as u32 => result,
-            inlateout("ebx") arg0 => _,
+            in(reg) arg0,
             in("ecx") arg1,
             in("edx") arg2,
+            options(preserves_flags),
         );
     }
     result
@@ -521,6 +570,16 @@ pub fn sys_connect(fd: i32, addr: u32, addr_len: u32) -> i32 {
 #[allow(dead_code)]
 pub fn sys_close_socket(fd: i32) -> i32 {
     syscall(SyscallNumber::CloseSocket, fd as u32, 0, 0) as i32
+}
+
+#[allow(dead_code)]
+pub fn sbrk(incr: i32) -> u32 {
+    let current = syscall(SyscallNumber::Brk, 0, 0, 0);
+    if incr == 0 {
+        return current;
+    }
+    let new = (current as i32).checked_add(incr).unwrap_or(i32::MAX) as u32;
+    syscall(SyscallNumber::Brk, new, 0, 0)
 }
 
 /// Dispatcher wrapper callable from C/C++: routes raw registers to Rust dispatcher

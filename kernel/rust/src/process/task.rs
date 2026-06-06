@@ -110,6 +110,8 @@ pub struct Task {
     name: String,
     // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
     fds: [Option<(u64, usize)>; 32],
+    // Program break for userland heap (brk/sbrk)
+    heap_break: u32,
 }
 
 
@@ -145,6 +147,7 @@ impl Task {
             stack: Some(stack),
             name: String::from(name),
             fds: [None; 32],
+            heap_break: 0x01000000,
         };
 
         // Try to open /dev/console for stdout/stderr (fd 1 and 2) if available
@@ -198,6 +201,16 @@ impl Task {
         } else {
             None
         }
+    }
+
+    /// Get heap break
+    pub fn heap_break(&self) -> u32 {
+        self.heap_break
+    }
+
+    /// Set heap break
+    pub fn set_heap_break(&mut self, brk: u32) {
+        self.heap_break = brk;
     }
 
     /// Close a file descriptor
@@ -268,9 +281,10 @@ impl Drop for Task {
 /// Entry point for the idle task
 extern "C" fn idle_task_entry() {
     loop {
-        // HLT instruction to save power when idle
         unsafe {
-            core::arch::asm!("hlt");
+            // Enable interrupts then halt — an interrupt (e.g. timer)
+            // will wake us and the scheduler can pick a real task.
+            core::arch::asm!("sti; hlt");
         }
     }
 }

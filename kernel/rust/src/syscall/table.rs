@@ -19,6 +19,7 @@ pub const LISTEN: u32 = 14;
 pub const ACCEPT: u32 = 15;
 pub const CONNECT: u32 = 16;
 pub const CLOSE_SOCKET: u32 = 17;
+pub const BRK: u32 = 19;
 pub const HAS_PENDING_CONNECTIONS: u32 = 18;
 
 /// Enum representation of syscall numbers
@@ -44,6 +45,7 @@ pub enum SyscallNumber {
     Connect = CONNECT,
     CloseSocket = CLOSE_SOCKET,
     HasPendingConnections = HAS_PENDING_CONNECTIONS,
+    Brk = BRK,
 }
 
 impl SyscallNumber {
@@ -68,6 +70,7 @@ impl SyscallNumber {
             CONNECT => Some(SyscallNumber::Connect),
             CLOSE_SOCKET => Some(SyscallNumber::CloseSocket),
             HAS_PENDING_CONNECTIONS => Some(SyscallNumber::HasPendingConnections),
+            BRK => Some(SyscallNumber::Brk),
             _ => None,
         }
     }

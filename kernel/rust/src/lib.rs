@@ -34,6 +34,8 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
             ffi::vga_putchar(byte);
         }
         ffi::serial_print(c")\n".as_ptr() as *const u8);
+        let vga_msg = err.vga_message();
+        ffi::vga_print(vga_msg.as_ptr() as *const u8);
     }
 }
 

@@ -1,31 +1,20 @@
-use alloc::boxed::Box;
-
-use alloy_display_kernel::apps::window_manager::{InputOutcome, WindowId, WindowManager, WindowOptions};
-use alloy_display_kernel::protocol::{
-     ClientId, DisplayEvent, DisplayRequest, DisplayResponse, MouseButton, PixelFormat, SurfaceId,
-};
-use alloy_display_kernel::server::{DisplayBackend, DisplayServer};
-
 use crate::ffi;
 use crate::fusion::backend::FusionDisplayBackend;
-use crate::fusion::framebuffer::{Color, FramebufferRenderer};
+use crate::fusion::shell::LxqtShell;
 use crate::graphics::vesa::VesaDisplay;
+use crate::fusion::WaylandServer;
 use crate::utils::pointer;
 
-const CURSOR_CLIENT_ID: ClientId = ClientId::new(2);
-const DEFAULT_FRAME_INTERVAL_MS: u32 = 16;
 const CURSOR_WIDTH: u32 = 12;
 const CURSOR_HEIGHT: u32 = 18;
 const CURSOR_Z_ORDER: u32 = 65535;
-const ICED_CLIENT_ID: ClientId = ClientId::new(32);
-const ICED_WINDOW_Z_ORDER: u32 = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayServerBootError {
     ServerStart,
     SurfaceUpload,
     FramePresent,
-    WindowManager,
+    LxqtShell,
 }
 
 impl DisplayServerBootError {
@@ -34,203 +23,34 @@ impl DisplayServerBootError {
             DisplayServerBootError::ServerStart => "DS-001",
             DisplayServerBootError::SurfaceUpload => "DS-003",
             DisplayServerBootError::FramePresent => "DS-004",
-            DisplayServerBootError::WindowManager => "DS-005",
+            DisplayServerBootError::LxqtShell => "DS-002",
         }
     }
 
     pub const fn serial_message(self) -> &'static [u8] {
         match self {
-            DisplayServerBootError::ServerStart => {
-                b"[DisplayServer][DS-001] Failed to start display server runtime\n\0"
-            }
-            DisplayServerBootError::SurfaceUpload => {
-                b"[DisplayServer][DS-003] Failed to upload surface pixels\n\0"
-            }
-            DisplayServerBootError::FramePresent => {
-                b"[DisplayServer][DS-004] Failed to present display frame\n\0"
-            }
-            DisplayServerBootError::WindowManager => {
-                b"[DisplayServer][DS-005] Window manager operation failed\n\0"
-            }
+            DisplayServerBootError::ServerStart =>
+                b"[DisplayServer][DS-001] Failed to start display server runtime\n\0",
+            DisplayServerBootError::SurfaceUpload =>
+                b"[DisplayServer][DS-003] Failed to upload surface pixels\n\0",
+            DisplayServerBootError::FramePresent =>
+                b"[DisplayServer][DS-004] Failed to present display frame\n\0",
+            DisplayServerBootError::LxqtShell =>
+                b"[DisplayServer][DS-002] LXQt shell initialization failed\n\0",
         }
     }
 
     pub const fn vga_message(self) -> &'static [u8] {
         match self {
-            DisplayServerBootError::ServerStart => {
-                b"[DisplayServer][DS-001] Failed to start display server\n\0"
-            }
-            DisplayServerBootError::SurfaceUpload => {
-                b"[DisplayServer][DS-003] Display upload failed\n\0"
-            }
-            DisplayServerBootError::FramePresent => {
-                b"[DisplayServer][DS-004] Display frame presentation failed\n\0"
-            }
-            DisplayServerBootError::WindowManager => {
-                b"[DisplayServer][DS-005] Window manager failure\n\0"
-            }
+            DisplayServerBootError::ServerStart =>
+                b"[DisplayServer][DS-001] Failed to start display server\n\0",
+            DisplayServerBootError::SurfaceUpload =>
+                b"[DisplayServer][DS-003] Display upload failed\n\0",
+            DisplayServerBootError::FramePresent =>
+                b"[DisplayServer][DS-004] Display frame presentation failed\n\0",
+            DisplayServerBootError::LxqtShell =>
+                b"[DisplayServer][DS-002] LXQt shell failure\n\0",
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct PointerState {
-    x: i32,
-    y: i32,
-    buttons: u8,
-    dragging_window: Option<WindowId>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct IcedWindowBinding {
-    client_id: ClientId,
-    window_id: WindowId,
-    surface_id: SurfaceId,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct IcedUiState {
-    active_tab: u8,
-    show_palette: bool,
-    accent_bright: bool,
-}
-
-struct IcedUiRuntime {
-    binding: IcedWindowBinding,
-    state: IcedUiState,
-    surface_width: u32,
-    surface_height: u32,
-    frame_source: Box<dyn IcedFrameSource>,
-    dirty: bool,
-}
-
-/// Source of Iced frame pixels uploaded to Fusion surfaces.
-trait IcedFrameSource {
-    fn render_frame(
-        &mut self,
-        width: u32,
-        height: u32,
-        state: IcedUiState,
-    ) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError>;
-}
-
-#[derive(Debug, Default)]
-struct SoftwareIcedFrameSource;
-
-impl IcedFrameSource for SoftwareIcedFrameSource {
-    fn render_frame(
-        &mut self,
-        width: u32,
-        height: u32,
-        state: IcedUiState,
-    ) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError> {
-        build_iced_primary_pixels(width, height, state)
-    }
-}
-
-impl IcedUiState {
-    fn new() -> Self {
-        Self {
-            active_tab: 0,
-            show_palette: false,
-            accent_bright: true,
-        }
-    }
-
-    fn handle_key(&mut self, key: u8) -> bool {
-        match key {
-            b'1' => {
-                self.active_tab = 0;
-                true
-            }
-            b'2' => {
-                self.active_tab = 1;
-                true
-            }
-            b'3' => {
-                self.active_tab = 2;
-                true
-            }
-            b'4' => {
-                self.active_tab = 3;
-                true
-            }
-            b'p' | b'P' => {
-                self.show_palette = !self.show_palette;
-                true
-            }
-            b't' | b'T' | b' ' => {
-                self.accent_bright = !self.accent_bright;
-                true
-            }
-            _ => false,
-        }
-    }
-}
-
-impl IcedUiRuntime {
-    fn new(
-        binding: IcedWindowBinding,
-        surface_width: u32,
-        surface_height: u32,
-        frame_source: Box<dyn IcedFrameSource>,
-    ) -> Self {
-        Self {
-            binding,
-            state: IcedUiState::new(),
-            surface_width,
-            surface_height,
-            frame_source,
-            dirty: true,
-        }
-    }
-
-    fn handle_key(&mut self, key: u8) -> bool {
-        if self.state.handle_key(key) {
-            self.dirty = true;
-            return true;
-        }
-        false
-    }
-
-    fn sync_surface_dimensions<B: DisplayBackend>(
-        &mut self,
-        server: &DisplayServer<B>,
-    ) -> Result<(), DisplayServerBootError> {
-        let surface = server
-            .surface(self.binding.surface_id)
-            .ok_or(DisplayServerBootError::SurfaceUpload)?;
-        if surface.width != self.surface_width || surface.height != self.surface_height {
-            self.surface_width = surface.width;
-            self.surface_height = surface.height;
-            self.dirty = true;
-        }
-        Ok(())
-    }
-
-    fn render_if_dirty<B: DisplayBackend>(
-        &mut self,
-        server: &mut DisplayServer<B>,
-    ) -> Result<(), DisplayServerBootError> {
-        if !self.dirty {
-            return Ok(());
-        }
-
-        let pixels = self
-            .frame_source
-            .render_frame(self.surface_width, self.surface_height, self.state)?;
-        server
-            .upload_surface_pixels(
-                self.binding.client_id,
-                self.binding.surface_id,
-                self.surface_width,
-                self.surface_height,
-                &pixels,
-                None,
-            )
-            .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
-        self.dirty = false;
-        Ok(())
     }
 }
 
@@ -240,162 +60,11 @@ fn serial_log(message: &'static [u8]) {
     }
 }
 
-fn build_iced_primary_pixels(
-    width: u32,
-    height: u32,
-    state: IcedUiState,
-) -> Result<alloc::vec::Vec<u32>, DisplayServerBootError> {
-    let mut renderer =
-        FramebufferRenderer::new(width, height).map_err(|_| DisplayServerBootError::SurfaceUpload)?;
-    renderer.clear(Color::from_rgb(13, 17, 24));
-
-    let header_h = (height / 12).clamp(30, 48);
-    renderer.fill_rect(0, 0, width, header_h, Color::from_rgb(24, 32, 46));
-    renderer.stroke_rect(0, 0, width, header_h, Color::from_rgb(86, 145, 230), 1);
-
-    let tabs = 4u32;
-    let tab_gap = 8u32;
-    let tab_area_w = width.saturating_sub(20);
-    let tab_width = (tab_area_w.saturating_sub(tab_gap * tabs.saturating_sub(1)) / tabs.max(1)).max(24);
-    for tab in 0..tabs {
-        let tab_x = 10 + tab * (tab_width + tab_gap);
-        let active = tab as u8 == state.active_tab;
-        let tab_color = if active {
-            if state.accent_bright {
-                Color::from_rgb(79, 168, 255)
-            } else {
-                Color::from_rgb(60, 126, 194)
-            }
-        } else {
-            Color::from_rgb(45, 54, 67)
-        };
-        renderer.fill_rect(tab_x, 6, tab_width, header_h.saturating_sub(12), tab_color);
-        renderer.stroke_rect(
-            tab_x,
-            6,
-            tab_width,
-            header_h.saturating_sub(12),
-            Color::from_rgb(170, 210, 255),
-            1,
-        );
-    }
-
-    let content_x = 12u32;
-    let content_y = header_h.saturating_add(8);
-    let content_w = width.saturating_sub(content_x.saturating_mul(2)).max(1);
-    let content_h = height
-        .saturating_sub(content_y)
-        .saturating_sub(12)
-        .max(1);
-    renderer.fill_rect(content_x, content_y, content_w, content_h, Color::from_rgb(20, 24, 33));
-    renderer.stroke_rect(
-        content_x,
-        content_y,
-        content_w,
-        content_h,
-        Color::from_rgb(67, 85, 110),
-        1,
-    );
-
-    let line_left = content_x.saturating_add(12);
-    let line_top = content_y.saturating_add(16);
-    let line_right = content_x.saturating_add(content_w.saturating_sub(12));
-    let line_count = 10u32;
-    for idx in 0..line_count {
-        let y = line_top.saturating_add(idx.saturating_mul(16));
-        if y >= content_y.saturating_add(content_h.saturating_sub(30)) {
-            break;
-        }
-        let shortening = (idx % 4).saturating_mul(24);
-        let end = line_right.saturating_sub(shortening);
-        if end > line_left {
-            let shade = if idx % 2 == 0 {
-                Color::from_rgb(154, 176, 205)
-            } else {
-                Color::from_rgb(115, 138, 170)
-            };
-            renderer.h_line(line_left, end, y, shade, 2);
-        }
-    }
-
-    let prompt_h = 30u32.min(content_h);
-    let prompt_y = content_y.saturating_add(content_h.saturating_sub(prompt_h));
-    renderer.fill_rect(content_x, prompt_y, content_w, prompt_h, Color::from_rgb(17, 21, 30));
-    renderer.stroke_rect(
-        content_x,
-        prompt_y,
-        content_w,
-        prompt_h,
-        Color::from_rgb(53, 70, 92),
-        1,
-    );
-    renderer.fill_rect(
-        content_x.saturating_add(10),
-        prompt_y.saturating_add(8),
-        6,
-        14,
-        Color::from_rgb(120, 215, 140),
-    );
-    let command_end = content_x
-        .saturating_add(content_w)
-        .saturating_sub(14);
-    let command_start = content_x.saturating_add(24);
-    if command_end > command_start {
-        renderer.h_line(
-            command_start,
-            command_end,
-            prompt_y.saturating_add(15),
-            Color::from_rgb(146, 165, 191),
-            1,
-        );
-    }
-
-    if state.show_palette {
-        let overlay_w = width.saturating_sub(90).clamp(120, 260);
-        let overlay_h = height.saturating_sub(110).clamp(100, 220);
-        let overlay_x = width.saturating_sub(overlay_w.saturating_add(14));
-        let overlay_y = (height.saturating_sub(overlay_h)) / 2;
-        renderer.fill_rect(
-            overlay_x,
-            overlay_y,
-            overlay_w,
-            overlay_h,
-            Color::from_rgb(18, 24, 34),
-        );
-        renderer.stroke_rect(
-            overlay_x,
-            overlay_y,
-            overlay_w,
-            overlay_h,
-            Color::from_rgb(118, 172, 247),
-            2,
-        );
-        let swatches = [
-            Color::from_rgb(74, 138, 224),
-            Color::from_rgb(84, 196, 128),
-            Color::from_rgb(224, 164, 89),
-        ];
-        let swatch_h = ((overlay_h.saturating_sub(32)) / swatches.len() as u32).max(12);
-        for (index, swatch) in swatches.iter().enumerate() {
-            let y = overlay_y + 16 + (index as u32) * swatch_h;
-            renderer.fill_rect(
-                overlay_x.saturating_add(16),
-                y,
-                overlay_w.saturating_sub(32),
-                swatch_h.saturating_sub(6).max(4),
-                *swatch,
-            );
-        }
-    }
-
-    Ok(renderer.pixels().to_vec())
-}
-
-fn expect_ack(response: DisplayResponse) -> Result<(), DisplayServerBootError> {
-    match response {
-        DisplayResponse::Ack => Ok(()),
-        _ => Err(DisplayServerBootError::SurfaceUpload),
-    }
+struct PointerState {
+    x: i32,
+    y: i32,
+    buttons: u8,
+    dragging_window: Option<crate::fusion::shell::window_manager::WindowId>,
 }
 
 fn build_cursor_pixels() -> alloc::vec::Vec<u32> {
@@ -411,175 +80,62 @@ fn build_cursor_pixels() -> alloc::vec::Vec<u32> {
     pixels
 }
 
-fn create_cursor_surface<B: DisplayBackend>(
-    server: &mut DisplayServer<B>,
-) -> Result<SurfaceId, DisplayServerBootError> {
-    let response = server
-        .handle_request(
-            CURSOR_CLIENT_ID,
-            DisplayRequest::CreateSurface {
-                width: CURSOR_WIDTH,
-                height: CURSOR_HEIGHT,
-                format: PixelFormat::Argb8888,
-            },
-        )
+fn create_cursor_surface(
+    backend: &mut FusionDisplayBackend,
+) -> Result<u32, DisplayServerBootError> {
+    let surface_id = backend
+        .create_surface(CURSOR_WIDTH, CURSOR_HEIGHT)
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+    backend
+        .set_z_order(surface_id, CURSOR_Z_ORDER)
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
+    backend
+        .set_visibility(surface_id, true)
         .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
 
-    let surface_id = match response {
-        DisplayResponse::SurfaceCreated { surface_id } => surface_id,
-        _ => return Err(DisplayServerBootError::SurfaceUpload),
-    };
-
-    expect_ack(
-        server
-            .handle_request(
-                CURSOR_CLIENT_ID,
-                DisplayRequest::SetSurfaceZOrder {
-                    surface_id,
-                    z_order: CURSOR_Z_ORDER,
-                },
-            )
-            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
-    )?;
-
-    expect_ack(
-        server
-            .handle_request(
-                CURSOR_CLIENT_ID,
-                DisplayRequest::SetSurfaceVisibility {
-                    surface_id,
-                    visible: true,
-                },
-            )
-            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
-    )?;
-
     let cursor_pixels = build_cursor_pixels();
-    server
-        .upload_surface_pixels(
-            CURSOR_CLIENT_ID,
-            surface_id,
-            CURSOR_WIDTH,
-            CURSOR_HEIGHT,
-            &cursor_pixels,
-            None,
-        )
+    backend
+        .upload_pixels(surface_id, CURSOR_WIDTH, CURSOR_HEIGHT, &cursor_pixels)
         .map_err(|_| DisplayServerBootError::SurfaceUpload)?;
 
     Ok(surface_id)
 }
 
-fn set_cursor_position<B: DisplayBackend>(
-    server: &mut DisplayServer<B>,
-    cursor_surface: SurfaceId,
+fn set_cursor_position(
+    backend: &mut FusionDisplayBackend,
+    cursor_surface: u32,
     x: i32,
     y: i32,
 ) -> Result<(), DisplayServerBootError> {
-    expect_ack(
-        server
-            .handle_request(
-                CURSOR_CLIENT_ID,
-                DisplayRequest::SetSurfacePosition {
-                    surface_id: cursor_surface,
-                    x,
-                    y,
-                },
-            )
-            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
-    )
+    backend
+        .set_position(cursor_surface, x, y)
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)
 }
 
-fn set_cursor_visibility<B: DisplayBackend>(
-    server: &mut DisplayServer<B>,
-    cursor_surface: SurfaceId,
+fn set_cursor_visibility(
+    backend: &mut FusionDisplayBackend,
+    cursor_surface: u32,
     visible: bool,
 ) -> Result<(), DisplayServerBootError> {
-    expect_ack(
-        server
-            .handle_request(
-                CURSOR_CLIENT_ID,
-                DisplayRequest::SetSurfaceVisibility {
-                    surface_id: cursor_surface,
-                    visible,
-                },
-            )
-            .map_err(|_| DisplayServerBootError::SurfaceUpload)?,
-    )
-}
-
-fn spawn_iced_runtime<B: DisplayBackend>(
-    wm: &mut WindowManager,
-    server: &mut DisplayServer<B>,
-    display_width: u32,
-    display_height: u32,
-) -> Result<IcedUiRuntime, DisplayServerBootError> {
-    let content_width = display_width.saturating_sub(200).max(260);
-    let content_height = display_height.saturating_sub(180).max(180);
-    let frame_width = content_width.saturating_add(4);
-    let frame_height = content_height.saturating_add(22);
-    let pos_x = (display_width.saturating_sub(frame_width) / 2) as i32;
-    let pos_y = (display_height.saturating_sub(frame_height) / 2) as i32;
-
-    let options = WindowOptions::new(ICED_CLIENT_ID, content_width, content_height)
-        .with_position(pos_x, pos_y)
-        .with_z_order(ICED_WINDOW_Z_ORDER)
-        .with_focused(true);
-    let window_id = wm
-        .create_window(server, options)
-        .map_err(|_| DisplayServerBootError::WindowManager)?;
-    let surface_id = wm
-        .content_surface(window_id)
-        .ok_or(DisplayServerBootError::WindowManager)?;
-    let (surface_width, surface_height) = {
-        let surface = server
-            .surface(surface_id)
-            .ok_or(DisplayServerBootError::SurfaceUpload)?;
-        (surface.width, surface.height)
-    };
-    let binding = IcedWindowBinding {
-        client_id: ICED_CLIENT_ID,
-        window_id,
-        surface_id,
-    };
-    let mut runtime = IcedUiRuntime::new(
-        binding,
-        surface_width,
-        surface_height,
-        Box::new(SoftwareIcedFrameSource),
-    );
-    runtime.render_if_dirty(server)?;
-    Ok(runtime)
+    backend
+        .set_visibility(cursor_surface, visible)
+        .map_err(|_| DisplayServerBootError::SurfaceUpload)
 }
 
 pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
-    run_iced_primary(display)
-}
-
-fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
-    serial_log(b"[DisplayServer] Bootstrapping Iced-primary runtime\n\0");
+    serial_log(b"[DisplayServer] Booting LXQt-compatible Fusion runtime\n\0");
     let display_width = display.framebuffer().width();
     let display_height = display.framebuffer().height();
 
-    let backend = FusionDisplayBackend::new(display);
-    let mut server = DisplayServer::new(backend);
-    server
-        .start()
-        .map_err(|_| DisplayServerBootError::ServerStart)?;
-    server
-        .handle_request(
-            ICED_CLIENT_ID,
-            DisplayRequest::SetFrameIntervalMs {
-                interval_ms: DEFAULT_FRAME_INTERVAL_MS,
-            },
-        )
-        .map_err(|_| DisplayServerBootError::ServerStart)?;
+    let mut backend = FusionDisplayBackend::new(display);
 
-    let mut wm = WindowManager::new();
-    wm.set_workspace_bounds(display_width, display_height)
-        .map_err(|_| DisplayServerBootError::WindowManager)?;
-    let mut runtime = spawn_iced_runtime(&mut wm, &mut server, display_width, display_height)?;
+    let mut lxqt_shell = LxqtShell::new(&backend.display_mut());
+    lxqt_shell.init_surfaces(&mut backend);
 
-    let cursor_surface = create_cursor_surface(&mut server)?;
+    let mut wayland = WaylandServer::new();
+    let _ = wayland.init();
+
+    let cursor_surface = create_cursor_surface(&mut backend)?;
     let mut pointer = PointerState {
         x: (display_width / 2) as i32,
         y: (display_height / 2) as i32,
@@ -588,46 +144,27 @@ fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> 
     };
     let mouse_ready = ffi::mouse_ready();
     if mouse_ready {
-        set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
+        set_cursor_position(&mut backend, cursor_surface, pointer.x, pointer.y)?;
     } else {
-        set_cursor_visibility(&mut server, cursor_surface, false)?;
-        serial_log(b"[DisplayServer] Mouse unavailable; cursor hidden until mouse input is ready\n\0");
+        set_cursor_visibility(&mut backend, cursor_surface, false)?;
+        serial_log(b"[DisplayServer] Mouse unavailable\n\0");
     }
     let max_pointer_x = display_width.saturating_sub(1) as i32;
     let max_pointer_y = display_height.saturating_sub(1) as i32;
 
-    let boot_uptime = unsafe { ffi::timer_get_uptime_ms_ffi() };
-    let first_present_time = boot_uptime.saturating_add(server.frame_interval_ms() as u64);
-    let first_presented = server
-        .update_frame(first_present_time)
-        .map_err(|_| DisplayServerBootError::FramePresent)?;
-    if !first_presented {
-        return Err(DisplayServerBootError::FramePresent);
-    }
-
+    backend.flush().map_err(|_| DisplayServerBootError::FramePresent)?;
     serial_log(b"[DisplayServer] First frame presented\n\0");
-    serial_log(
-        b"[DisplayServer] Iced-primary window ready - use ` for control mode\n\0",
-    );
 
     loop {
         if ffi::keyboard_has_key() {
             let key = ffi::keyboard_read();
+            if key == b'`' {
+                serial_log(b"[DisplayServer] Exit key pressed\n\0");
+                break;
+            }
             if key != 0 {
-                match wm
-                    .handle_key(&mut server, key)
-                    .map_err(|_| DisplayServerBootError::WindowManager)?
-                {
-                    InputOutcome::ExitDisplay => break,
-                    InputOutcome::Consumed => {}
-                    InputOutcome::ForwardToWindow(window_id) => {
-                        server
-                            .route_key_input(key, true)
-                            .map_err(|_| DisplayServerBootError::FramePresent)?;
-                        if window_id == runtime.binding.window_id {
-                            runtime.handle_key(key);
-                        }
-                    }
+                if let Some(focused) = lxqt_shell.window_manager.focused() {
+                    let _ = lxqt_shell.window_manager.destroy_window(focused, &mut backend);
                 }
             }
         }
@@ -659,158 +196,50 @@ fn run_iced_primary(display: VesaDisplay) -> Result<(), DisplayServerBootError> 
                 if movement.actual_dx != 0 || movement.actual_dy != 0 {
                     pointer.x = movement.next_x;
                     pointer.y = movement.next_y;
-                    set_cursor_position(&mut server, cursor_surface, pointer.x, pointer.y)?;
-                    server
-                        .route_pointer_motion(pointer.x, pointer.y, movement.actual_dx, movement.actual_dy)
-                        .map_err(|_| DisplayServerBootError::FramePresent)?;
+                    set_cursor_position(&mut backend, cursor_surface, pointer.x, pointer.y)?;
 
-                    if pointer.dragging_window.is_some()
-                        && (mouse_event.buttons & ffi::MOUSE_BUTTON_LEFT) != 0
-                    {
-                        wm.move_focused_by(&mut server, movement.actual_dx, movement.actual_dy)
-                            .map_err(|_| DisplayServerBootError::WindowManager)?;
+                    if let Some(drag_win) = pointer.dragging_window {
+                        let _ = lxqt_shell.window_manager.move_window(
+                            drag_win,
+                            movement.actual_dx,
+                            movement.actual_dy,
+                            &mut backend,
+                        );
                     }
                 }
             }
 
-            for (mask, button) in [
-                (ffi::MOUSE_BUTTON_LEFT, MouseButton::Left),
-                (ffi::MOUSE_BUTTON_RIGHT, MouseButton::Right),
-                (ffi::MOUSE_BUTTON_MIDDLE, MouseButton::Middle),
-            ] {
-                let Some(is_pressed) =
-                    pointer::button_state_changed(pointer.buttons, mouse_event.buttons, mask)
-                else {
-                    continue;
-                };
+            let left_pressed = (mouse_event.buttons & ffi::MOUSE_BUTTON_LEFT) != 0;
+            let left_was = (pointer.buttons & ffi::MOUSE_BUTTON_LEFT) != 0;
 
-                server
-                    .route_mouse_button(button, is_pressed, pointer.x, pointer.y)
-                    .map_err(|_| DisplayServerBootError::FramePresent)?;
-
-                if mask != ffi::MOUSE_BUTTON_LEFT {
-                    continue;
-                }
-
-                if is_pressed {
-                    if let Some(window_id) = wm.window_at_point(pointer.x, pointer.y) {
-                        wm.focus_window(&mut server, window_id)
-                            .map_err(|_| DisplayServerBootError::WindowManager)?;
-                        if wm.title_bar_window_at_point(pointer.x, pointer.y) == Some(window_id) {
-                            pointer.dragging_window = Some(window_id);
-                        } else {
-                            pointer.dragging_window = None;
-                        }
-                    } else {
-                        pointer.dragging_window = None;
+            if left_pressed && !left_was {
+                if let Some(window_id) = lxqt_shell.window_manager.window_at_point(pointer.x, pointer.y)
+                {
+                    lxqt_shell.window_manager.focus_window(window_id, &mut backend);
+                    if lxqt_shell.window_manager.title_bar_at_point(pointer.x, pointer.y) == Some(window_id) {
+                        pointer.dragging_window = Some(window_id);
                     }
-                } else {
-                    pointer.dragging_window = None;
                 }
-            }
-
-            if mouse_event.wheel != 0 {
-                server
-                    .route_mouse_wheel(mouse_event.wheel as i32, pointer.x, pointer.y)
-                    .map_err(|_| DisplayServerBootError::FramePresent)?;
+            } else if !left_pressed && left_was {
+                pointer.dragging_window = None;
             }
 
             pointer.buttons = mouse_event.buttons;
         }
 
-        if wm.window_state(runtime.binding.window_id).is_none() {
-            runtime = spawn_iced_runtime(&mut wm, &mut server, display_width, display_height)?;
-        }
-        if let Some(window_id) = pointer.dragging_window {
-            if wm.window_state(window_id).is_none() {
-                pointer.dragging_window = None;
-            }
-        }
-
-        runtime.sync_surface_dimensions(&server)?;
-        runtime.render_if_dirty(&mut server)?;
-
         let uptime_ms = unsafe { ffi::timer_get_uptime_ms_ffi() };
-        server
-            .update_frame(uptime_ms)
-            .map_err(|_| DisplayServerBootError::FramePresent)?;
 
-        while let Some(event) = server.poll_event() {
-            match event {
-                DisplayEvent::FocusChanged {
-                    surface_id: Some(surface_id),
-                } => {
-                    if surface_id == runtime.binding.surface_id {
-                        serial_log(b"[DisplayServer] Focus -> iced primary window\n\0");
-                    } else {
-                        serial_log(b"[DisplayServer] Focus -> unmanaged surface\n\0");
-                    }
-                }
-                DisplayEvent::FocusChanged { surface_id: None } => {
-                    serial_log(b"[DisplayServer] Focus cleared\n\0");
-                }
-                DisplayEvent::SurfaceDestroyed { surface_id }
-                    if surface_id == runtime.binding.surface_id => {
-                        serial_log(b"[DisplayServer] Iced primary surface destroyed\n\0");
-                    }
-                _ => {}
-            }
-        }
+        lxqt_shell.desktop.dirty = true;
+        lxqt_shell.panel.dirty = true;
+        lxqt_shell.render(&mut backend, uptime_ms);
+
+        backend.flush().map_err(|_| DisplayServerBootError::FramePresent)?;
 
         unsafe {
             core::arch::asm!("hlt");
         }
     }
 
-    let diagnostics = server.diagnostics();
-    if diagnostics.dropped_events > 0 {
-        serial_log(b"[DisplayServer] Warning: event queue overflow detected\n\0");
-    }
-    if diagnostics.backend_errors > 0 {
-        serial_log(b"[DisplayServer] Warning: backend errors detected during runtime\n\0");
-    }
-
-    let _ = server.stop();
     serial_log(b"[DisplayServer] Runtime stopped\n\0");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn software_frame_source_renders_expected_buffer_size() {
-        let mut source = SoftwareIcedFrameSource;
-        let pixels = source
-            .render_frame(320, 200, IcedUiState::new())
-            .expect("software frame source should render");
-        assert_eq!(pixels.len(), 320 * 200);
-    }
-
-    #[test]
-    fn software_frame_source_background_is_not_white() {
-        let mut source = SoftwareIcedFrameSource;
-        let pixels = source
-            .render_frame(320, 200, IcedUiState::new())
-            .expect("base frame should render");
-        assert_eq!(pixels[0], 0x000D1118, "background should use iced-owned dark tone");
-    }
-
-    #[test]
-    fn software_frame_source_reacts_to_palette_toggle() {
-        let mut source = SoftwareIcedFrameSource;
-        let mut with_palette = IcedUiState::new();
-        with_palette.show_palette = true;
-
-        let base = source
-            .render_frame(320, 200, IcedUiState::new())
-            .expect("base frame should render");
-        let palette = source
-            .render_frame(320, 200, with_palette)
-            .expect("palette frame should render");
-
-        assert_ne!(base, palette, "palette toggle should alter output pixels");
-    }
-
 }

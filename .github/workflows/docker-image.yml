@@ -22,10 +22,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Log in to GHCR
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -35,7 +35,7 @@ jobs:
       run: echo "CI_IMAGE=${GITHUB_REPOSITORY,,}-ci" >> $GITHUB_ENV
 
     - name: Build and push
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.CI_IMAGE }}:latest

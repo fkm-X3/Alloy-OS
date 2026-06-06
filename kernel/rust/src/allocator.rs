@@ -101,7 +101,7 @@ pub fn get_stats() -> ((usize, usize), (usize, usize)) {
 
 /// Print allocation statistics to serial (non-intrusive)
 pub fn print_stats() {
-    let ((_slab_alloc, _slab_free), (_heap_alloc, _heap_free)) = get_stats();
+    let _ = get_stats();
     
     unsafe {
         use crate::ffi;

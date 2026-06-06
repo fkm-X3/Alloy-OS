@@ -140,75 +140,133 @@ impl Pmm {
     }
 }
 
+// C FFI functions used by the memory manager
+#[cfg(any(feature = "i686", feature = "x86_64"))]
+extern "C" {
+    fn pmm_init(multiboot_addr: u32);
+    fn pmm_alloc_frame() -> *mut c_void;
+    fn pmm_free_frame(addr: *mut c_void);
+    fn pmm_get_total_memory() -> u64;
+    fn pmm_get_available_memory() -> u64;
+    fn pmm_get_total_frames() -> u32;
+    fn pmm_get_used_frames() -> u32;
+    fn paging_create_directory_phys() -> u32;
+    fn paging_switch_to_directory(pd_phys: u32) -> bool;
+    fn paging_get_kernel_directory_phys() -> u32;
+    fn paging_get_physical_address(virt: u32) -> u32;
+    fn paging_destroy_directory(pd_phys: u32);
+    fn vmm_init();
+    fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
+    fn vmm_free_region(addr: *mut c_void, size: u32);
+    fn vmm_map(virt_addr: *mut c_void, phys_addr: *mut c_void, flags: u32) -> bool;
+    fn vmm_unmap(virt_addr: *mut c_void);
+    fn vmm_get_allocated_pages() -> u32;
+    fn vmm_get_next_virt_addr() -> u32;
+}
+
+fn flags_to_raw(flags: PageFlags) -> u32 {
+    let mut raw = 0u32;
+    if flags.present { raw |= 0x001; }
+    if flags.writable { raw |= 0x002; }
+    if flags.user_accessible { raw |= 0x004; }
+    if flags.cache_disabled { raw |= 0x010; }
+    raw
+}
+
 impl MemoryManager for Pmm {
-    fn init(&mut self, _multiboot_info_addr: u32) {
-        // Placeholder: parse multiboot memory map
+    fn init(&mut self, multiboot_info_addr: u32) {
+        unsafe {
+            pmm_init(multiboot_info_addr);
+            vmm_init();
+        }
+        self.bitmap = core::ptr::null_mut();
+        self.total_frames = unsafe { pmm_get_total_frames() };
+        self.used_frames = unsafe { pmm_get_used_frames() };
+        self.memory_size = unsafe { pmm_get_total_memory() };
     }
 
     fn alloc_frame(&mut self) -> Option<*mut c_void> {
-        // Placeholder: find free frame in bitmap
-        None
+        let ptr = unsafe { pmm_alloc_frame() };
+        if ptr.is_null() {
+            None
+        } else {
+            self.used_frames += 1;
+            Some(ptr)
+        }
     }
 
-    fn free_frame(&mut self, _addr: *mut c_void) {
-        // Placeholder: mark frame as free
+    fn free_frame(&mut self, addr: *mut c_void) {
+        unsafe { pmm_free_frame(addr); }
+        self.used_frames = self.used_frames.saturating_sub(1);
     }
 
     unsafe fn map_page(
         &mut self,
-        _virt_addr: *mut c_void,
-        _phys_addr: *mut c_void,
-        _flags: PageFlags,
+        virt_addr: *mut c_void,
+        phys_addr: *mut c_void,
+        flags: PageFlags,
     ) -> bool {
-        false
+        vmm_map(virt_addr, phys_addr, flags_to_raw(flags))
     }
 
-    unsafe fn unmap_page(&mut self, _virt_addr: *mut c_void) {
-        // Placeholder
+    unsafe fn unmap_page(&mut self, virt_addr: *mut c_void) {
+        vmm_unmap(virt_addr);
     }
 
-    fn alloc_region(&mut self, _size: u32, _flags: PageFlags) -> *mut c_void {
-        core::ptr::null_mut()
+    fn alloc_region(&mut self, size: u32, flags: PageFlags) -> *mut c_void {
+        unsafe { vmm_alloc_region(size, flags_to_raw(flags)) }
     }
 
-    fn free_region(&mut self, _addr: *mut c_void, _size: u32) {
-        // Placeholder
+    fn free_region(&mut self, addr: *mut c_void, size: u32) {
+        unsafe { vmm_free_region(addr, size); }
     }
 
     fn total_memory(&self) -> u64 {
-        self.memory_size
+        if self.memory_size == 0 {
+            unsafe { pmm_get_total_memory() }
+        } else {
+            self.memory_size
+        }
     }
 
     fn available_memory(&self) -> u64 {
-        ((self.total_frames - self.used_frames) * 4096) as u64
+        unsafe { pmm_get_available_memory() }
     }
 
     fn total_frames(&self) -> u32 {
-        self.total_frames
+        if self.total_frames == 0 {
+            unsafe { pmm_get_total_frames() }
+        } else {
+            self.total_frames
+        }
     }
 
     fn used_frames(&self) -> u32 {
-        self.used_frames
+        if self.used_frames == 0 {
+            unsafe { pmm_get_used_frames() }
+        } else {
+            self.used_frames
+        }
     }
 
     fn create_page_directory(&mut self) -> usize {
-        0
+        unsafe { paging_create_directory_phys() as usize }
     }
 
-    fn switch_page_directory(&mut self, _pd_phys: usize) {
-        // Placeholder
+    fn switch_page_directory(&mut self, pd_phys: usize) {
+        unsafe { paging_switch_to_directory(pd_phys as u32); }
     }
 
     fn kernel_page_directory(&self) -> usize {
-        0
+        unsafe { paging_get_kernel_directory_phys() as usize }
     }
 
-    fn get_physical_address(&self, _virt: usize) -> usize {
-        0
+    fn get_physical_address(&self, virt: usize) -> usize {
+        unsafe { paging_get_physical_address(virt as u32) as usize }
     }
 
-    fn destroy_page_directory(&mut self, _pd_phys: usize) {
-        // Placeholder
+    fn destroy_page_directory(&mut self, pd_phys: usize) {
+        unsafe { paging_destroy_directory(pd_phys as u32); }
     }
 }
 

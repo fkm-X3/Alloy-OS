@@ -22,6 +22,8 @@
 #define SYS_CLOSE_SOCKET 17
 #define SYS_HAS_PENDING_CONNECTIONS 18
 #define SYS_BRK     19
+#define SYS_FORK    20
+#define SYS_CLONE   21
 
 // INT 0x80 calling convention:
 //   eax = syscall number

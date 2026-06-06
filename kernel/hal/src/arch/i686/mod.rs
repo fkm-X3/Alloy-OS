@@ -222,7 +222,7 @@ pub mod segments {
 }
 
 use crate::interrupt::{InterruptController, Pic8259};
-use crate::memory::{MemoryManager, Pmm, PageFlags};
+use crate::memory::{MemoryManager, Pmm};
 use crate::serial::{SerialPort, Uart16550};
 use crate::time::{Timer, Pit};
 use crate::HalPlatform;

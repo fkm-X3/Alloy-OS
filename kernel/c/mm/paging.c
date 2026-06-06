@@ -231,3 +231,87 @@ bool paging_switch_to_directory(uint32_t pd_phys) {
 uint32_t paging_get_kernel_directory_phys() {
     return kernel_directory_phys;
 }
+
+uint32_t paging_clone_directory(uint32_t pd_phys) {
+    if (!pd_phys) return 0;
+
+    void* new_pd_phys = pmm_alloc_frame();
+    if (!new_pd_phys) {
+        serial_print("Paging: ERROR - Failed to allocate new directory frame for clone\n");
+        return 0;
+    }
+
+    const uint32_t SRC_DIR_IDX = 100;
+    const uint32_t DST_DIR_IDX = 101;
+
+    struct page_table* src_map = map_page_table_window(SRC_DIR_IDX, pd_phys);
+    struct page_table* dst_map = map_page_table_window(DST_DIR_IDX, (uint32_t)new_pd_phys);
+    if (!src_map || !dst_map) {
+        pmm_free_frame(new_pd_phys);
+        return 0;
+    }
+
+    struct page_directory* src_pd = (struct page_directory*)((uint32_t)PT_VIRT_BASE + (SRC_DIR_IDX * PAGE_SIZE));
+    struct page_directory* dst_pd = (struct page_directory*)((uint32_t)PT_VIRT_BASE + (DST_DIR_IDX * PAGE_SIZE));
+
+    for (int i = 0; i < 4; i++) {
+        dst_pd->entries[i] = src_pd->entries[i];
+    }
+
+    for (int i = 4; i < 1024; i++) {
+        dst_pd->entries[i] = 0;
+    }
+
+    for (int dir = 4; dir < 1024; dir++) {
+        uint32_t pde = src_pd->entries[dir];
+        if (!(pde & PAGE_PRESENT)) continue;
+
+        uint32_t src_pt_phys = pde & 0xFFFFF000;
+
+        void* dst_pt_phys = pmm_alloc_frame();
+        if (!dst_pt_phys) {
+            paging_destroy_directory((uint32_t)new_pd_phys);
+            pmm_free_frame(new_pd_phys);
+            return 0;
+        }
+
+        struct page_table* src_pt = map_page_table_window(dir, src_pt_phys);
+        if (!src_pt) {
+            pmm_free_frame(dst_pt_phys);
+            paging_destroy_directory((uint32_t)new_pd_phys);
+            return 0;
+        }
+
+        struct page_table* dst_pt = map_page_table_window(dir + 512, (uint32_t)dst_pt_phys);
+        if (!dst_pt) {
+            pmm_free_frame(dst_pt_phys);
+            paging_destroy_directory((uint32_t)new_pd_phys);
+            return 0;
+        }
+
+        for (int i = 0; i < 1024; i++) {
+            uint32_t pte = src_pt->entries[i];
+            if (!(pte & PAGE_PRESENT)) {
+                dst_pt->entries[i] = 0;
+                continue;
+            }
+
+            uint32_t src_frame = pte & 0xFFFFF000;
+            uint32_t flags = pte & 0xFFF;
+
+            void* new_frame = pmm_alloc_frame();
+            if (!new_frame) {
+                paging_destroy_directory((uint32_t)new_pd_phys);
+                return 0;
+            }
+
+            __builtin_memcpy(new_frame, (void*)src_frame, PAGE_SIZE);
+
+            dst_pt->entries[i] = ((uint32_t)new_frame & 0xFFFFF000) | flags;
+        }
+
+        dst_pd->entries[dir] = ((uint32_t)dst_pt_phys & 0xFFFFF000) | (pde & 0xFFF);
+    }
+
+    return (uint32_t)new_pd_phys;
+}

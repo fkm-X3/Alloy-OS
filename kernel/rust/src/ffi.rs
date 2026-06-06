@@ -78,6 +78,7 @@ extern "C" {
     pub fn paging_get_kernel_directory_phys() -> u32;
     pub fn paging_get_physical_address(virt: u32) -> u32;
     pub fn paging_destroy_directory(pd_phys: u32);
+    pub fn paging_clone_directory(pd_phys: u32) -> u32;
 
     // Timer functions (from timer.cpp)
     pub fn timer_init_ffi(frequency: u32);

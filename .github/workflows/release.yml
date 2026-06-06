@@ -28,7 +28,7 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           kernel/rust/target/
-        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml', 'Alloy-DE/**/Cargo.lock', 'Alloy-DE/**/Cargo.toml') }}
+        key: rust-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
         restore-keys: |
           rust-${{ runner.os }}-
     

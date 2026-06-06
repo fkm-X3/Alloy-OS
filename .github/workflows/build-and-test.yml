@@ -34,8 +34,7 @@ jobs:
       with:
         path: |
           kernel/rust/target
-          Alloy-DE/alloy-display-kernel/target
-        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Alloy-DE/alloy-display-kernel/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
+        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
         restore-keys: |
           cargo-target-${{ runner.os }}-
 

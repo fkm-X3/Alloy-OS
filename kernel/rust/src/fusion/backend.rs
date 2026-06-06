@@ -1,12 +1,9 @@
-//! Fusion Display Backend - Implements DisplayBackend for framebuffer rendering
+//! Fusion Display Backend - framebuffer compositing for LXQt/Fusion
 //!
-//! Bridges kernel framebuffer with the display server protocol, allowing
-//! applications to render through the composited display pipeline.
+//! Manages surfaces, z-order compositing, and VESA framebuffer output.
 
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use alloy_display_kernel::server::DisplayBackend;
-use alloy_display_kernel::protocol::{SurfaceId, PixelFormat, Rect};
 use crate::graphics::vesa::VesaDisplay;
 use crate::graphics::Display;
 
@@ -301,127 +298,13 @@ impl FusionDisplayBackend {
     pub fn display_mut(&mut self) -> &mut VesaDisplay {
         &mut self.display
     }
-}
 
-// Implement DisplayBackend trait for integration with display server
-impl DisplayBackend for FusionDisplayBackend {
-    type Error = FusionError;
-
-    fn create_surface(
-        &mut self,
-        surface_id: SurfaceId,
-        width: u32,
-        height: u32,
-        _format: PixelFormat,
-    ) -> Result<(), Self::Error> {
-        if self.surfaces.contains_key(&surface_id.0) {
-            return Err(FusionError::SurfaceNotFound);
-        }
-
-        let surface = SurfaceData::new(width, height)?;
-        self.surfaces.insert(surface_id.0, surface);
-        Ok(())
-    }
-
-    fn destroy_surface(&mut self, surface_id: SurfaceId) -> Result<(), Self::Error> {
-        self.surfaces.remove(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-        Ok(())
-    }
-
-    fn set_surface_position(
-        &mut self,
-        surface_id: SurfaceId,
-        x: i32,
-        y: i32,
-    ) -> Result<(), Self::Error> {
-        let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-        surface.x = x;
-        surface.y = y;
-        Ok(())
-    }
-
-    fn resize_surface(
-        &mut self,
-        surface_id: SurfaceId,
-        width: u32,
-        height: u32,
-    ) -> Result<(), Self::Error> {
-        if width == 0 || height == 0 {
-            return Err(FusionError::InvalidDimensions);
-        }
-
-        let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-        let new_pixel_count = (width as usize)
-            .checked_mul(height as usize)
-            .ok_or(FusionError::InvalidDimensions)?;
-
-        surface.width = width;
-        surface.height = height;
-        surface.pixels.clear();
-        surface.pixels.resize(new_pixel_count, 0u32);
-
-        Ok(())
-    }
-
-    fn set_surface_visibility(
-        &mut self,
-        surface_id: SurfaceId,
-        visible: bool,
-    ) -> Result<(), Self::Error> {
-        let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-        surface.visible = visible;
-        Ok(())
-    }
-
-    fn set_surface_z_order(
-        &mut self,
-        surface_id: SurfaceId,
-        z_order: u32,
-    ) -> Result<(), Self::Error> {
-        let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-        surface.z_order = z_order;
-        Ok(())
-    }
-
-    fn commit_surface(
-        &mut self,
-        _surface_id: SurfaceId,
-        _damage: Option<Rect>,
-    ) -> Result<(), Self::Error> {
-        // Accept commit - actual composition happens during flush
-        Ok(())
-    }
-
-    fn upload_surface_pixels(
-        &mut self,
-        surface_id: SurfaceId,
-        width: u32,
-        height: u32,
-        pixels: &[u32],
-        _damage: Option<Rect>,
-    ) -> Result<(), Self::Error> {
-        let surface = self.surfaces.get_mut(&surface_id.0).ok_or(FusionError::SurfaceNotFound)?;
-
-        if surface.width != width || surface.height != height {
-            return Err(FusionError::InvalidDimensions);
-        }
-
-        let expected_len = (width as usize) * (height as usize);
-        if pixels.len() != expected_len {
-            return Err(FusionError::InvalidPixelData);
-        }
-
-        surface.pixels.copy_from_slice(pixels);
-        self.dirty = true;
-        Ok(())
-    }
-
-fn flush(&mut self) -> Result<(), Self::Error> {
+    /// Composite all visible surfaces onto the framebuffer and swap
+    pub fn flush(&mut self) -> Result<(), FusionError> {
         if !self.dirty {
             return Ok(());
         }
 
-        // Clone visible surface data to avoid borrow conflicts
         let sorted: Vec<(u32, SurfaceData)> = {
             let mut tmp: Vec<_> = self
                 .surfaces
@@ -433,7 +316,6 @@ fn flush(&mut self) -> Result<(), Self::Error> {
             tmp
         };
 
-        // Safe: display clear is separate from pixel writes
         self.display.clear(COMPOSITOR_CLEAR_COLOR);
 
         for (_id, surface) in &sorted {

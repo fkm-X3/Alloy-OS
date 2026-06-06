@@ -177,11 +177,13 @@ impl RegistryHandler {
         let interface_str: &[u8] = match interface {
             InterfaceName::Compositor => b"wl_compositor\0",
             InterfaceName::Output => b"wl_output\0",
-            InterfaceName::XdgShell => b"xdg_shell\0",
+            InterfaceName::XdgShell => b"xdg_wm_base\0",
             InterfaceName::DataDeviceManager => b"wl_data_device_manager\0",
             InterfaceName::Seat => b"wl_seat\0",
             InterfaceName::Shm => b"wl_shm\0",
             InterfaceName::Subcompositor => b"wl_subcompositor\0",
+            InterfaceName::LayerShell => b"zwlr_layer_shell_v1\0",
+            InterfaceName::XdgOutputManager => b"zxdg_output_manager_v1\0",
         };
 
         let mut payload = Vec::new();

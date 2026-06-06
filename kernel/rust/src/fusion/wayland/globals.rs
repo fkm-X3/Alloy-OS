@@ -23,6 +23,10 @@ pub enum InterfaceName {
     Shm,
     /// wl_subcompositor - subsurface support
     Subcompositor,
+    /// zwlr_layer_shell_v1 - layer shell for panels/desktop
+    LayerShell,
+    /// zxdg_output_manager_v1 - output properties
+    XdgOutputManager,
 }
 
 impl fmt::Display for InterfaceName {
@@ -35,6 +39,8 @@ impl fmt::Display for InterfaceName {
             InterfaceName::Seat => write!(f, "wl_seat"),
             InterfaceName::Shm => write!(f, "wl_shm"),
             InterfaceName::Subcompositor => write!(f, "wl_subcompositor"),
+            InterfaceName::LayerShell => write!(f, "zwlr_layer_shell_v1"),
+            InterfaceName::XdgOutputManager => write!(f, "zxdg_output_manager_v1"),
         }
     }
 }
@@ -99,6 +105,9 @@ impl GlobalRegistry {
         registry.add_global(InterfaceName::Shm, 2);
         registry.add_global(InterfaceName::Subcompositor, 1);
         registry.add_global(InterfaceName::DataDeviceManager, 3);
+        registry.add_global(InterfaceName::XdgShell, 6);
+        registry.add_global(InterfaceName::LayerShell, 4);
+        registry.add_global(InterfaceName::XdgOutputManager, 3);
 
         registry
     }

@@ -23,6 +23,9 @@ pub mod focus;
 pub mod seat;
 pub mod output;
 pub mod input_routing;
+pub mod xdg_shell;
+pub mod layer_shell;
+pub mod xdg_output;
 
 use self::socket::UnixSocket;
 use self::protocol::{WaylandMessage, ProtocolHandler};
@@ -35,6 +38,9 @@ use self::surface::SurfaceState;
 use self::seat::SeatManager;
 use self::output::OutputManager;
 use self::input_routing::InputRouter;
+use self::xdg_shell::XdgShellHandler;
+use self::layer_shell::LayerShellHandler;
+use self::xdg_output::XdgOutputManagerHandler;
 use self::compositor_integration::CompositorIntegration;
 use crate::graphics::vesa::VesaDisplay;
 use crate::fusion::FusionDisplayBackend;
@@ -171,6 +177,12 @@ pub struct WaylandServer {
     output_manager: OutputManager,
     /// Input router for event dispatch
     input_router: InputRouter,
+    /// XDG shell handler (lxqt wayland compat)
+    xdg_shell_handler: XdgShellHandler,
+    /// Layer shell handler (panel/desktop surfaces)
+    layer_shell_handler: LayerShellHandler,
+    /// XDG output manager handler
+    xdg_output_handler: XdgOutputManagerHandler,
     /// Framebuffer reference for compositor integration
     framebuffer: Option<FusionDisplayBackend>,
 }
@@ -190,6 +202,9 @@ impl WaylandServer {
             seat_manager: SeatManager::new(),
             output_manager: OutputManager::new(),
             input_router: InputRouter::new(),
+            xdg_shell_handler: XdgShellHandler::new(),
+            layer_shell_handler: LayerShellHandler::new(),
+            xdg_output_handler: XdgOutputManagerHandler::new(),
             framebuffer: None,
         }
     }
@@ -259,19 +274,122 @@ impl WaylandServer {
 
     /// Dispatch a message from a client
     pub fn dispatch_message(&mut self, client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
-        if self.clients.contains_key(&client_id) {
-            self.protocol_handler.handle_message(
-                client_id,
-                message,
-                &mut self.display_handler,
-                &mut self.registry_handler,
-                &mut self.compositor_handler,
-                &mut self.shm_buffer_handler,
-            )?;
-            Ok(())
-        } else {
-            Err(WaylandError::ObjectNotFound)
+        let Some(client) = self.clients.get(&client_id) else {
+            return Err(WaylandError::ObjectNotFound);
+        };
+
+        let object_type = client.state().get_object(message.object_id.0)
+            .map(|e| e.object_type())
+            .unwrap_or(crate::fusion::wayland::client::ObjectType::Custom);
+
+        let _ = client;
+
+        match object_type {
+            crate::fusion::wayland::client::ObjectType::Display => {
+                let response = self.display_handler.handle_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+                let _ = response;
+            }
+            crate::fusion::wayland::client::ObjectType::Registry => {
+                let response = self.registry_handler.handle_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+                match response {
+                    crate::fusion::wayland::registry_handler::RegistryResponse::Bound {
+                        global_name: _,
+                        object_id: _,
+                        interface,
+                        version: _,
+                    } => {
+                        let obj_type = match interface {
+                            crate::fusion::wayland::globals::InterfaceName::Compositor =>
+                                crate::fusion::wayland::client::ObjectType::Compositor,
+                            crate::fusion::wayland::globals::InterfaceName::Output =>
+                                crate::fusion::wayland::client::ObjectType::Output,
+                            crate::fusion::wayland::globals::InterfaceName::Seat =>
+                                crate::fusion::wayland::client::ObjectType::Custom,
+                            crate::fusion::wayland::globals::InterfaceName::Shm =>
+                                crate::fusion::wayland::client::ObjectType::Custom,
+                            crate::fusion::wayland::globals::InterfaceName::Subcompositor =>
+                                crate::fusion::wayland::client::ObjectType::Custom,
+                            crate::fusion::wayland::globals::InterfaceName::DataDeviceManager =>
+                                crate::fusion::wayland::client::ObjectType::Custom,
+                            crate::fusion::wayland::globals::InterfaceName::XdgShell =>
+                                crate::fusion::wayland::client::ObjectType::XdgWmBase,
+                            crate::fusion::wayland::globals::InterfaceName::LayerShell =>
+                                crate::fusion::wayland::client::ObjectType::LayerShell,
+                            crate::fusion::wayland::globals::InterfaceName::XdgOutputManager =>
+                                crate::fusion::wayland::client::ObjectType::XdgOutputManager,
+                        };
+                        if let Some(client) = self.clients.get_mut(&client_id) {
+                            client.state_mut().register_object(obj_type, 1);
+                        }
+                    }
+                }
+            }
+            crate::fusion::wayland::client::ObjectType::Compositor => {
+                let response = self.compositor_handler.handle_compositor_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+                let _ = response;
+            }
+            crate::fusion::wayland::client::ObjectType::Surface => {
+                let _ = self.compositor_handler.handle_surface_request(
+                    message.object_id.0, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgWmBase => {
+                let response = self.xdg_shell_handler.handle_wm_base_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+                let _ = response;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgSurface => {
+                let _ = self.xdg_shell_handler.handle_xdg_surface_request(
+                    message.object_id.0, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgToplevel => {
+                let _ = self.xdg_shell_handler.handle_toplevel_request(
+                    message.object_id.0, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgPopup => {
+                let _ = self.xdg_shell_handler.handle_popup_request(message.opcode)?;
+            }
+            crate::fusion::wayland::client::ObjectType::LayerShell => {
+                let _ = self.layer_shell_handler.handle_layer_shell_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::LayerSurface => {
+                let _ = self.layer_shell_handler.handle_layer_surface_request(
+                    message.object_id.0, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgOutputManager => {
+                let _ = self.xdg_output_handler.handle_request(
+                    client_id, message.opcode, &message.payload
+                )?;
+            }
+            crate::fusion::wayland::client::ObjectType::XdgOutput => {
+                let _ = self.xdg_output_handler.handle_xdg_output_request(
+                    client_id, message.object_id.0, message.opcode, &message.payload
+                )?;
+            }
+            _ => {
+                let _ = self.protocol_handler.handle_message(
+                    client_id,
+                    message,
+                    &mut self.display_handler,
+                    &mut self.registry_handler,
+                    &mut self.compositor_handler,
+                    &mut self.shm_buffer_handler,
+                )?;
+            }
         }
+        Ok(())
     }
 
     /// Process all pending frame callbacks and emit done events
@@ -417,6 +535,36 @@ self.registry_handler.remove_client(client_id);
     /// Get mutable reference to input router
     pub fn input_router_mut(&mut self) -> &mut InputRouter {
         &mut self.input_router
+    }
+
+    /// Get reference to xdg shell handler
+    pub fn xdg_shell_handler(&self) -> &XdgShellHandler {
+        &self.xdg_shell_handler
+    }
+
+    /// Get mutable reference to xdg shell handler
+    pub fn xdg_shell_handler_mut(&mut self) -> &mut XdgShellHandler {
+        &mut self.xdg_shell_handler
+    }
+
+    /// Get reference to layer shell handler
+    pub fn layer_shell_handler(&self) -> &LayerShellHandler {
+        &self.layer_shell_handler
+    }
+
+    /// Get mutable reference to layer shell handler
+    pub fn layer_shell_handler_mut(&mut self) -> &mut LayerShellHandler {
+        &mut self.layer_shell_handler
+    }
+
+    /// Get reference to xdg output handler
+    pub fn xdg_output_handler(&self) -> &XdgOutputManagerHandler {
+        &self.xdg_output_handler
+    }
+
+    /// Get mutable reference to xdg output handler
+    pub fn xdg_output_handler_mut(&mut self) -> &mut XdgOutputManagerHandler {
+        &mut self.xdg_output_handler
     }
 }
 

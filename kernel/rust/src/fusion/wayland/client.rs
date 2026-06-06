@@ -52,6 +52,22 @@ pub enum ObjectType {
     Callback,
     /// wl_output - display output/monitor
     Output,
+    /// xdg_wm_base - xdg windowing shell
+    XdgWmBase,
+    /// xdg_surface - xdg surface
+    XdgSurface,
+    /// xdg_toplevel - xdg toplevel window
+    XdgToplevel,
+    /// xdg_popup - xdg popup window
+    XdgPopup,
+    /// zwlr_layer_shell_v1 - layer shell
+    LayerShell,
+    /// zwlr_layer_surface_v1 - layer surface
+    LayerSurface,
+    /// zxdg_output_manager_v1 - xdg output manager
+    XdgOutputManager,
+    /// zxdg_output_v1 - xdg output
+    XdgOutput,
     /// Custom/Unknown type
     Custom,
 }

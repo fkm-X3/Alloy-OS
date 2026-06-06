@@ -19,6 +19,8 @@ pub const LISTEN: u32 = 14;
 pub const ACCEPT: u32 = 15;
 pub const CONNECT: u32 = 16;
 pub const CLOSE_SOCKET: u32 = 17;
+pub const CLONE: u32 = 21;
+pub const FORK: u32 = 20;
 pub const BRK: u32 = 19;
 pub const HAS_PENDING_CONNECTIONS: u32 = 18;
 
@@ -46,6 +48,8 @@ pub enum SyscallNumber {
     CloseSocket = CLOSE_SOCKET,
     HasPendingConnections = HAS_PENDING_CONNECTIONS,
     Brk = BRK,
+    Fork = FORK,
+    Clone = CLONE,
 }
 
 impl SyscallNumber {
@@ -71,6 +75,8 @@ impl SyscallNumber {
             CLOSE_SOCKET => Some(SyscallNumber::CloseSocket),
             HAS_PENDING_CONNECTIONS => Some(SyscallNumber::HasPendingConnections),
             BRK => Some(SyscallNumber::Brk),
+            FORK => Some(SyscallNumber::Fork),
+            CLONE => Some(SyscallNumber::Clone),
             _ => None,
         }
     }

@@ -1,5 +1,6 @@
 use alloc::collections::VecDeque;
 use alloc::boxed::Box;
+use alloc::string::String;
 use crate::process::task::{Task, TaskState};
 use crate::sync::SpinLock;
 use crate::ffi;
@@ -153,6 +154,55 @@ impl Scheduler {
 
         // Use schedule() which performs proper context switching between tasks
         Self::schedule();
+    }
+
+    /// Clone — create a new task running `entry(arg)` with given stack.
+    /// If the current task has its own page directory, it is cloned.
+    pub fn clone_task(entry: u32, stack: u32, arg: u32) -> u32 {
+        let mut scheduler = SCHEDULER.lock();
+        let sched = match scheduler.as_mut() {
+            Some(s) => s,
+            None => return u32::MAX,
+        };
+        // Build a context for the new task
+        let mut ctx = Box::new(crate::process::task::CpuContext::new());
+        ctx.eip = entry;
+        ctx.esp = stack;
+        ctx.ebp = stack;
+        // Pass arg in EAX (child sees it as return value)
+        ctx.eax = arg;
+        // Set user-mode segments
+        ctx.cs = 0x1B;
+        ctx.ds = 0x23;
+        ctx.es = 0x23;
+        ctx.fs = 0x23;
+        ctx.gs = 0x23;
+        ctx.ss = 0x23;
+
+        // Clone page directory if current has its own
+        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
+        let current_cr3 = sched.current_task.as_ref()
+            .map(|t| t.context().cr3)
+            .unwrap_or(kernel_pd);
+        ctx.cr3 = if current_cr3 != kernel_pd {
+            let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
+            if new_pd == 0 { return u32::MAX; }
+            new_pd
+        } else {
+            kernel_pd
+        };
+
+        let child = Box::new(Task::from_parts(
+            ctx,
+            Some(Box::new([0u8; 4096])),
+            String::from("clone"),
+            [None; 32],
+            0x01000000,
+        ));
+
+        let pid = child.id().as_u32();
+        sched.ready_queue.push_back(child);
+        pid
     }
 
     /// Convenience helper to operate on the current task under the scheduler lock.

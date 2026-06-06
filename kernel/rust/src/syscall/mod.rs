@@ -32,6 +32,8 @@ pub enum SyscallNumber {
     CloseSocket = 17,
     HasPendingConnections = 18,
     Brk = 19,
+    Fork = 20,
+    Clone = 21,
 }
 
 /// sys_exit - Terminate the current task
@@ -455,6 +457,25 @@ pub extern "C" fn rust_sys_has_pending_connections(fd: i32) -> i32 {
     crate::net::socket_has_pending_connections(fd)
 }
 
+/// sys_clone - Create a new task running `entry(arg)` with `stack`.
+/// Returns child PID on success, !0 on error.
+#[no_mangle]
+pub extern "C" fn rust_sys_clone(entry: u32, stack: u32, arg: u32) -> u32 {
+    unsafe {
+        ffi::serial_print(c"[Syscall] sys_clone called\n".as_ptr() as *const u8);
+    }
+    crate::process::Scheduler::clone_task(entry, stack, arg)
+}
+
+/// sys_fork - (stub) Full process copy requires user-mode support; not yet implemented.
+#[no_mangle]
+pub extern "C" fn rust_sys_fork() -> u32 {
+    unsafe {
+        ffi::serial_print(c"[Syscall] sys_fork: not implemented (use clone)\n".as_ptr() as *const u8);
+    }
+    u32::MAX
+}
+
 /// sys_brk - Set the program break (heap end) for the current task.
 /// If addr is 0, return the current break. Otherwise, try to extend/shrink
 /// the heap to the given address. Returns the new program break on success,
@@ -469,7 +490,6 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
         return current_break;
     }
 
-    let page = |x: u32| x & !0xFFF;
     let page_ceil = |x: u32| (x + 0xFFF) & !0xFFF;
 
     let old_brk = current_break;
@@ -479,7 +499,6 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
     let new_page = page_ceil(new_brk);
 
     if new_page > old_page {
-        let alloc_start = old_page;
         let alloc_size = new_page - old_page;
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
         let ptr = unsafe { ffi::vmm_alloc_region(alloc_size, flags) };
@@ -505,12 +524,9 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     let result: u32;
     unsafe {
         core::arch::asm!(
-            "push ebx",
-            "mov ebx, {1}",
             "int 0x80",
-            "pop ebx",
             inlateout("eax") num as u32 => result,
-            in(reg) arg0,
+            inout("ebx") arg0 => _,
             in("ecx") arg1,
             in("edx") arg2,
             options(preserves_flags),

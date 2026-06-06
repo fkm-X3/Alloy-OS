@@ -223,6 +223,25 @@ impl Task {
         }
     }
     
+    /// Create a task from raw parts (used by clone/fork)
+    pub fn from_parts(
+        context: Box<CpuContext>,
+        stack: Option<Box<[u8; 4096]>>,
+        name: String,
+        fds: [Option<(u64, usize)>; 32],
+        heap_break: u32,
+    ) -> Self {
+        Task {
+            id: TaskId::new(),
+            state: TaskState::Ready,
+            context,
+            stack,
+            name,
+            fds,
+            heap_break,
+        }
+    }
+
     /// Create the idle task (special task with no real work)
     pub fn new_idle() -> Self {
         Self::new(idle_task_entry, "idle")

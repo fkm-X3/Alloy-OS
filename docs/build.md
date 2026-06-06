@@ -28,10 +28,6 @@ make clean     # remove all build outputs
 ## Validation
 
 ```sh
-# Display crate tests (host, std-available)
-cd Alloy-DE && cargo test -p alloy-display-kernel
-cd Alloy-DE && cargo test -p alloy-display-kernel <test_name>
-
 # Kernel Rust (requires nightly + custom target)
 cd kernel/rust && cargo +nightly fmt --check
 cd kernel/rust && cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc
@@ -40,4 +36,4 @@ cd kernel/rust && cargo +nightly clippy --target i686-alloy.json -Zbuild-std=cor
 nasm -f elf32 -o /dev/null <file.asm>
 ```
 
-Kernel Rust is `no_std` with `panic = "abort"`. No `cargo test` runs inside the kernel crate.
+Kernel Rust is `no_std` with `panic = "abort"`. No `cargo test` runs inside the kernel crate. The display crate (`Fusion`) is inlined under `kernel/rust/src/fusion/`.

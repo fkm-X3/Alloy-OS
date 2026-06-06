@@ -26,8 +26,7 @@ See [docs/build.md](docs/build.md) for all make targets, native builds, and vali
 | Directory | Responsibility |
 |---|---|
 | `kernel/c/` | Early boot, drivers, paging, VMM |
-| `kernel/rust/` | Rust kernel entry, VFS, display server |
-| `Alloy-DE/alloy-display-kernel/` | Shared display library, protocol, window manager |
+| `kernel/rust/` | Rust kernel entry, VFS, display server, Fusion Wayland |
 | `boot/` | Bootloader ASM + GRUB config |
 | `tools/` | Screenshot/smoke-test helpers |
 
@@ -36,7 +35,7 @@ See [docs/architecture.md](docs/architecture.md) for boot flow, conventions, CI,
 
 ## What you see at boot
 
-The kernel enters Rust, initializes VFS, boots the display server with Fusion compositing Cosmos DE shell surfaces. Wayland support lives under `kernel/rust/src/fusion/wayland`.
+The kernel enters Rust, initializes VFS, boots the display server with Fusion compositing with LXQt-compatible shell surfaces. Wayland support lives under `kernel/rust/src/fusion/wayland`.
 
 ## Controls
 

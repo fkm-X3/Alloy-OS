@@ -13,7 +13,6 @@
 |---|---|
 | `kernel/c/` | Early boot (C), drivers, paging, VMM, handoff to Rust |
 | `kernel/rust/` | Rust kernel entry, allocator, VFS, display server, Fusion Wayland |
-| `Alloy-DE/alloy-display-kernel/` | Shared display server library — protocol, server core, window manager, desktop shell |
 | `boot/` | Bootloader ASM + GRUB config |
 | `tools/` | Screenshot and smoke-test Python helpers |
 
@@ -39,7 +38,7 @@ All CI runs inside Docker via `.github/actions/docker-ci`.
 - Mouse input is relative PS/2. Click inside QEMU to grab pointer. `make output` is headless and cannot capture live mouse.
 - The repo targets `i686-alloy` (32-bit x86), not `x86_64`, despite `ARCH ?= x86_64` in the Makefile.
 - Rust nightly is required with `-Zbuild-std=core,alloc` and the custom target spec `i686-alloy.json`.
-- Not a Cargo workspace — two crate roots: `kernel/rust`, `Alloy-DE/alloy-display-kernel`.
+- Not a Cargo workspace — single crate root: `kernel/rust`.
 
 ## Terminal mode
 

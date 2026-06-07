@@ -34,6 +34,10 @@ uint64_t pmm_get_available_memory();
 uint32_t pmm_get_total_frames();
 uint32_t pmm_get_used_frames();
 
+void pmm_refcount_inc(void* addr);
+void pmm_refcount_dec(void* addr);
+uint32_t pmm_refcount_get(void* addr);
+
 #ifdef __cplusplus
 }
 #endif

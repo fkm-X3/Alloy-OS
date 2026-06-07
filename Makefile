@@ -58,13 +58,14 @@ RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
+CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories
 BUILD_DIR = build
 BOOT_DIR = boot
 KERNEL_C_DIR = kernel/c
+USERLAND_DIR = os/userland
 KERNEL_RUST_DIR = kernel/rust
 ARCH_DIR = $(KERNEL_C_DIR)/arch/$(ARCH)
 DRIVERS_DIR = $(KERNEL_C_DIR)/drivers
@@ -99,14 +100,19 @@ OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch
+.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch userland
 
-all: $(KERNEL_ELF)
+all: userland $(KERNEL_ELF)
 
 iso: $(KERNEL_ISO)
 
+# Build userland binaries (embedded into kernel VFS)
+userland:
+	$(MAKE) -C $(USERLAND_DIR) ARCH=$(ARCH)
+	@cp $(USERLAND_DIR)/build/hello hello 2>/dev/null || true
+
 # Link kernel
-$(KERNEL_ELF): $(OBJECTS) $(RUST_LIB)
+$(KERNEL_ELF): userland $(OBJECTS) $(RUST_LIB)
 	@echo "Linking kernel ($(ARCH))..."
 	@mkdir -p $(dir $@)
 	$(LD) $(LDFLAGS) -o $@ $(OBJECTS) $(RUST_LIB)

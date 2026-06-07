@@ -7,6 +7,9 @@ extern uint32_t _kernel_end;
 
 PhysicalMemoryManager g_pmm;
 
+#define MAX_PHYSICAL_FRAMES (1024 * 1024)
+static uint32_t frame_refcounts[MAX_PHYSICAL_FRAMES];
+
 #define MULTIBOOT_MEMORY_AVAILABLE 1
 #define MULTIBOOT_MEMORY_RESERVED 2
 #define MULTIBOOT_MEMORY_ACPI_RECLAIMABLE 3
@@ -57,6 +60,10 @@ void pmm_init(uint32_t multiboot_addr) {
 
     for (uint32_t i = 0; i < sizeof(frame_bitmap) / sizeof(uint32_t); i++) {
         g_pmm.bitmap[i] = 0xFFFFFFFF;
+    }
+
+    for (uint32_t i = 0; i < MAX_PHYSICAL_FRAMES; i++) {
+        frame_refcounts[i] = 0;
     }
 
     struct multiboot_tag* tag = (struct multiboot_tag*)(multiboot_addr + 8);
@@ -178,6 +185,10 @@ void* pmm_alloc_frame() {
     set_frame(frame);
     g_pmm.used_frames++;
 
+    if (frame < MAX_PHYSICAL_FRAMES) {
+        frame_refcounts[frame] = 1;
+    }
+
     return (void*)(frame * PAGE_SIZE);
 }
 
@@ -212,4 +223,31 @@ uint32_t pmm_get_total_frames() {
 
 uint32_t pmm_get_used_frames() {
     return g_pmm.used_frames;
+}
+
+void pmm_refcount_inc(void* addr) {
+    uint32_t frame = (uint32_t)addr / PAGE_SIZE;
+    if (frame < MAX_PHYSICAL_FRAMES) {
+        frame_refcounts[frame]++;
+    }
+}
+
+void pmm_refcount_dec(void* addr) {
+    uint32_t frame = (uint32_t)addr / PAGE_SIZE;
+    if (frame < MAX_PHYSICAL_FRAMES) {
+        if (frame_refcounts[frame] > 0) {
+            frame_refcounts[frame]--;
+        }
+        if (frame_refcounts[frame] == 0) {
+            pmm_free_frame(addr);
+        }
+    }
+}
+
+uint32_t pmm_refcount_get(void* addr) {
+    uint32_t frame = (uint32_t)addr / PAGE_SIZE;
+    if (frame < MAX_PHYSICAL_FRAMES) {
+        return frame_refcounts[frame];
+    }
+    return 0;
 }

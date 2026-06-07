@@ -220,3 +220,44 @@ pub mod segments {
     pub const USER_CODE: u16 = 0x18;
     pub const USER_DATA: u16 = 0x20;
 }
+
+use crate::interrupt::{InterruptController, Pic8259};
+use crate::memory::{MemoryManager, Pmm};
+use crate::serial::{SerialPort, Uart16550};
+use crate::time::{Timer, Pit};
+use crate::HalPlatform;
+
+/// i686 HAL platform implementation using C-backed memory manager
+pub struct I686Platform;
+
+impl HalPlatform for I686Platform {
+    type Arch = I686Arch;
+    type InterruptCtrl = Pic8259;
+    type MemManager = Pmm;
+    type Serial = Uart16550;
+    type Timer = Pit;
+
+    fn init_early() -> Self::Serial {
+        let mut serial = Uart16550::new();
+        serial.init(0x3F8, 115200);
+        serial
+    }
+
+    fn init_interrupts() -> Self::InterruptCtrl {
+        let mut pic = Pic8259::new(0x20, 0x28);
+        pic.init();
+        pic
+    }
+
+    fn init_memory() -> Self::MemManager {
+        let mut pmm = Pmm::new();
+        pmm.init(0);
+        pmm
+    }
+
+    fn init_timer(frequency: u32) -> Self::Timer {
+        let mut pit = Pit::new();
+        pit.init(frequency);
+        pit
+    }
+}

@@ -78,6 +78,13 @@ extern "C" {
     pub fn paging_get_kernel_directory_phys() -> u32;
     pub fn paging_get_physical_address(virt: u32) -> u32;
     pub fn paging_destroy_directory(pd_phys: u32);
+    pub fn paging_clone_directory(pd_phys: u32) -> u32;
+    pub fn paging_fork_directory(pd_phys: u32) -> u32;
+    pub fn paging_handle_cow_fault(fault_addr: u32) -> u8;
+
+    // Physical memory manager refcounting
+    pub fn pmm_refcount_inc(addr: *mut c_void);
+    pub fn pmm_refcount_dec(addr: *mut c_void);
 
     // Timer functions (from timer.cpp)
     pub fn timer_init_ffi(frequency: u32);
@@ -228,6 +235,18 @@ pub fn keyboard_read() -> u8 {
     }
 }
 
+/// Block until a key is available, then read it.
+pub fn keyboard_read_blocking() -> u8 {
+    loop {
+        if keyboard_has_key() {
+            return keyboard_read();
+        }
+        crate::process::scheduler::Scheduler::block_current_on(
+            &crate::process::scheduler::KEYBOARD_WAIT,
+        );
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MouseEvent {
     pub dx: i8,
@@ -247,6 +266,18 @@ pub fn mouse_ready() -> bool {
 
 pub fn mouse_init_error_code() -> u8 {
     unsafe { mouse_last_init_error() }
+}
+
+/// Block until a mouse event is available, then read it.
+pub fn mouse_read_blocking() -> MouseEvent {
+    loop {
+        if let Some(event) = mouse_read() {
+            return event;
+        }
+        crate::process::scheduler::Scheduler::block_current_on(
+            &crate::process::scheduler::MOUSE_WAIT,
+        );
+    }
 }
 
 pub fn mouse_read() -> Option<MouseEvent> {

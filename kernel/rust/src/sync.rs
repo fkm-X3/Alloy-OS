@@ -117,7 +117,7 @@ impl<T> SpinlockIRQ<T> {
             // Read EFLAGS
             core::arch::asm!(
                 "pushfd",
-                "pop {0}",
+                "pop {0:e}",
                 out(reg) flags
             );
             

@@ -49,8 +49,8 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
         let eflags: u32;
         
         core::arch::asm!(
-            "mov {0}, esp",
-            "mov {1}, ebp",
+            "mov {0:e}, esp",
+            "mov {1:e}, ebp",
             out(reg) esp,
             out(reg) ebp,
         );
@@ -58,7 +58,7 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
         // Get EFLAGS
         core::arch::asm!(
             "pushfd",
-            "pop {0}",
+            "pop {0:e}",
             out(reg) eflags,
         );
         

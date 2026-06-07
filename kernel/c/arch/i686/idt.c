@@ -228,6 +228,7 @@ static const char* exception_messages[] = {
 };
 
 extern void rust_handle_page_fault(uint32_t addr, uint32_t err_code);
+extern uint8_t paging_handle_cow_fault(uint32_t fault_addr);
 
 void exception_handler(struct interrupt_frame* frame) {
     uint32_t int_no = frame->int_no;
@@ -236,6 +237,16 @@ void exception_handler(struct interrupt_frame* frame) {
     if (int_no == 14) {
         uint32_t fault_addr = 0;
         asm volatile ("mov %%cr2, %0" : "=r"(fault_addr));
+
+        // Check for COW fault: user-mode (bit 2), write (bit 1), present (bit 0)
+        if ((err_code & 0x7) == 0x7) {
+            if (paging_handle_cow_fault(fault_addr)) {
+                serial_print("[COW] Resolved COW page fault at 0x");
+                serial_print_hex(fault_addr);
+                serial_print("\n");
+                return;
+            }
+        }
 
         serial_print("\n!!! PAGE FAULT at 0x");
         serial_print_hex(fault_addr);

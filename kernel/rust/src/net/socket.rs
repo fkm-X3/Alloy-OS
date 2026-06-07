@@ -1,6 +1,8 @@
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 use crate::sync::SpinLock;
+use crate::process::WaitQueue;
+use crate::process::Scheduler;
 
 pub const AF_UNIX: i32 = 1;
 pub const SOCK_STREAM: i32 = 1;
@@ -136,6 +138,9 @@ impl SocketTable {
 }
 
 static SOCKET_TABLE: SpinLock<Option<SocketTable>> = SpinLock::new(None);
+
+/// Wait queue for socket reads — tasks block here when no data is available.
+static SOCKET_READ_WAIT: WaitQueue = WaitQueue::new();
 
 fn ensure_table() {
     let mut guard = SOCKET_TABLE.lock();
@@ -305,33 +310,37 @@ pub fn socket_read(fd: i32, buf: &mut [u8]) -> isize {
     }
     let ufd = fd as u32;
 
-    ensure_table();
-    let mut guard = SOCKET_TABLE.lock();
-    let table = guard.as_mut().unwrap();
-    let socket = match table.get_mut(ufd) {
-        Some(s) => s,
-        None => return -1,
-    };
+    loop {
+        ensure_table();
+        let mut guard = SOCKET_TABLE.lock();
+        let table = guard.as_mut().unwrap();
+        let socket = match table.get_mut(ufd) {
+            Some(s) => s,
+            None => return -1,
+        };
 
-    if socket.state != SocketState::Connected {
-        return -1;
-    }
-
-    let mut bytes_read = 0;
-    for b in buf.iter_mut() {
-        match socket.read_buffer.pop_front() {
-            Some(byte) => {
-                *b = byte;
-                bytes_read += 1;
-            }
-            None => break,
+        if socket.state != SocketState::Connected {
+            return -1;
         }
-    }
 
-    if bytes_read > 0 {
-        bytes_read as isize
-    } else {
-        -1
+        let mut bytes_read = 0;
+        for b in buf.iter_mut() {
+            match socket.read_buffer.pop_front() {
+                Some(byte) => {
+                    *b = byte;
+                    bytes_read += 1;
+                }
+                None => break,
+            }
+        }
+
+        if bytes_read > 0 {
+            return bytes_read as isize;
+        }
+
+        // No data available — block until something is written
+        drop(guard);
+        Scheduler::block_current_on(&SOCKET_READ_WAIT);
     }
 }
 
@@ -367,12 +376,23 @@ pub fn socket_write(fd: i32, buf: &[u8]) -> isize {
         socket.write_buffer.push_back(b);
     }
 
-    if let Some(peer) = table.get_mut(peer_fd) {
+    let had_data = if let Some(peer) = table.get_mut(peer_fd) {
+        let was_empty = peer.read_buffer.is_empty();
         for &b in buf.iter().take(bytes_to_write) {
             if peer.read_buffer.len() < SOCKET_BUFFER_SIZE {
                 peer.read_buffer.push_back(b);
             }
         }
+        was_empty && bytes_to_write > 0
+    } else {
+        false
+    };
+
+    drop(guard);
+
+    // Wake any readers blocking on this socket
+    if had_data {
+        Scheduler::wake_waiters(&SOCKET_READ_WAIT, 1);
     }
 
     bytes_to_write as isize

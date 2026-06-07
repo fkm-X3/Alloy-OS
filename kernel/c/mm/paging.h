@@ -12,6 +12,7 @@
 #define PAGE_DIRTY      0x040
 #define PAGE_SIZE_FLAG  0x080
 #define PAGE_GLOBAL     0x100
+#define PAGE_COW        0x200  // Bit 9: Copy-on-write (available bit)
 
 typedef uint32_t page_dir_entry_t;
 typedef uint32_t page_table_entry_t;
@@ -45,6 +46,8 @@ void paging_destroy_directory(uint32_t pd_phys);
 bool paging_switch_to_directory(uint32_t pd_phys);
 uint32_t paging_get_kernel_directory_phys();
 uint32_t paging_clone_directory(uint32_t pd_phys);
+uint32_t paging_fork_directory(uint32_t pd_phys);
+uint8_t paging_handle_cow_fault(uint32_t fault_addr);
 
 #ifdef __cplusplus
 }

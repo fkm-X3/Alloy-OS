@@ -103,6 +103,8 @@ impl CpuContext {
 /// Represents a schedulable task
 pub struct Task {
     id: TaskId,
+    parent_id: Option<TaskId>,
+    exit_code: u32,
     state: TaskState,
     context: Box<CpuContext>,
     #[allow(dead_code)]
@@ -146,6 +148,8 @@ impl Task {
         
         let mut task = Task {
             id,
+            parent_id: None,
+            exit_code: 0,
             state: TaskState::Ready,
             context,
             stack: Some(stack),
@@ -236,9 +240,12 @@ impl Task {
         name: String,
         fds: [Option<(u64, usize)>; 32],
         heap_break: u32,
+        parent_id: Option<TaskId>,
     ) -> Self {
         Task {
             id: TaskId::new(),
+            parent_id,
+            exit_code: 0,
             state: TaskState::Ready,
             context,
             stack,
@@ -285,6 +292,26 @@ impl Task {
     /// Get immutable reference to CPU context
     pub fn context(&self) -> &CpuContext {
         &self.context
+    }
+
+    pub fn parent_id(&self) -> Option<TaskId> {
+        self.parent_id
+    }
+
+    pub fn set_parent_id(&mut self, pid: Option<TaskId>) {
+        self.parent_id = pid;
+    }
+
+    pub fn exit_code(&self) -> u32 {
+        self.exit_code
+    }
+
+    pub fn set_exit_code(&mut self, code: u32) {
+        self.exit_code = code;
+    }
+
+    pub fn clone_fds(&self) -> [Option<(u64, usize)>; 32] {
+        self.fds
     }
 
     pub fn priority(&self) -> u8 {

@@ -23,9 +23,11 @@
 #define SYS_ACCEPT    15
 #define SYS_CONNECT   16
 #define SYS_CLOSE_SOCKET 17
+#define SYS_HAS_PENDING_CONNECTIONS 18
 #define SYS_BRK        19
 #define SYS_FORK       20
 #define SYS_CLONE      21
+#define SYS_WAITPID    22
 
 // Syscall dispatcher (called from assembly stub)
 #ifdef __cplusplus

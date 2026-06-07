@@ -21,6 +21,8 @@ extern int32_t rust_sys_accept(int32_t fd);
 extern int32_t rust_sys_connect(int32_t fd, const void* addr, uint32_t addr_len);
 extern int32_t rust_sys_close_socket(int32_t fd);
 extern uint32_t rust_sys_clone(uint32_t entry, uint32_t stack, uint32_t arg);
+extern uint32_t rust_sys_waitpid(uint32_t pid, uint32_t options);
+extern int32_t rust_sys_has_pending_connections(int32_t fd);
 
 uint32_t syscall_dispatcher(uint32_t syscall_no,
                             uint32_t arg0,
@@ -97,6 +99,12 @@ uint32_t syscall_dispatcher(uint32_t syscall_no,
             break;
         case SYS_CLOSE_SOCKET:
             result = (uint32_t)(int32_t)rust_sys_close_socket((int32_t)arg0);
+            break;
+        case SYS_HAS_PENDING_CONNECTIONS:
+            result = (uint32_t)(int32_t)rust_sys_has_pending_connections((int32_t)arg0);
+            break;
+        case SYS_WAITPID:
+            result = rust_sys_waitpid(arg0, arg1);
             break;
         default:
             serial_print("[Syscall] Unknown syscall number\n");

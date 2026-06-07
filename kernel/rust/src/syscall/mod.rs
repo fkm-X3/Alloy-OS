@@ -34,6 +34,7 @@ pub enum SyscallNumber {
     Brk = 19,
     Fork = 20,
     Clone = 21,
+    WaitPid = 22,
 }
 
 /// sys_exit - Terminate the current task
@@ -45,11 +46,7 @@ pub extern "C" fn rust_sys_exit(code: u32) -> u32 {
         ffi::serial_print(c"\n".as_ptr() as *const u8);
     }
 
-    let _ = Scheduler::with_current_task_mut(|task| {
-        task.set_state(crate::process::task::TaskState::Terminated);
-    });
-
-    Scheduler::schedule();
+    Scheduler::terminate_current(code);
     code
 }
 
@@ -69,7 +66,7 @@ pub extern "C" fn rust_sys_getpid() -> u32 {
     unsafe {
         ffi::serial_print(c"[Syscall] sys_getpid called\n".as_ptr() as *const u8);
     }
-    1
+    Scheduler::with_current_task(|task| task.id().as_u32()).unwrap_or(1)
 }
 
 /// sys_sleep - Sleep for specified milliseconds
@@ -467,13 +464,29 @@ pub extern "C" fn rust_sys_clone(entry: u32, stack: u32, arg: u32) -> u32 {
     crate::process::Scheduler::clone_task(entry, stack, arg)
 }
 
-/// sys_fork - (stub) Full process copy requires user-mode support; not yet implemented.
+/// sys_fork - Create a child process with COW-shared address space.
+/// Returns child PID to parent, 0 to child.
 #[no_mangle]
 pub extern "C" fn rust_sys_fork() -> u32 {
     unsafe {
-        ffi::serial_print(c"[Syscall] sys_fork: not implemented (use clone)\n".as_ptr() as *const u8);
+        ffi::serial_print(c"[Syscall] sys_fork called\n".as_ptr() as *const u8);
     }
-    u32::MAX
+    crate::process::Scheduler::fork_current()
+}
+
+/// sys_waitpid - Wait for a child process to exit.
+/// Returns (child_pid << 16) | (exit_code & 0xFFFF), or u32::MAX on error.
+#[no_mangle]
+pub extern "C" fn rust_sys_waitpid(_pid: u32, _options: u32) -> u32 {
+    unsafe {
+        ffi::serial_print(c"[Syscall] sys_waitpid called\n".as_ptr() as *const u8);
+    }
+    let (child_pid, exit_code) = Scheduler::wait_for_child();
+    if child_pid == u32::MAX {
+        return u32::MAX;
+    }
+    // Pack PID and exit code: higher 16 bits = PID, lower 16 bits = exit code
+    ((child_pid & 0xFFFF) << 16) | (exit_code & 0xFFFF)
 }
 
 /// sys_brk - Set the program break (heap end) for the current task.

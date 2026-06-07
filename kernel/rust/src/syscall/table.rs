@@ -19,6 +19,7 @@ pub const LISTEN: u32 = 14;
 pub const ACCEPT: u32 = 15;
 pub const CONNECT: u32 = 16;
 pub const CLOSE_SOCKET: u32 = 17;
+pub const WAITPID: u32 = 22;
 pub const CLONE: u32 = 21;
 pub const FORK: u32 = 20;
 pub const BRK: u32 = 19;
@@ -50,6 +51,7 @@ pub enum SyscallNumber {
     Brk = BRK,
     Fork = FORK,
     Clone = CLONE,
+    WaitPid = WAITPID,
 }
 
 impl SyscallNumber {
@@ -77,6 +79,7 @@ impl SyscallNumber {
             BRK => Some(SyscallNumber::Brk),
             FORK => Some(SyscallNumber::Fork),
             CLONE => Some(SyscallNumber::Clone),
+            WAITPID => Some(SyscallNumber::WaitPid),
             _ => None,
         }
     }

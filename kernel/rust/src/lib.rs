@@ -14,6 +14,7 @@ pub mod terminal;
 pub mod utils_rs;
 pub use utils_rs as utils;
 pub mod fs;
+pub mod block;
 pub mod process;
 pub mod syscall;
 pub mod elf;
@@ -48,6 +49,30 @@ pub extern "C" fn rust_main() {
 
     crate::fs::vfs_init();
     unsafe { ffi::serial_print(c"[VFS] initialized\n".as_ptr() as *const u8); }
+
+    // Auto-mount FAT32 on any block devices
+    let dev_count = fs::vfs_block_device_count();
+    for dev_id in 0..dev_count {
+        let ns = fs::vfs_block_device_sectors(dev_id);
+        if ns < 512 { continue; }
+        let _ = fs::vfs_mount_fat32(dev_id, "/mnt/disk");
+        if let Ok(entries) = fs::vfs_list_fat32(dev_id) {
+            unsafe {
+                let msg = c"[VFS] Mounted FAT32 dev #";
+                ffi::serial_print(msg.as_ptr() as *const u8);
+                ffi::serial_print_hex(dev_id as u32);
+                ffi::serial_print(c"\n".as_ptr() as *const u8);
+            }
+            for entry in entries {
+                let name_s = core::str::from_utf8(&entry.name[..entry.name_len]).unwrap_or("?");
+                unsafe {
+                    ffi::serial_print(c"  ".as_ptr() as *const u8);
+                    ffi::serial_print(name_s.as_ptr());
+                    ffi::serial_print(c"\n".as_ptr() as *const u8);
+                }
+            }
+        }
+    }
 
     if let Some(display) = graphics::vesa::VesaDisplay::new() {
         unsafe {

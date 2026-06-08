@@ -8,6 +8,7 @@ use crate::process::CpuContext;
 // External C++ functions
 extern "C" {
     pub fn serial_print(s: *const u8);
+    pub fn serial_print_hex(value: u32);
     pub fn vga_print(s: *const u8);
     pub fn vga_println(s: *const u8);
     pub fn vga_putchar(c: u8);
@@ -131,6 +132,31 @@ extern "C" {
     /// Get total framebuffer size in bytes
     /// Returns: Size in bytes, or 0 if not in graphics mode
     pub fn vesa_get_framebuffer_size() -> u32;
+
+    // ATA PIO driver functions
+    pub fn ata_init() -> i32;
+    pub fn ata_drive_present(bus: u8, drive: u8) -> i32;
+    pub fn ata_read_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *mut u8) -> i32;
+    pub fn ata_write_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *const u8) -> i32;
+
+    // PCI functions
+    pub fn pci_init();
+    pub fn pci_device_count() -> i32;
+
+    // AHCI driver functions
+    pub fn ahci_init() -> i32;
+    pub fn ahci_drive_count() -> i32;
+    pub fn ahci_read_sectors(index: i32, lba: u64, count: u8, buffer: *mut u8) -> i32;
+    pub fn ahci_write_sectors(index: i32, lba: u64, count: u8, buffer: *const u8) -> i32;
+
+    // Initrd / ramdisk functions
+    pub fn initrd_init(multiboot_addr: u32);
+    pub fn initrd_module_count() -> i32;
+    pub fn initrd_module_start_ffi(index: i32) -> u32;
+    pub fn initrd_module_end_ffi(index: i32) -> u32;
+    pub fn initrd_module_size_ffi(index: i32) -> u32;
+    pub fn initrd_module_cmdline_ffi(index: i32, buf: *mut u8, max_len: u32);
+    pub fn initrd_has_modules_ffi() -> i32;
 }
 
 // Safe wrappers
@@ -453,4 +479,111 @@ pub fn vesa_buffer_size() -> u32 {
     unsafe {
         vesa_get_framebuffer_size()
     }
+}
+
+// ============================================================================
+// ATA PIO Driver Safe Wrappers
+// ============================================================================
+
+pub struct AtaDriveInfo {
+    pub present: bool,
+    pub is_lba48: bool,
+    pub num_sectors: u64,
+    pub model: [u8; 41],
+}
+
+impl AtaDriveInfo {
+    pub fn probe(bus: u8, drive: u8) -> Self {
+        let present = unsafe { ata_drive_present(bus, drive) != 0 };
+        if !present {
+            return AtaDriveInfo { present: false, is_lba48: false, num_sectors: 0, model: [0u8; 41] };
+        }
+        AtaDriveInfo { present: true, is_lba48: true, num_sectors: 0, model: [0u8; 41] }
+    }
+}
+
+pub fn ata_initialize() -> bool {
+    unsafe { ata_init() != 0 }
+}
+
+pub fn ata_drive_exists(bus: u8, drive: u8) -> bool {
+    unsafe { ata_drive_present(bus, drive) != 0 }
+}
+
+pub fn ata_read(bus: u8, drive: u8, lba: u64, count: u8, buf: &mut [u8]) -> bool {
+    unsafe { ata_read_sectors(bus, drive, lba, count, buf.as_mut_ptr()) != 0 }
+}
+
+pub fn ata_write(bus: u8, drive: u8, lba: u64, count: u8, buf: &[u8]) -> bool {
+    unsafe { ata_write_sectors(bus, drive, lba, count, buf.as_ptr()) != 0 }
+}
+
+// ============================================================================
+// AHCI Driver Safe Wrappers
+// ============================================================================
+
+pub struct AhciDriveInfo {
+    pub present: bool,
+    pub port_num: u8,
+    pub num_sectors: u64,
+    pub model: [u8; 41],
+}
+
+impl AhciDriveInfo {
+    #[allow(unused_variables)]
+    pub fn probe(index: i32) -> Self {
+        AhciDriveInfo { present: true, port_num: 0, num_sectors: 0, model: [0u8; 41] }
+    }
+}
+
+pub fn ahci_initialize() -> bool {
+    unsafe { ahci_init() != 0 }
+}
+
+pub fn ahci_drive_count_ffi() -> i32 {
+    unsafe { ahci_drive_count() }
+}
+
+pub fn ahci_read(drive: i32, lba: u64, count: u8, buf: &mut [u8]) -> bool {
+    unsafe { ahci_read_sectors(drive, lba, count, buf.as_mut_ptr()) != 0 }
+}
+
+pub fn ahci_write(drive: i32, lba: u64, count: u8, buf: &[u8]) -> bool {
+    unsafe { ahci_write_sectors(drive, lba, count, buf.as_ptr()) != 0 }
+}
+
+// ============================================================================
+// Initrd / Ramdisk Safe Wrappers
+// ============================================================================
+
+pub fn initrd_initialize(multiboot_addr: u32) {
+    unsafe { initrd_init(multiboot_addr) }
+}
+
+pub fn initrd_module_count_ffi() -> i32 {
+    unsafe { initrd_module_count() }
+}
+
+pub fn initrd_module_start(index: i32) -> u32 {
+    unsafe { initrd_module_start_ffi(index) }
+}
+
+pub fn initrd_module_end(index: i32) -> u32 {
+    unsafe { initrd_module_end_ffi(index) }
+}
+
+pub fn initrd_module_size(index: i32) -> u32 {
+    unsafe { initrd_module_size_ffi(index) }
+}
+
+pub fn initrd_module_cmdline(index: i32) -> [u8; 64] {
+    let mut buf = [0u8; 64];
+    unsafe {
+        initrd_module_cmdline_ffi(index, buf.as_mut_ptr(), 64);
+    }
+    buf
+}
+
+pub fn initrd_has_modules() -> bool {
+    unsafe { initrd_has_modules_ffi() != 0 }
 }

@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     grub-common \
     xorriso \
     mtools \
+    dosfstools \
     qemu-system-x86 \
     python3 \
     python3-pip \

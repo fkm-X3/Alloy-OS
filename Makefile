@@ -87,7 +87,11 @@ C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
             $(DRIVERS_DIR)/vesa.c \
             $(DRIVERS_DIR)/keyboard.c \
             $(DRIVERS_DIR)/mouse.c \
-            $(DRIVERS_DIR)/timer.c
+            $(DRIVERS_DIR)/timer.c \
+            $(DRIVERS_DIR)/ata.c \
+            $(DRIVERS_DIR)/pci.c \
+            $(DRIVERS_DIR)/ahci.c \
+            $(DRIVERS_DIR)/initrd.c
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
@@ -154,11 +158,26 @@ $(KERNEL_ISO): $(KERNEL_ELF)
 	@echo "ISO created: $@"
 
 # Run in QEMU
-run: $(KERNEL_ISO)
-	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
+# Disk image for storage testing
+DISK_IMG = $(BUILD_DIR)/disk.img
+DISK_SIZE_MB = 64
 
-output: $(KERNEL_ISO)
-	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
+$(DISK_IMG):
+	@echo "Creating $(DISK_SIZE_MB)MB disk image..."
+	@mkdir -p $(BUILD_DIR)
+	qemu-img create -f raw $@ $(DISK_SIZE_MB)M 2>/dev/null || dd if=/dev/zero of=$@ bs=1M count=$(DISK_SIZE_MB) 2>/dev/null
+
+run: $(KERNEL_ISO) $(DISK_IMG)
+	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+
+run-ahci: $(KERNEL_ISO)
+	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
+
+output: $(KERNEL_ISO) $(DISK_IMG)
+	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+
+output-ahci: $(KERNEL_ISO)
+	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
 
 # Boot headless and auto-capture desktop shell screenshot (PNG)
 screenshot: $(KERNEL_ISO)
@@ -180,6 +199,15 @@ debug: $(KERNEL_ISO)
 clean:
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
+
+# Create a FAT32 disk image (requires mkfs.fat in PATH)
+fat32-img: $(BUILD_DIR)
+	@echo "Creating FAT32 disk image..."
+	qemu-img create -f raw $(BUILD_DIR)/fat32.img 64M 2>/dev/null || \
+	  dd if=/dev/zero of=$(BUILD_DIR)/fat32.img bs=1M count=64 2>/dev/null
+	mkfs.fat -F 32 $(BUILD_DIR)/fat32.img 2>/dev/null || \
+	  echo "WARNING: mkfs.fat not found. Install dosfstools. Created empty image."
+	@echo "FAT32 image: $(BUILD_DIR)/fat32.img"
 
 # Im lazy
 lazy:

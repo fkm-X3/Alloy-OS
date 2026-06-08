@@ -9,6 +9,10 @@
 #include "../drivers/mouse.h"
 #include "../drivers/timer.h"
 #include "../drivers/vesa.h"
+#include "../drivers/ata.h"
+#include "../drivers/pci.h"
+#include "../drivers/ahci.h"
+#include "../drivers/initrd.h"
 
 void init_gdt();
 void init_idt();
@@ -188,6 +192,40 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_set_color(7, 0);
 #endif
     serial_print("Kernel initialization complete\n");
+
+#if defined(ARCH_I686) || defined(ARCH_X86_64)
+    serial_print("Initializing PCI bus...\n");
+    vga_print("[ ] Initializing PCI bus...");
+    pci_init();
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("PCI initialized\n");
+
+    serial_print("Initializing ATA PIO driver...\n");
+    vga_print("[ ] Initializing ATA...");
+    ata_init();
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("ATA driver initialized\n");
+
+    serial_print("Initializing AHCI driver...\n");
+    vga_print("[ ] Initializing AHCI...");
+    ahci_init();
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("AHCI driver initialized\n");
+
+    serial_print("Initializing initrd/ramdisk...\n");
+    vga_print("[ ] Initializing initrd...");
+    initrd_init(multiboot_addr);
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+    serial_print("Initrd initialized\n");
+#endif
 
     serial_print("Transferring control to Rust kernel...\n");
 #if defined(ARCH_I686) || defined(ARCH_X86_64)

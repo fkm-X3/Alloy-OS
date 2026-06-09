@@ -23,9 +23,7 @@ debug/
 **/*.rs.bk
 **/mutants.out*/
 
-# --- Accidentally-tracked artifacts ---
-hello
-compositor
+# --- Build artifacts (some tracked intentionally) ---
 kernel/rust/check_output.txt
 
 # --- IDE / Editor ---

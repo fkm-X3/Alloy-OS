@@ -25,6 +25,8 @@
 #define SYS_FORK    20
 #define SYS_CLONE   21
 #define SYS_WAITPID 22
+#define SYS_SOCKET_READ  23
+#define SYS_SOCKET_WRITE 24
 
 // INT 0x80 calling convention:
 //   eax = syscall number

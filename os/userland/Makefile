@@ -12,7 +12,7 @@ LIB_DIR = lib
 TEST_DIR = tests
 BUILD_DIR = build
 
-LIB_OBJS = $(BUILD_DIR)/crt0.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o
+LIB_OBJS = $(BUILD_DIR)/crt0.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/wayland_client.o
 
 $(BUILD_DIR)/crt0.o: $(LIB_DIR)/crt0.S
 	@mkdir -p $(BUILD_DIR)
@@ -32,7 +32,7 @@ $(BUILD_DIR)/%.o: $(LIB_DIR)/%.c
 $(BUILD_DIR)/%: $(TEST_DIR)/%.c $(LIB_OBJS)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $(BUILD_DIR)/$*.o
-	$(LD) $(LDFLAGS) -o $@ $(BUILD_DIR)/crt0.o $(BUILD_DIR)/$*.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o
+	$(LD) $(LDFLAGS) -o $@ $(BUILD_DIR)/crt0.o $(BUILD_DIR)/$*.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/wayland_client.o
 
 clean:
 	rm -rf $(BUILD_DIR)

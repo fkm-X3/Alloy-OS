@@ -82,6 +82,9 @@ extern "C" {
     pub fn paging_clone_directory(pd_phys: u32) -> u32;
     pub fn paging_fork_directory(pd_phys: u32) -> u32;
     pub fn paging_handle_cow_fault(fault_addr: u32) -> u8;
+    pub fn paging_map_page_in_pd(pd_phys: u32, virt_addr: u32, phys_addr: u32, flags: u32) -> bool;
+    pub fn paging_temp_map_frame(phys_addr: u32) -> *mut core::ffi::c_void;
+    pub fn paging_temp_unmap_frame();
 
     // Physical memory manager refcounting
     pub fn pmm_refcount_inc(addr: *mut c_void);

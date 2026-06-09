@@ -48,6 +48,9 @@ uint32_t paging_get_kernel_directory_phys();
 uint32_t paging_clone_directory(uint32_t pd_phys);
 uint32_t paging_fork_directory(uint32_t pd_phys);
 uint8_t paging_handle_cow_fault(uint32_t fault_addr);
+bool paging_map_page_in_pd(uint32_t pd_phys, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
+void* paging_temp_map_frame(uint32_t phys_addr);
+void paging_temp_unmap_frame(void);
 
 #ifdef __cplusplus
 }

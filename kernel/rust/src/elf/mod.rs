@@ -1,42 +1,54 @@
 // Minimal ELF loader for i386 (32-bit) - supports ET_EXEC with PT_LOAD segments
+//
+// IMPORTANT: This function may be called with a non-kernel page directory active
+// (e.g., during spawn_user_elf). It MUST NOT perform any heap allocations that
+// would call vmm_alloc_region, because that function maps pages into the *current*
+// page directory and advances the global kernel heap pointer, corrupting VMM state.
+// Use fixed-size stack arrays instead of Vec/Box/etc.
 
 use crate::ffi;
 use core::ptr;
 
 #[repr(C)]
-struct Elf32Ehdr {
-    e_ident: [u8; 16],
-    e_type: u16,
-    e_machine: u16,
-    e_version: u32,
-    e_entry: u32,
-    e_phoff: u32,
-    e_shoff: u32,
-    e_flags: u32,
-    e_ehsize: u16,
-    e_phentsize: u16,
-    e_phnum: u16,
-    e_shentsize: u16,
-    e_shnum: u16,
-    e_shstrndx: u16,
+#[allow(dead_code)]
+pub(crate) struct Elf32Ehdr {
+    pub e_ident: [u8; 16],
+    pub e_type: u16,
+    pub e_machine: u16,
+    pub e_version: u32,
+    pub e_entry: u32,
+    pub e_phoff: u32,
+    pub e_shoff: u32,
+    pub e_flags: u32,
+    pub e_ehsize: u16,
+    pub e_phentsize: u16,
+    pub e_phnum: u16,
+    pub e_shentsize: u16,
+    pub e_shnum: u16,
+    pub e_shstrndx: u16,
 }
 
 #[repr(C)]
-struct Elf32Phdr {
-    p_type: u32,
-    p_offset: u32,
-    p_vaddr: u32,
-    p_paddr: u32,
-    p_filesz: u32,
-    p_memsz: u32,
-    p_flags: u32,
-    p_align: u32,
+#[allow(dead_code)]
+pub(crate) struct Elf32Phdr {
+    pub p_type: u32,
+    pub p_offset: u32,
+    pub p_vaddr: u32,
+    pub p_paddr: u32,
+    pub p_filesz: u32,
+    pub p_memsz: u32,
+    pub p_flags: u32,
+    pub p_align: u32,
 }
 
 const PT_LOAD: u32 = 1;
 
+const MAX_LOADS: usize = 32;
+
 /// Load an ELF image from a bytes slice into memory and return (entry point, phdr_vaddr) on success.
 /// phdr_vaddr is the runtime virtual address of the program header table (AT_PHDR). If unknown, returns 0.
+///
+/// **No heap allocations.** Uses a fixed-size stack array to track load segments.
 pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
     // Basic size checks
     if image.len() < core::mem::size_of::<Elf32Ehdr>() { return Err(-1); }
@@ -52,10 +64,11 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
     let phentsize = hdr.e_phentsize as usize;
     let phnum = hdr.e_phnum as usize;
 
-    // Track loaded PT_LOAD segments to help compute phdr runtime address
-    #[derive(Clone, Copy)]
+    // Track loaded PT_LOAD segments on the stack (no heap alloc) to compute phdr runtime address.
+    #[derive(Clone, Copy, Default)]
     struct LoadSeg { p_offset: u32, p_vaddr: u32, p_filesz: u32 }
-    let mut loads: alloc::vec::Vec<LoadSeg> = alloc::vec::Vec::new();
+    let mut loads: [LoadSeg; MAX_LOADS] = [LoadSeg::default(); MAX_LOADS];
+    let mut load_count: usize = 0;
 
     for i in 0..phnum {
         let phdr_offset = phoff + i * phentsize;
@@ -96,14 +109,18 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u32,u32), i32> {
                 page_addr += page_size;
             }
 
-            // Record this load segment
-            loads.push(LoadSeg { p_offset: ph.p_offset, p_vaddr: ph.p_vaddr, p_filesz: ph.p_filesz });
+            // Record this load segment (up to MAX_LOADS — enough for any real ELF)
+            if load_count < MAX_LOADS {
+                loads[load_count] = LoadSeg { p_offset: ph.p_offset, p_vaddr: ph.p_vaddr, p_filesz: ph.p_filesz };
+                load_count += 1;
+            }
         }
     }
 
     // Compute runtime phdr address if possible: find load segment that contains file offset e_phoff
     let mut phdr_vaddr: u32 = 0;
-    for seg in loads.iter() {
+    for i in 0..load_count {
+        let seg = &loads[i];
         let off = hdr.e_phoff;
         if off >= seg.p_offset && off < seg.p_offset + seg.p_filesz {
             let delta = off - seg.p_offset;

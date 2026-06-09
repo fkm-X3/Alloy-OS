@@ -422,6 +422,101 @@ uint32_t paging_fork_directory(uint32_t pd_phys) {
     return (uint32_t)new_pd_phys;
 }
 
+/// Dedicated window indices for `paging_map_page_in_pd` — these sit
+/// outside the range the normal page-table window (dir_index) ever
+/// produces for user addresses, so there is no slot collision.
+#define PD_WIN  1010  // window slot for the *target page directory*
+#define PT_WIN  1011  // window slot for the *target page table*
+
+/// Map a physical frame at a virtual address in a *specific* page directory,
+/// without switching CR3.  Creates intermediate page tables as needed.
+/// Returns true on success.
+///
+/// WARNING: PD_WIN / PT_WIN are dedicated to this function; they must not
+/// be used by any other caller that interleaves with this one.
+bool paging_map_page_in_pd(uint32_t pd_phys, uint32_t virt_addr,
+                            uint32_t phys_addr, uint32_t flags) {
+    // Map the target PD frame at PD_WIN
+    kernel_pts[3].entries[PD_WIN] = (pd_phys & 0xFFFFF000) | PAGE_PRESENT | PAGE_WRITE;
+    invalidate_page_local(PT_VIRT_BASE + PD_WIN * PAGE_SIZE);
+    struct page_directory* target_pd =
+        (struct page_directory*)(PT_VIRT_BASE + PD_WIN * PAGE_SIZE);
+
+    uint32_t dir_index = virt_addr >> 22;
+    uint32_t table_index = (virt_addr >> 12) & 0x3FF;
+
+    // Shared first 16 MB — direct access to kernel_pts[]
+    if (dir_index < 4) {
+        kernel_pts[dir_index].entries[table_index] =
+            (phys_addr & 0xFFFFF000) | (flags & 0xFFF) | PAGE_PRESENT;
+        invalidate_page_local(virt_addr);
+
+        kernel_pts[3].entries[PD_WIN] = 0;
+        invalidate_page_local(PT_VIRT_BASE + PD_WIN * PAGE_SIZE);
+        return true;
+    }
+
+    // ── non-shared PDEs ──────────────────────────────────────────────
+    uint32_t pde = target_pd->entries[dir_index];
+    uint32_t pt_phys;
+
+    if (!(pde & PAGE_PRESENT)) {
+        void* new_pt = pmm_alloc_frame();
+        if (!new_pt) {
+            kernel_pts[3].entries[PD_WIN] = 0;
+            invalidate_page_local(PT_VIRT_BASE + PD_WIN * PAGE_SIZE);
+            return false;
+        }
+        pt_phys = (uint32_t)new_pt;
+
+        // Map and zero the new page table at PT_WIN
+        kernel_pts[3].entries[PT_WIN] = pt_phys | PAGE_PRESENT | PAGE_WRITE;
+        invalidate_page_local(PT_VIRT_BASE + PT_WIN * PAGE_SIZE);
+        struct page_table* pt = (struct page_table*)(PT_VIRT_BASE + PT_WIN * PAGE_SIZE);
+        for (int i = 0; i < 1024; i++)
+            pt->entries[i] = 0;
+
+        // Wire it into the target PD
+        target_pd->entries[dir_index] = pt_phys | PAGE_PRESENT | PAGE_WRITE;
+    } else {
+        pt_phys = pde & 0xFFFFF000;
+        // Map the existing page table at PT_WIN
+        kernel_pts[3].entries[PT_WIN] = pt_phys | PAGE_PRESENT | PAGE_WRITE;
+        invalidate_page_local(PT_VIRT_BASE + PT_WIN * PAGE_SIZE);
+    }
+
+    // Set the PTE
+    struct page_table* pt = (struct page_table*)(PT_VIRT_BASE + PT_WIN * PAGE_SIZE);
+    pt->entries[table_index] =
+        (phys_addr & 0xFFFFF000) | (flags & 0xFFF) | PAGE_PRESENT;
+
+    // Cleanup window mappings
+    kernel_pts[3].entries[PD_WIN] = 0;
+    kernel_pts[3].entries[PT_WIN] = 0;
+    invalidate_page_local(PT_VIRT_BASE + PD_WIN * PAGE_SIZE);
+    invalidate_page_local(PT_VIRT_BASE + PT_WIN * PAGE_SIZE);
+
+    return true;
+}
+
+/// Dedicated window index for temporarily mapping a data frame into kernel space.
+#define TEMP_DATA_WIN 1012
+
+/// Temporarily map a physical data frame at a kernel-accessible virtual address.
+/// Returns the virtual address. Call paging_temp_unmap_frame() afterwards.
+/// NOT reentrant / not nestable — single slot.
+void* paging_temp_map_frame(uint32_t phys_addr) {
+    kernel_pts[3].entries[TEMP_DATA_WIN] =
+        (phys_addr & 0xFFFFF000) | PAGE_PRESENT | PAGE_WRITE;
+    invalidate_page_local(PT_VIRT_BASE + TEMP_DATA_WIN * PAGE_SIZE);
+    return (void*)(PT_VIRT_BASE + TEMP_DATA_WIN * PAGE_SIZE);
+}
+
+void paging_temp_unmap_frame(void) {
+    kernel_pts[3].entries[TEMP_DATA_WIN] = 0;
+    invalidate_page_local(PT_VIRT_BASE + TEMP_DATA_WIN * PAGE_SIZE);
+}
+
 uint8_t paging_handle_cow_fault(uint32_t fault_addr) {
     uint32_t* pte = get_page_entry(fault_addr, false);
     if (!pte || !(*pte & PAGE_PRESENT)) {

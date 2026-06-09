@@ -27,6 +27,8 @@ pub fn dispatch_syscall(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
         Some(table::SyscallNumber::Connect) => unsafe { crate::syscall::rust_sys_connect(ebx as i32, ecx as *const core::ffi::c_void, edx) as u32 },
         Some(table::SyscallNumber::CloseSocket) => crate::syscall::rust_sys_close_socket(ebx as i32) as u32,
         Some(table::SyscallNumber::HasPendingConnections) => crate::syscall::rust_sys_has_pending_connections(ebx as i32) as u32,
+        Some(table::SyscallNumber::SocketRead) => crate::syscall::rust_sys_socket_read(ebx as i32, ecx, edx) as u32,
+        Some(table::SyscallNumber::SocketWrite) => crate::syscall::rust_sys_socket_write(ebx as i32, ecx, edx) as u32,
         Some(table::SyscallNumber::Brk) => crate::syscall::rust_sys_brk(ebx),
         Some(table::SyscallNumber::Fork) => crate::syscall::rust_sys_fork(),
         Some(table::SyscallNumber::Clone) => crate::syscall::rust_sys_clone(ebx, ecx, edx),

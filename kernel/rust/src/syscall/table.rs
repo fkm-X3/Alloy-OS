@@ -24,6 +24,8 @@ pub const CLONE: u32 = 21;
 pub const FORK: u32 = 20;
 pub const BRK: u32 = 19;
 pub const HAS_PENDING_CONNECTIONS: u32 = 18;
+pub const SOCKET_READ: u32 = 23;
+pub const SOCKET_WRITE: u32 = 24;
 
 /// Enum representation of syscall numbers
 #[repr(u32)]
@@ -52,6 +54,8 @@ pub enum SyscallNumber {
     Fork = FORK,
     Clone = CLONE,
     WaitPid = WAITPID,
+    SocketRead = SOCKET_READ,
+    SocketWrite = SOCKET_WRITE,
 }
 
 impl SyscallNumber {
@@ -80,6 +84,8 @@ impl SyscallNumber {
             FORK => Some(SyscallNumber::Fork),
             CLONE => Some(SyscallNumber::Clone),
             WAITPID => Some(SyscallNumber::WaitPid),
+            SOCKET_READ => Some(SyscallNumber::SocketRead),
+            SOCKET_WRITE => Some(SyscallNumber::SocketWrite),
             _ => None,
         }
     }

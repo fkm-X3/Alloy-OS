@@ -454,6 +454,42 @@ pub extern "C" fn rust_sys_has_pending_connections(fd: i32) -> i32 {
     crate::net::socket_has_pending_connections(fd)
 }
 
+/// Socket read syscall — read data from a connected socket
+#[no_mangle]
+pub extern "C" fn rust_sys_socket_read(fd: i32, buf_ptr: u32, len: u32) -> i32 {
+    if buf_ptr == 0 || len == 0 {
+        return -1;
+    }
+    let mut buf = alloc::vec![0u8; len as usize];
+    let result = crate::net::socket_read(fd, &mut buf);
+    if result < 0 {
+        return result as i32;
+    }
+    let to_copy = core::cmp::min(result as usize, len as usize);
+    unsafe {
+        if crate::utils::copy_to_user(buf_ptr, &buf[..to_copy]).is_err() {
+            return -1;
+        }
+    }
+    to_copy as i32
+}
+
+/// Socket write syscall — write data to a connected socket
+#[no_mangle]
+pub extern "C" fn rust_sys_socket_write(fd: i32, buf_ptr: u32, len: u32) -> i32 {
+    if buf_ptr == 0 || len == 0 {
+        return -1;
+    }
+    let max = core::cmp::min(len as usize, 4096usize);
+    let mut buf = [0u8; 4096];
+    unsafe {
+        if crate::utils::copy_from_user(buf_ptr, &mut buf[..max]).is_err() {
+            return -1;
+        }
+    }
+    crate::net::socket_write(fd, &buf[..max]) as i32
+}
+
 /// sys_clone - Create a new task running `entry(arg)` with `stack`.
 /// Returns child PID on success, !0 on error.
 #[no_mangle]

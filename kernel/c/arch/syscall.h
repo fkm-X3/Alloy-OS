@@ -28,6 +28,8 @@
 #define SYS_FORK       20
 #define SYS_CLONE      21
 #define SYS_WAITPID    22
+#define SYS_SOCKET_READ  23
+#define SYS_SOCKET_WRITE 24
 
 // Syscall dispatcher (called from assembly stub)
 #ifdef __cplusplus

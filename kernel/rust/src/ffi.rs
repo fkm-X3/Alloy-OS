@@ -93,6 +93,11 @@ extern "C" {
     pub fn timer_get_uptime_ms_ffi() -> u64;
     pub fn timer_get_frequency_ffi() -> u32;
 
+    // VESA VBE hardware cursor functions
+    pub fn vesa_cursor_is_available() -> u8;
+    pub fn vesa_cursor_enable(enable: u8);
+    pub fn vesa_cursor_set_position(x: u16, y: u16);
+
     // VESA VBE graphics functions (from vesa.cpp)
     /// Initialize VESA VBE detection and controller check
     pub fn vesa_init();
@@ -479,6 +484,21 @@ pub fn vesa_buffer_size() -> u32 {
     unsafe {
         vesa_get_framebuffer_size()
     }
+}
+
+/// Check if VBE hardware cursor is available via I/O ports
+pub fn vesa_hardware_cursor_available() -> bool {
+    unsafe { vesa_cursor_is_available() != 0 }
+}
+
+/// Enable or disable VBE hardware cursor
+pub fn vesa_hardware_cursor_set_enabled(enabled: bool) {
+    unsafe { vesa_cursor_enable(enabled as u8) }
+}
+
+/// Set VBE hardware cursor position (top-left corner)
+pub fn vesa_hardware_cursor_set_position(x: u16, y: u16) {
+    unsafe { vesa_cursor_set_position(x, y) }
 }
 
 // ============================================================================

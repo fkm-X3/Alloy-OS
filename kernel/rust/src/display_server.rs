@@ -9,6 +9,12 @@ const CURSOR_WIDTH: u32 = 12;
 const CURSOR_HEIGHT: u32 = 18;
 const CURSOR_Z_ORDER: u32 = 65535;
 
+/// Hardware cursor state
+struct HardwareCursor {
+    available: bool,
+    enabled: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayServerBootError {
     ServerStart,
@@ -135,7 +141,28 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     let mut wayland = WaylandServer::new();
     let _ = wayland.init();
 
-    let cursor_surface = create_cursor_surface(&mut backend)?;
+    // Try to use VBE hardware cursor; fall back to software composited cursor
+    let hw_cursor = HardwareCursor {
+        available: ffi::vesa_hardware_cursor_available(),
+        enabled: false,
+    };
+
+    if hw_cursor.available {
+        ffi::vesa_hardware_cursor_set_enabled(true);
+        ffi::vesa_hardware_cursor_set_position(
+            (display_width / 2) as u16,
+            (display_height / 2) as u16,
+        );
+        serial_log(b"[DisplayServer] Using VBE hardware cursor\n\0");
+    }
+
+    let cursor_surface = if !hw_cursor.available {
+        let surface = create_cursor_surface(&mut backend)?;
+        Some(surface)
+    } else {
+        None
+    };
+
     let mut pointer = PointerState {
         x: (display_width / 2) as i32,
         y: (display_height / 2) as i32,
@@ -144,9 +171,11 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
     };
     let mouse_ready = ffi::mouse_ready();
     if mouse_ready {
-        set_cursor_position(&mut backend, cursor_surface, pointer.x, pointer.y)?;
-    } else {
-        set_cursor_visibility(&mut backend, cursor_surface, false)?;
+        if let Some(surface) = cursor_surface {
+            set_cursor_position(&mut backend, surface, pointer.x, pointer.y)?;
+        }
+    } else if let Some(surface) = cursor_surface {
+        set_cursor_visibility(&mut backend, surface, false)?;
         serial_log(b"[DisplayServer] Mouse unavailable\n\0");
     }
     let max_pointer_x = display_width.saturating_sub(1) as i32;
@@ -196,7 +225,15 @@ pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
                 if movement.actual_dx != 0 || movement.actual_dy != 0 {
                     pointer.x = movement.next_x;
                     pointer.y = movement.next_y;
-                    set_cursor_position(&mut backend, cursor_surface, pointer.x, pointer.y)?;
+
+                    if let Some(surface) = cursor_surface {
+                        set_cursor_position(&mut backend, surface, pointer.x, pointer.y)?;
+                    } else {
+                        ffi::vesa_hardware_cursor_set_position(
+                            pointer.x.max(0) as u16,
+                            pointer.y.max(0) as u16,
+                        );
+                    }
 
                     if let Some(drag_win) = pointer.dragging_window {
                         let _ = lxqt_shell.window_manager.move_window(

@@ -165,7 +165,7 @@ impl LxqtWindowManager {
         let Some(win) = self.windows.get(&id) else { return };
         let frame_w = win.width.saturating_add(8);
         let frame_h = win.height.saturating_add(28);
-        let mut renderer = match FramebufferRenderer::new(frame_w, frame_h) {
+        let mut r = match FramebufferRenderer::new(frame_w, frame_h) {
             Ok(r) => r,
             Err(_) => return,
         };
@@ -177,28 +177,33 @@ impl LxqtWindowManager {
         };
         let border_color = Color::from_rgb(35, 40, 52);
 
-        renderer.clear(Color::from_rgb(25, 30, 42));
-        renderer.fill_rect(0, 0, frame_w, 24, title_bar_color);
-        renderer.stroke_rect(0, 0, frame_w, frame_h, border_color, 1);
+        r.clear(Color::from_rgb(25, 30, 42));
+        r.fill_rect(0, 0, frame_w, 24, title_bar_color);
+        r.stroke_rect(0, 0, frame_w, frame_h, border_color, 1);
 
-        let _ = renderer.pixels();
+        let close_x = frame_w.saturating_sub(22);
+        r.fill_rect(close_x, 6, 16, 12, Color::from_rgb(200, 60, 60));
 
-        let dummy_renderer = FramebufferRenderer::new(frame_w, frame_h);
-        drop(dummy_renderer);
-
-        {
-            let mut r = FramebufferRenderer::new(frame_w, frame_h).ok();
-            if let Some(ref mut r) = r {
-                r.clear(Color::from_rgb(25, 30, 42));
-                r.fill_rect(0, 0, frame_w, 24, title_bar_color);
-                r.stroke_rect(0, 0, frame_w, frame_h, border_color, 1);
-
-                let close_x = frame_w.saturating_sub(22);
-                r.fill_rect(close_x, 6, 16, 12, Color::from_rgb(200, 60, 60));
-
-                let _ = backend.upload_pixels(win.frame_surface_id, frame_w, frame_h, r.pixels());
+        let title_color = if win.focused { Color::white() } else { Color::from_rgb(180, 190, 210) };
+        let max_title_w = close_x.saturating_sub(10);
+        let cw = r.char_width();
+        let display_title = if win.title.len().saturating_mul(cw as usize) > max_title_w as usize {
+            let max_chars = (max_title_w / cw).saturating_sub(1) as usize;
+            let mut t = alloc::string::String::with_capacity(max_chars + 1);
+            for (i, ch) in win.title.chars().enumerate() {
+                if i >= max_chars {
+                    t.push('…');
+                    break;
+                }
+                t.push(ch);
             }
-        }
+            t
+        } else {
+            win.title.clone()
+        };
+        r.draw_text(6, 4, &display_title, title_color, Some(title_bar_color));
+
+        let _ = backend.upload_pixels(win.frame_surface_id, frame_w, frame_h, r.pixels());
     }
 
     pub fn set_workspace_bounds(&mut self, width: u32, height: u32) {

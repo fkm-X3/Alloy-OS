@@ -3,6 +3,7 @@
 //! Provides a simple renderer that can draw Iced components directly to
 //! framebuffer pixel buffers. Uses basic primitives for text and shapes.
 
+use crate::graphics::font::Font;
 
 /// Simple color representation (ARGB8888)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +77,7 @@ pub struct FramebufferRenderer {
     width: u32,
     height: u32,
     pixels: alloc::vec::Vec<u32>,
+    font: Option<crate::graphics::font::BitmapFont8x16>,
 }
 
 impl FramebufferRenderer {
@@ -93,6 +95,7 @@ impl FramebufferRenderer {
             width,
             height,
             pixels: alloc::vec![0u32; pixel_count],
+            font: Some(crate::graphics::font::BitmapFont8x16::new()),
         })
     }
 
@@ -189,6 +192,39 @@ impl FramebufferRenderer {
                 self.set_pixel(x + t, i, color.to_pixel());
             }
         }
+    }
+
+    /// Draw text using the built-in font
+    pub fn draw_text(&mut self, x: u32, y: u32, text: &str, color: Color, bg: Option<Color>) {
+        let fg_pixel = color.to_pixel();
+        let bg_pixel = bg.map(|c| c.to_pixel()).unwrap_or(0);
+        let Some(ref font) = self.font else { return };
+        let mut cx = x;
+        let cy = y;
+        for ch in text.chars() {
+            if ch == '\n' {
+                cx = x;
+                continue;
+            }
+            font.render_glyph(ch, &mut self.pixels, self.width, self.height, cx, cy, fg_pixel, bg_pixel);
+            cx = cx.saturating_add(font.char_width());
+        }
+    }
+
+    /// Get text width in pixels
+    pub fn text_width(&self, text: &str) -> u32 {
+        let Some(ref font) = self.font else { return 0 };
+        text.len() as u32 * font.char_width()
+    }
+
+    /// Get the current font's character width
+    pub fn char_width(&self) -> u32 {
+        self.font.as_ref().map_or(0, |f| f.char_width())
+    }
+
+    /// Get the current font's character height
+    pub fn char_height(&self) -> u32 {
+        self.font.as_ref().map_or(0, |f| f.char_height())
     }
 
     /// Draw a circle (Bresenham's algorithm)

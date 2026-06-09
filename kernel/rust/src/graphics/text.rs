@@ -29,322 +29,98 @@
 //! ```
 
 use super::{Display, FramebufferBuffer};
+use crate::graphics::font::Font;
 use core::fmt::Debug;
 
 /// Error types for text rendering operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextRenderError {
-    /// Display reported an error during rendering
     DisplayError,
-    /// Out of bounds coordinate
     OutOfBounds,
 }
 
-/// 5x7 bitmap font for ASCII characters 32-126 (95 characters).
-/// Each character is 7 bytes, one byte per row (5 pixels wide, 7 pixels tall).
-/// LSBs represent left pixels.
-static FONT_5X7: &[u8] = &[
-    // ASCII 32: Space
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // ASCII 33: !
-    0x08, 0x08, 0x08, 0x08, 0x00, 0x08, 0x00,
-    // ASCII 34: "
-    0x14, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // ASCII 35: #
-    0x0A, 0x1F, 0x0A, 0x1F, 0x0A, 0x00, 0x00,
-    // ASCII 36: $
-    0x08, 0x1C, 0x0A, 0x1C, 0x14, 0x1C, 0x08,
-    // ASCII 37: %
-    0x16, 0x16, 0x08, 0x04, 0x0D, 0x0D, 0x00,
-    // ASCII 38: &
-    0x0C, 0x12, 0x0A, 0x04, 0x0A, 0x12, 0x0D,
-    // ASCII 39: '
-    0x08, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // ASCII 40: (
-    0x04, 0x08, 0x08, 0x08, 0x08, 0x08, 0x04,
-    // ASCII 41: )
-    0x08, 0x04, 0x04, 0x04, 0x04, 0x04, 0x08,
-    // ASCII 42: *
-    0x00, 0x08, 0x1B, 0x0E, 0x1B, 0x08, 0x00,
-    // ASCII 43: +
-    0x00, 0x08, 0x08, 0x1C, 0x08, 0x08, 0x00,
-    // ASCII 44: ,
-    0x00, 0x00, 0x00, 0x00, 0x08, 0x08, 0x04,
-    // ASCII 45: -
-    0x00, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00,
-    // ASCII 46: .
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00,
-    // ASCII 47: /
-    0x00, 0x10, 0x10, 0x08, 0x04, 0x04, 0x02,
-    // ASCII 48: 0
-    0x0C, 0x12, 0x12, 0x12, 0x12, 0x12, 0x0C,
-    // ASCII 49: 1
-    0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E,
-    // ASCII 50: 2
-    0x0C, 0x12, 0x02, 0x04, 0x08, 0x10, 0x1E,
-    // ASCII 51: 3
-    0x1E, 0x02, 0x04, 0x02, 0x02, 0x12, 0x0C,
-    // ASCII 52: 4
-    0x02, 0x06, 0x0A, 0x12, 0x1E, 0x02, 0x02,
-    // ASCII 53: 5
-    0x1E, 0x10, 0x1C, 0x02, 0x02, 0x12, 0x0C,
-    // ASCII 54: 6
-    0x0C, 0x10, 0x10, 0x1C, 0x12, 0x12, 0x0C,
-    // ASCII 55: 7
-    0x1E, 0x02, 0x04, 0x04, 0x08, 0x08, 0x08,
-    // ASCII 56: 8
-    0x0C, 0x12, 0x12, 0x0C, 0x12, 0x12, 0x0C,
-    // ASCII 57: 9
-    0x0C, 0x12, 0x12, 0x0E, 0x02, 0x04, 0x08,
-    // ASCII 58: :
-    0x00, 0x08, 0x00, 0x00, 0x08, 0x00, 0x00,
-    // ASCII 59: ;
-    0x00, 0x08, 0x00, 0x00, 0x08, 0x08, 0x04,
-    // ASCII 60: <
-    0x04, 0x08, 0x10, 0x10, 0x08, 0x04, 0x00,
-    // ASCII 61: =
-    0x00, 0x00, 0x1C, 0x00, 0x1C, 0x00, 0x00,
-    // ASCII 62: >
-    0x08, 0x04, 0x02, 0x02, 0x04, 0x08, 0x00,
-    // ASCII 63: ?
-    0x0C, 0x12, 0x02, 0x04, 0x08, 0x00, 0x08,
-    // ASCII 64: @
-    0x0C, 0x12, 0x1E, 0x1A, 0x1E, 0x10, 0x0C,
-    // ASCII 65: A
-    0x0C, 0x12, 0x12, 0x1E, 0x12, 0x12, 0x12,
-    // ASCII 66: B
-    0x1C, 0x12, 0x12, 0x1C, 0x12, 0x12, 0x1C,
-    // ASCII 67: C
-    0x0C, 0x12, 0x10, 0x10, 0x10, 0x12, 0x0C,
-    // ASCII 68: D
-    0x18, 0x14, 0x12, 0x12, 0x12, 0x14, 0x18,
-    // ASCII 69: E
-    0x1E, 0x10, 0x10, 0x1C, 0x10, 0x10, 0x1E,
-    // ASCII 70: F
-    0x1E, 0x10, 0x10, 0x1C, 0x10, 0x10, 0x10,
-    // ASCII 71: G
-    0x0C, 0x12, 0x10, 0x1E, 0x12, 0x12, 0x0C,
-    // ASCII 72: H
-    0x12, 0x12, 0x12, 0x1E, 0x12, 0x12, 0x12,
-    // ASCII 73: I
-    0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E,
-    // ASCII 74: J
-    0x0E, 0x04, 0x04, 0x04, 0x04, 0x14, 0x08,
-    // ASCII 75: K
-    0x12, 0x12, 0x14, 0x18, 0x14, 0x12, 0x12,
-    // ASCII 76: L
-    0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1E,
-    // ASCII 77: M
-    0x12, 0x1B, 0x1B, 0x15, 0x12, 0x12, 0x12,
-    // ASCII 78: N
-    0x12, 0x1A, 0x16, 0x12, 0x12, 0x12, 0x12,
-    // ASCII 79: O
-    0x0C, 0x12, 0x12, 0x12, 0x12, 0x12, 0x0C,
-    // ASCII 80: P
-    0x1C, 0x12, 0x12, 0x1C, 0x10, 0x10, 0x10,
-    // ASCII 81: Q
-    0x0C, 0x12, 0x12, 0x12, 0x12, 0x14, 0x0A,
-    // ASCII 82: R
-    0x1C, 0x12, 0x12, 0x1C, 0x12, 0x12, 0x12,
-    // ASCII 83: S
-    0x0C, 0x12, 0x10, 0x0C, 0x02, 0x12, 0x0C,
-    // ASCII 84: T
-    0x1E, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    // ASCII 85: U
-    0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x0C,
-    // ASCII 86: V
-    0x12, 0x12, 0x12, 0x12, 0x12, 0x0A, 0x04,
-    // ASCII 87: W
-    0x12, 0x12, 0x12, 0x15, 0x1B, 0x1B, 0x12,
-    // ASCII 88: X
-    0x12, 0x12, 0x0A, 0x04, 0x0A, 0x12, 0x12,
-    // ASCII 89: Y
-    0x12, 0x12, 0x0A, 0x04, 0x08, 0x08, 0x08,
-    // ASCII 90: Z
-    0x1E, 0x02, 0x04, 0x08, 0x10, 0x10, 0x1E,
-    // ASCII 91: [
-    0x0E, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0E,
-    // ASCII 92: \
-    0x02, 0x02, 0x04, 0x08, 0x10, 0x10, 0x10,
-    // ASCII 93: ]
-    0x0E, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0E,
-    // ASCII 94: ^
-    0x04, 0x0A, 0x12, 0x00, 0x00, 0x00, 0x00,
-    // ASCII 95: _
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F,
-    // ASCII 96: `
-    0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // ASCII 97: a
-    0x00, 0x0C, 0x02, 0x0E, 0x12, 0x12, 0x0E,
-    // ASCII 98: b
-    0x10, 0x10, 0x1C, 0x12, 0x12, 0x12, 0x1C,
-    // ASCII 99: c
-    0x00, 0x0C, 0x12, 0x10, 0x10, 0x12, 0x0C,
-    // ASCII 100: d
-    0x02, 0x02, 0x0E, 0x12, 0x12, 0x12, 0x0E,
-    // ASCII 101: e
-    0x00, 0x0C, 0x12, 0x1E, 0x10, 0x12, 0x0C,
-    // ASCII 102: f
-    0x04, 0x08, 0x08, 0x1C, 0x08, 0x08, 0x08,
-    // ASCII 103: g
-    0x00, 0x0E, 0x12, 0x12, 0x0E, 0x02, 0x0C,
-    // ASCII 104: h
-    0x10, 0x10, 0x1C, 0x12, 0x12, 0x12, 0x12,
-    // ASCII 105: i
-    0x08, 0x00, 0x08, 0x08, 0x08, 0x08, 0x08,
-    // ASCII 106: j
-    0x04, 0x00, 0x04, 0x04, 0x04, 0x14, 0x08,
-    // ASCII 107: k
-    0x10, 0x10, 0x12, 0x14, 0x18, 0x14, 0x12,
-    // ASCII 108: l
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    // ASCII 109: m
-    0x00, 0x12, 0x1B, 0x15, 0x15, 0x12, 0x12,
-    // ASCII 110: n
-    0x00, 0x1C, 0x12, 0x12, 0x12, 0x12, 0x12,
-    // ASCII 111: o
-    0x00, 0x0C, 0x12, 0x12, 0x12, 0x12, 0x0C,
-    // ASCII 112: p
-    0x00, 0x1C, 0x12, 0x12, 0x1C, 0x10, 0x10,
-    // ASCII 113: q
-    0x00, 0x0E, 0x12, 0x12, 0x0E, 0x02, 0x02,
-    // ASCII 114: r
-    0x00, 0x16, 0x08, 0x08, 0x08, 0x08, 0x08,
-    // ASCII 115: s
-    0x00, 0x0C, 0x10, 0x0C, 0x02, 0x02, 0x1C,
-    // ASCII 116: t
-    0x08, 0x08, 0x1C, 0x08, 0x08, 0x08, 0x04,
-    // ASCII 117: u
-    0x00, 0x12, 0x12, 0x12, 0x12, 0x12, 0x0E,
-    // ASCII 118: v
-    0x00, 0x12, 0x12, 0x12, 0x12, 0x0A, 0x04,
-    // ASCII 119: w
-    0x00, 0x12, 0x12, 0x15, 0x1B, 0x1B, 0x12,
-    // ASCII 120: x
-    0x00, 0x12, 0x0A, 0x04, 0x04, 0x0A, 0x12,
-    // ASCII 121: y
-    0x00, 0x12, 0x12, 0x0E, 0x02, 0x02, 0x0C,
-    // ASCII 122: z
-    0x00, 0x1E, 0x04, 0x08, 0x10, 0x10, 0x1E,
-    // ASCII 123: {
-    0x06, 0x08, 0x08, 0x10, 0x08, 0x08, 0x06,
-    // ASCII 124: |
-    0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08,
-    // ASCII 125: }
-    0x0C, 0x04, 0x04, 0x02, 0x04, 0x04, 0x0C,
-    // ASCII 126: ~
-    0x0A, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00,
-];
-
 /// Text rendering context for drawing text on a display.
 ///
-/// This struct encapsulates text rendering state including cursor position,
-/// current color, and font information.
+/// Uses the 8x16 bitmap font (Font trait) and renders via the Display trait.
 #[derive(Debug, Clone)]
 pub struct TextRenderer {
-    /// Current cursor X position in pixels
     pub cursor_x: u32,
-    /// Current cursor Y position in pixels
     pub cursor_y: u32,
-    /// Current foreground color
     pub fg_color: u32,
-    /// Current background color
     pub bg_color: u32,
+    font: crate::graphics::font::BitmapFont8x16,
 }
 
 impl TextRenderer {
-    /// Create a new text renderer with default settings.
     pub fn new() -> Self {
         TextRenderer {
             cursor_x: 0,
             cursor_y: 0,
-            fg_color: 0xFFFFFFFF, // White
-            bg_color: 0xFF000000, // Black
+            fg_color: 0xFFFFFFFF,
+            bg_color: 0xFF000000,
+            font: crate::graphics::font::BitmapFont8x16::new(),
         }
     }
 
-    /// Set the cursor position for subsequent text output.
     pub fn set_cursor(&mut self, x: u32, y: u32) {
         self.cursor_x = x;
         self.cursor_y = y;
     }
 
-    /// Set the text color.
     pub fn set_color(&mut self, fg: u32, bg: u32) {
         self.fg_color = fg;
         self.bg_color = bg;
     }
 
-    /// Get character width in pixels (5 pixels).
-    pub const fn get_char_width() -> u32 {
-        5
+    pub fn get_char_width(&self) -> u32 {
+        self.font.char_width()
     }
 
-    /// Get character height in pixels (7 pixels).
-    pub const fn get_char_height() -> u32 {
-        7
+    pub fn get_char_height(&self) -> u32 {
+        self.font.char_height()
     }
 
-    /// Get line height including spacing in pixels (9 pixels).
-    pub const fn get_line_height() -> u32 {
-        9
+    pub fn get_line_height(&self) -> u32 {
+        self.font.line_height()
     }
 
-    /// Render a single character at the given position.
-    ///
-    /// # Arguments
-    ///
-    /// * `x` - X coordinate in pixels
-    /// * `y` - Y coordinate in pixels
-    /// * `ch` - Character to render
-    /// * `color` - Foreground color (ARGB format)
-    /// * `display` - Mutable reference to display implementation
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` on success, or `TextRenderError` if operation fails.
-    ///
-    /// # Notes
-    ///
-    /// Clipping is performed automatically to prevent out-of-bounds writes.
-    /// Characters outside valid ASCII 32-126 range are silently skipped.
     pub fn render_char<B: FramebufferBuffer>(
+        &self,
         x: u32,
         y: u32,
         ch: char,
         color: u32,
         display: &mut dyn Display<Error = (), Buffer = B>,
     ) -> Result<(), TextRenderError> {
-        let char_code = ch as u32;
+        let (screen_width, screen_height) = display.get_resolution();
 
-        // ASCII range: 32 (space) to 126 (~)
+        let width = self.font.char_width();
+        let height = self.font.char_height();
+
+        let char_code = ch as u32;
         if !(32..=126).contains(&char_code) {
             return Ok(());
         }
 
-        // Get font glyph data
-        let glyph_offset = ((char_code - 32) as usize) * 7;
-        let glyph = &FONT_5X7[glyph_offset..glyph_offset + 7];
-
-        let (screen_width, screen_height) = display.get_resolution();
-
-        // Render each row of the glyph
-        for row in 0..7u32 {
+        for row in 0..height {
             if y + row >= screen_height {
                 break;
             }
-
-            let byte = glyph[row as usize];
-
-            // Render each bit (pixel) in the byte, LSB = leftmost
-            for col in 0..5u32 {
+            for col in 0..width {
                 if x + col >= screen_width {
                     break;
                 }
+            }
+        }
 
-                // Check if this bit is set (LSB first)
-                if (byte & (1 << col)) != 0 {
-                    display.pixel_put(x + col, y + row, color);
+        let mut buf = alloc::vec![0u32; (width * height) as usize];
+        self.font.render_glyph(ch, &mut buf, width, height, 0, 0, color, self.bg_color);
+
+        for row in 0..height {
+            for col in 0..width {
+                let idx = (row * width + col) as usize;
+                if idx < buf.len() && buf[idx] != self.bg_color {
+                    display.pixel_put(x + col, y + row, buf[idx]);
                 }
             }
         }
@@ -352,35 +128,8 @@ impl TextRenderer {
         Ok(())
     }
 
-    /// Render a string of text at the given position.
-    ///
-    /// # Arguments
-    ///
-    /// * `x` - Starting X coordinate in pixels
-    /// * `y` - Starting Y coordinate in pixels
-    /// * `text` - Text string to render
-    /// * `color` - Foreground color (ARGB format)
-    /// * `display` - Mutable reference to display implementation
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` on success, or `TextRenderError` if operation fails.
-    ///
-    /// # Features
-    ///
-    /// - Supports newline character (`\n`) to advance to the next line
-    /// - Automatically clips text to display bounds
-    /// - Renders characters sequentially with proper spacing
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use kernel::graphics::{Display, text::TextRenderer};
-    /// # let mut display: &mut dyn Display<Error=(), Buffer=()> = unsafe { &mut *(0 as *mut _) };
-    /// let mut renderer = TextRenderer::new();
-    /// let _ = renderer.render_string(10, 10, "Hello\nWorld", 0xFFFFFFFF, display);
-    /// ```
     pub fn render_string<B: FramebufferBuffer>(
+        &self,
         x: u32,
         y: u32,
         text: &str,
@@ -392,17 +141,13 @@ impl TextRenderer {
 
         for ch in text.chars() {
             if ch == '\n' {
-                // Move to next line
                 current_x = x;
-                current_y += Self::get_line_height();
+                current_y = current_y.saturating_add(self.get_line_height());
                 continue;
             }
 
-            // Render the character
-            Self::render_char(current_x, current_y, ch, color, display)?;
-
-            // Move to next character position
-            current_x += Self::get_char_width();
+            self.render_char(current_x, current_y, ch, color, display)?;
+            current_x = current_x.saturating_add(self.get_char_width());
         }
 
         Ok(())

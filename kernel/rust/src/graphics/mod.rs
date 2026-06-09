@@ -27,6 +27,7 @@
 
 pub mod color;
 pub mod framebuffer;
+pub mod font;
 pub mod text;
 pub mod vesa;
 

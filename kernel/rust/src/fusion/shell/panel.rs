@@ -67,18 +67,11 @@ impl LxqtPanel {
         let hours = (uptime_ms / 3600000) % 24;
 
         let time_str = alloc::format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
-        let time_w = (time_str.len() as u32) * 7;
+        let time_w = renderer.text_width(&time_str);
         let time_x = self.width.saturating_sub(time_w + 10);
 
         let clock_color = Color::from_rgb(180, 190, 210);
-        for (i, ch) in time_str.as_bytes().iter().enumerate() {
-            let cx = time_x + (i as u32) * 7;
-            let _ = cx;
-            if *ch == b':' {
-                let _ = clock_color;
-            }
-            renderer.fill_rect(time_x + (i as u32) * 7, 12, 5, 12, clock_color);
-        }
+        renderer.draw_text(time_x, 6, &time_str, clock_color, Some(bg));
 
         let _ = backend.upload_pixels(self.surface_id, self.width, self.height, renderer.pixels());
         self.dirty = false;

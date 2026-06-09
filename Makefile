@@ -110,10 +110,11 @@ all: userland $(KERNEL_ELF)
 
 iso: $(KERNEL_ISO)
 
-# Build userland binaries (embedded into kernel VFS)
+# Build userland binaries (embedded into kernel VFS via include_bytes!)
 userland:
 	$(MAKE) -C $(USERLAND_DIR) ARCH=$(ARCH)
 	@cp $(USERLAND_DIR)/build/hello hello 2>/dev/null || true
+	@cp $(USERLAND_DIR)/build/compositor compositor 2>/dev/null || true
 
 # Link kernel
 $(KERNEL_ELF): userland $(OBJECTS) $(RUST_LIB)
@@ -123,7 +124,7 @@ $(KERNEL_ELF): userland $(OBJECTS) $(RUST_LIB)
 	@echo "Kernel built successfully: $@"
 
 # Build Rust library
-$(RUST_LIB): $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
+$(RUST_LIB): userland $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
 	@echo "Building Rust kernel library ($(ARCH))..."
 	@mkdir -p $(BUILD_DIR)/kernel/rust
 	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target $(RUST_TARGET) -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec

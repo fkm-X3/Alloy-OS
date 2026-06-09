@@ -23,7 +23,19 @@ pub mod fusion;
 pub mod net;
 pub mod display_server;
 
+use alloc::boxed::Box;
 use core::panic::PanicInfo;
+
+/// Wrapper entry point for the display server when running as a scheduler task.
+/// Creates the VESA display and runs the server loop.
+extern "C" fn display_server_entry() {
+    if let Some(display) = graphics::vesa::VesaDisplay::new() {
+        unsafe {
+            ffi::serial_print(c"[Spawn] VESA ready, booting display server task\n".as_ptr() as *const u8);
+        }
+        let _ = display_server::run(display);
+    }
+}
 
 fn log_display_server_error(err: display_server::DisplayServerBootError) {
     unsafe {
@@ -43,7 +55,7 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
 #[no_mangle]
 pub extern "C" fn rust_main() {
     unsafe {
-        ffi::serial_print(c"[Rust] Kernel entry - starting Display Server\n".as_ptr() as *const u8);
+        ffi::serial_print(c"[Rust] Kernel entry - initializing subsystems\n".as_ptr() as *const u8);
         ffi::vga_clear();
     }
 
@@ -74,29 +86,35 @@ pub extern "C" fn rust_main() {
         }
     }
 
-    if let Some(display) = graphics::vesa::VesaDisplay::new() {
-        unsafe {
-            ffi::serial_print(c"[Rust] VESA display initialized, booting display server\n".as_ptr() as *const u8);
-        }
+    unsafe {
+        ffi::serial_print(c"[Rust] Initializing scheduler\n".as_ptr() as *const u8);
+    }
+    process::Scheduler::init();
 
-        match display_server::run(display) {
-            Ok(()) => {
+    // Create the display server task (LXQt shell + Wayland server)
+    let display_task = Box::new(process::task::Task::new(display_server_entry, "display-server"));
+    process::Scheduler::add_task(display_task);
+
+    // Spawn the userspace compositor if the binary is available
+    if let Ok(comp_vnode) = fs::vfs_open("/bin/compositor", 0, 0) {
+        if let Some(image) = fs::vfs_read_all(comp_vnode) {
+            if !image.is_empty() {
                 unsafe {
-                    ffi::serial_print(c"[Rust] Display server exited normally\n".as_ptr() as *const u8);
+                    ffi::serial_print(c"[Spawn] Loading userspace compositor\n".as_ptr() as *const u8);
+                }
+                if process::spawn_user_elf(&image) {
+                    unsafe {
+                        ffi::serial_print(c"[Spawn] Compositor task created\n".as_ptr() as *const u8);
+                    }
                 }
             }
-            Err(err) => {
-                log_display_server_error(err);
-                unsafe {
-                    ffi::serial_print(c"[Rust] Display server boot failed\n".as_ptr() as *const u8);
-                }
-            }
-        }
-    } else {
-        unsafe {
-            ffi::serial_print(c"[Rust] Failed to initialize VESA display (headless mode)\n".as_ptr() as *const u8);
         }
     }
+
+    unsafe {
+        ffi::serial_print(c"[Rust] Starting scheduler — entering multitasking\n".as_ptr() as *const u8);
+    }
+    process::Scheduler::start();
 }
 
 #[panic_handler]

@@ -131,6 +131,23 @@ pub fn vfs_init() {
         }
     }
 
+    let compositor_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../compositor"));
+    if !compositor_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/compositor", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, compositor_bytes.to_vec());
+                unsafe { crate::ffi::serial_print(c"[VFS] /compositor embedded into VFS\n".as_ptr() as *const u8); }
+            }
+        }
+        if let Ok(id2) = vfs_open("/bin/compositor", 0, 0) {
+            let mut g2 = VFS_STATE.lock();
+            if let Some(state2) = g2.as_mut() {
+                state2.data.insert(id2, compositor_bytes.to_vec());
+            }
+        }
+    }
+
     unsafe { crate::ffi::serial_print(c"[VFS] Initializing block devices...\n".as_ptr() as *const u8); }
 
     let devices = crate::block::init_block_devices();

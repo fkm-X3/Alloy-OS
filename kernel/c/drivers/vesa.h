@@ -37,6 +37,25 @@
 #define VBE_FUNCTION_SAVE_STATE     0x4F04  // Save VBE state
 #define VBE_FUNCTION_RESTORE_STATE  0x4F05  // Restore VBE state
 
+// VBE I/O ports for Bochs VBE extensions
+#define VBE_DISPI_IOPORT_INDEX      0x01CE
+#define VBE_DISPI_IOPORT_DATA       0x01CF
+
+// Bochs VBE index register values
+#define VBE_DISPI_INDEX_ID          0x00
+#define VBE_DISPI_INDEX_XRES        0x01
+#define VBE_DISPI_INDEX_YRES        0x02
+#define VBE_DISPI_INDEX_BPP         0x03
+#define VBE_DISPI_INDEX_ENABLE      0x04
+#define VBE_DISPI_INDEX_BANK        0x05
+#define VBE_DISPI_INDEX_VIRT_WIDTH  0x06
+#define VBE_DISPI_INDEX_VIRT_HEIGHT 0x07
+#define VBE_DISPI_INDEX_X_OFFSET    0x08
+#define VBE_DISPI_INDEX_Y_OFFSET    0x09
+#define VBE_DISPI_INDEX_CURSOR_X    0x0A
+#define VBE_DISPI_INDEX_CURSOR_Y    0x0B
+#define VBE_DISPI_INDEX_CURSOR_ENABLE 0x0C
+
 // VBE return codes
 #define VBE_STATUS_SUCCESS          0x004F  // Function supported and successful
 #define VBE_STATUS_UNSUPPORTED      0x014F  // Function not supported
@@ -286,6 +305,11 @@ extern "C" {
     uint8_t vesa_get_bits_per_pixel();
     uint16_t vesa_get_bytes_per_scanline();
     uint32_t vesa_get_framebuffer_size();
+
+    // VBE hardware cursor functions
+    uint8_t vesa_cursor_is_available();
+    void vesa_cursor_enable(uint8_t enable);
+    void vesa_cursor_set_position(uint16_t x, uint16_t y);
 
 #ifdef __cplusplus
 }

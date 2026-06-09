@@ -274,3 +274,51 @@ uint32_t vesa_get_framebuffer_size() {
     }
     return g_vesa_state.framebuffer_size;
 }
+
+static void vbe_write_register(uint16_t index, uint16_t value) {
+    asm volatile("outw %0, %1" : : "a"(index), "d"((uint16_t)VBE_DISPI_IOPORT_INDEX));
+    asm volatile("outw %0, %1" : : "a"(value), "d"((uint16_t)VBE_DISPI_IOPORT_DATA));
+}
+
+static uint16_t vbe_read_register(uint16_t index) {
+    uint16_t value;
+    asm volatile("outw %0, %1" : : "a"(index), "d"((uint16_t)VBE_DISPI_IOPORT_INDEX));
+    asm volatile("inw %1, %0" : "=a"(value) : "d"((uint16_t)VBE_DISPI_IOPORT_DATA));
+    return value;
+}
+
+/// Check if VBE hardware cursor is available by probing cursor registers.
+/// Returns 1 if hardware cursor is supported, 0 otherwise.
+uint8_t vesa_cursor_is_available() {
+    if (!g_vesa_state.available) {
+        return 0;
+    }
+
+    // Probe: write a test value to cursor X register and read it back
+    uint16_t saved = vbe_read_register(VBE_DISPI_INDEX_CURSOR_X);
+    vbe_write_register(VBE_DISPI_INDEX_CURSOR_X, 0xAAAA);
+    uint16_t test = vbe_read_register(VBE_DISPI_INDEX_CURSOR_X);
+    vbe_write_register(VBE_DISPI_INDEX_CURSOR_X, saved);
+
+    if (test == 0xAAAA) {
+        serial_print("[VESA] Hardware cursor available\n");
+        return 1;
+    }
+
+    serial_print("[VESA] Hardware cursor not available (VBE doesn't support it)\n");
+    return 0;
+}
+
+/// Enable or disable the VBE hardware cursor.
+/// @param enable 1 to show the cursor, 0 to hide it.
+void vesa_cursor_enable(uint8_t enable) {
+    vbe_write_register(VBE_DISPI_INDEX_CURSOR_ENABLE, enable ? 1 : 0);
+}
+
+/// Set the VBE hardware cursor position on screen.
+/// @param x X coordinate in pixels (clamped by hardware to framebuffer bounds)
+/// @param y Y coordinate in pixels
+void vesa_cursor_set_position(uint16_t x, uint16_t y) {
+    vbe_write_register(VBE_DISPI_INDEX_CURSOR_X, x);
+    vbe_write_register(VBE_DISPI_INDEX_CURSOR_Y, y);
+}

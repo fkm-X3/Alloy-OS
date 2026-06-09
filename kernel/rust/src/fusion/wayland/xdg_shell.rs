@@ -159,7 +159,7 @@ impl XdgShellHandler {
     fn handle_toplevel_set_title(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<ToplevelResponse> {
         let title = alloc::string::String::from_utf8_lossy(payload).into_owned();
         for (_id, surface) in self.surfaces.iter_mut() {
-            if surface.xdg_surface_object_id == object_id || true {
+            if surface.xdg_surface_object_id == object_id {
                 surface.title = Some(title.clone());
                 break;
             }
@@ -170,7 +170,7 @@ impl XdgShellHandler {
     fn handle_toplevel_set_app_id(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<ToplevelResponse> {
         let app_id = alloc::string::String::from_utf8_lossy(payload).into_owned();
         for (_id, surface) in self.surfaces.iter_mut() {
-            if surface.xdg_surface_object_id == object_id || true {
+            if surface.xdg_surface_object_id == object_id {
                 surface.app_id = Some(app_id.clone());
                 break;
             }

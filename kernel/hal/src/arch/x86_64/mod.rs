@@ -1,7 +1,6 @@
-//! x86_64 architecture implementation (placeholder)
+//! x86_64 architecture implementation
 //!
-//! This is a placeholder for future x86_64 (64-bit) support.
-//! The current OS primarily targets i686 (32-bit x86).
+//! Full 64-bit x86 architecture support.
 
 use super::{Arch, CpuContext};
 
@@ -13,24 +12,25 @@ impl Arch for X86_64Arch {
     const PAGE_SIZE: u32 = 4096;
 
     fn init() {
-        // TODO: Enter long mode, set up 64-bit GDT/IDT, enable PAE
+        // Architecture init is handled by the C boot code (boot_x86_64.asm)
+        // which sets up long mode paging, GDT, IDT
     }
 
     fn halt() {
         unsafe {
-            core::arch::asm!("hlt");
+            core::arch::asm!("cli; hlt", options(nomem, nostack));
         }
     }
 
     fn disable_interrupts() {
         unsafe {
-            core::arch::asm!("cli");
+            core::arch::asm!("cli", options(nomem, nostack));
         }
     }
 
     fn enable_interrupts() {
         unsafe {
-            core::arch::asm!("sti");
+            core::arch::asm!("sti", options(nomem, nostack));
         }
     }
 
@@ -53,18 +53,9 @@ impl Arch for X86_64Arch {
         }
 
         let vendor_bytes: [u8; 12] = [
-            ebx as u8,
-            (ebx >> 8) as u8,
-            (ebx >> 16) as u8,
-            (ebx >> 24) as u8,
-            edx as u8,
-            (edx >> 8) as u8,
-            (edx >> 16) as u8,
-            (edx >> 24) as u8,
-            ecx as u8,
-            (ecx >> 8) as u8,
-            (ecx >> 16) as u8,
-            (ecx >> 24) as u8,
+            ebx as u8, (ebx >> 8) as u8, (ebx >> 16) as u8, (ebx >> 24) as u8,
+            edx as u8, (edx >> 8) as u8, (edx >> 16) as u8, (edx >> 24) as u8,
+            ecx as u8, (ecx >> 8) as u8, (ecx >> 16) as u8, (ecx >> 24) as u8,
         ];
 
         let len = core::cmp::min(vendor_bytes.len(), buffer.len());
@@ -104,11 +95,7 @@ impl Arch for X86_64Arch {
         }
         let base_family = (eax >> 8) & 0xF;
         let ext_family = (eax >> 20) & 0xFF;
-        let family = if base_family == 0xF {
-            base_family + ext_family
-        } else {
-            base_family
-        };
+        let family = if base_family == 0xF { base_family + ext_family } else { base_family };
 
         let base_model = (eax >> 4) & 0xF;
         let ext_model = (eax >> 16) & 0xF;
@@ -119,24 +106,22 @@ impl Arch for X86_64Arch {
         };
 
         let stepping = eax & 0xF;
-
         (family, model, stepping)
     }
 
-    unsafe fn context_switch(_old_ctx: *mut CpuContext, _new_ctx: *mut CpuContext) {
-        // TODO: Implement 64-bit context switch
-        // Save/restore: RAX-R15, RBP, RSP, RIP, CS/DS/ES/FS/GS/SS, RFLAGS, CR3
-        // Use syscall/sysret for fast syscalls
+    unsafe fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext) {
+        extern "C" {
+            fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
+        }
+        context_switch(old_ctx, new_ctx);
     }
 
     fn init_gdt() {
-        // TODO: Set up 64-bit GDT with TSS
-        // Need: NULL, Kernel Code (64-bit), Kernel Data, User Code, User Data, TSS
+        // Handled by C kernel code (arch/x86_64/gdt.c)
     }
 
     fn init_idt() {
-        // TODO: Set up 64-bit IDT
-        // 16-byte entries with 64-bit offset
+        // Handled by C kernel code (arch/x86_64/idt.c)
     }
 
     fn get_fault_address() -> usize {
@@ -148,11 +133,11 @@ impl Arch for X86_64Arch {
     }
 
     unsafe fn invalidate_tlb_entry(virt_addr: usize) {
-        core::arch::asm!("invlpg [{}]", in(reg) virt_addr as u64);
+        core::arch::asm!("invlpg [{}]", in(reg) virt_addr as u64, options(nostack));
     }
 
     unsafe fn switch_page_directory(pd_phys: usize) {
-        core::arch::asm!("mov cr3, {}", in(reg) pd_phys as u64);
+        core::arch::asm!("mov cr3, {}", in(reg) pd_phys as u64, options(nostack));
     }
 }
 
@@ -196,7 +181,7 @@ pub mod paging {
     pub const PTE_DIRTY: u64 = 1 << 6;
     pub const PTE_PS: u64 = 1 << 7;
     pub const PTE_GLOBAL: u64 = 1 << 8;
-    pub const PTE_NX: u64 = 1 << 63; // No-execute bit
+    pub const PTE_NX: u64 = 1 << 63;
 }
 
 /// x86_64 segment selectors
@@ -206,4 +191,35 @@ pub mod segments {
     pub const USER_CODE: u16 = 0x18;
     pub const USER_DATA: u16 = 0x20;
     pub const TSS: u16 = 0x28;
+}
+
+impl super::CpuContext {
+    /// Create a new CPU context with sensible defaults.
+    pub fn new() -> Self {
+        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() };
+        Self {
+            rax: 0, rbx: 0, rcx: 0, rdx: 0,
+            rsi: 0, rdi: 0, rbp: 0, rsp: 0,
+            r8: 0, r9: 0, r10: 0, r11: 0,
+            r12: 0, r13: 0, r14: 0, r15: 0,
+            rip: 0,
+            cs: 0x08, ds: 0x10, es: 0x10, fs: 0x10, gs: 0x10, ss: 0x10,
+            rflags: 0x202,
+            cr3: kernel_cr3 as u64,
+        }
+    }
+
+    /// Set the initial entry point, stack pointer, and argument for a task.
+    pub fn set_entry(&mut self, entry: u64, stack_top: u64, arg: u64) {
+        self.rip = entry;
+        self.rsp = stack_top;
+        self.rbp = stack_top;
+        self.rdi = arg;
+    }
+}
+
+impl Default for super::CpuContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }

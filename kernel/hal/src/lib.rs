@@ -6,13 +6,15 @@
 //! enabling the kernel to support multiple CPU architectures (i686, x86_64, aarch64).
 
 pub mod arch;
+pub mod ffi;
 pub mod interrupt;
 pub mod io;
 pub mod memory;
+pub mod platform;
 pub mod serial;
 pub mod time;
 
-pub use arch::Arch;
+pub use arch::{Arch, CpuContext, CpuInfo};
 pub use interrupt::{InterruptController, IrqHandler};
 #[cfg(any(feature = "i686", feature = "x86_64"))]
 pub use io::IoPort;

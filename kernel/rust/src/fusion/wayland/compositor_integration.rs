@@ -9,7 +9,7 @@ use super::surface::SurfaceState;
 use super::shm::{ShmBuffer, ShmFormat, ShmManager};
 use super::damage::DamageRect;
 use crate::fusion::backend::FusionDisplayBackend;
-use crate::graphics::vesa::VesaDisplay;
+use crate::graphics::PlatformDisplay;
 
 /// Compositor integration interface
 ///
@@ -37,7 +37,7 @@ impl CompositorIntegration {
     }
 
     /// Initialize the compositor with display backend
-    pub fn init_with_display(&mut self, display: VesaDisplay) {
+    pub fn init_with_display(&mut self, display: PlatformDisplay) {
         self.backend = Some(FusionDisplayBackend::new(display));
         self.frame_timing = Some(FrameTiming::new(0));
     }

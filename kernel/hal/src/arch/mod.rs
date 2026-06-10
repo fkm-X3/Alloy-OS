@@ -86,18 +86,6 @@ pub struct CpuContext {
     pub cr3: u32,
 }
 
-#[cfg(all(feature = "i686", not(any(feature = "x86_64", feature = "aarch64"))))]
-impl Default for CpuContext {
-    fn default() -> Self {
-        Self {
-            eax: 0, ebx: 0, ecx: 0, edx: 0,
-            esi: 0, edi: 0, ebp: 0, esp: 0,
-            eip: 0, cs: 0, ds: 0, es: 0,
-            fs: 0, gs: 0, ss: 0, eflags: 0, cr3: 0,
-        }
-    }
-}
-
 #[cfg(all(feature = "x86_64", not(any(feature = "i686", feature = "aarch64"))))]
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -129,20 +117,6 @@ pub struct CpuContext {
     pub cr3: u64,
 }
 
-#[cfg(all(feature = "x86_64", not(any(feature = "i686", feature = "aarch64"))))]
-impl Default for CpuContext {
-    fn default() -> Self {
-        Self {
-            rax: 0, rbx: 0, rcx: 0, rdx: 0,
-            rsi: 0, rdi: 0, rbp: 0, rsp: 0,
-            r8: 0, r9: 0, r10: 0, r11: 0,
-            r12: 0, r13: 0, r14: 0, r15: 0,
-            rip: 0, cs: 0, ds: 0, es: 0,
-            fs: 0, gs: 0, ss: 0, rflags: 0, cr3: 0,
-        }
-    }
-}
-
 #[cfg(all(feature = "aarch64", not(any(feature = "i686", feature = "x86_64"))))]
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -163,18 +137,6 @@ pub struct CpuContext {
     pub elr: u64,
     pub spsr: u64,
     pub ttbr0: u64,
-}
-
-#[cfg(all(feature = "aarch64", not(any(feature = "i686", feature = "x86_64"))))]
-impl Default for CpuContext {
-    fn default() -> Self {
-        Self {
-            x19: 0, x20: 0, x21: 0, x22: 0,
-            x23: 0, x24: 0, x25: 0, x26: 0,
-            x27: 0, x28: 0, fp: 0, lr: 0,
-            sp: 0, elr: 0, spsr: 0, ttbr0: 0,
-        }
-    }
 }
 
 /// Common CPU info structure

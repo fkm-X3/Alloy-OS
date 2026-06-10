@@ -18,6 +18,10 @@ void init_gdt();
 void init_idt();
 void rust_main();
 
+// PL110 framebuffer (aarch64)
+void pl110_init(unsigned int fb_addr, unsigned short width, unsigned short height);
+int pl110_is_available();
+
 static void arch_halt() {
 #ifdef ARCH_I686
     asm volatile("cli; hlt");
@@ -181,8 +185,14 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
         vga_set_color(7, 0);
         serial_print("[VESA] Graphics not available (missing framebuffer metadata)\n");
     }
-#else
-    serial_print("Paging/VESA: Not yet implemented for ARM64\n");
+#elif defined(ARCH_AARCH64)
+    serial_print("Initializing PL110 display...\n");
+    pl110_init(0x48000000, 1024, 768);
+    if (pl110_is_available()) {
+        serial_print("[PL110] Display initialized\n");
+    } else {
+        serial_print("[PL110] Display not available\n");
+    }
 #endif
 
 #if defined(ARCH_I686) || defined(ARCH_X86_64)

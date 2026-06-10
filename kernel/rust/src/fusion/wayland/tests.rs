@@ -311,7 +311,7 @@ mod wayland_integration_tests {
 
     #[test]
     fn test_output_manager_bind_unbind() {
-        use crate::graphics::vesa::VesaDisplay;
+        use crate::graphics::PlatformDisplay;
 
         let mut manager = OutputManager::new();
         let geom = OutputGeometry::new(0, 0);

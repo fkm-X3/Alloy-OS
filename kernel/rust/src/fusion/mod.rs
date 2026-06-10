@@ -21,7 +21,7 @@ pub struct Fusion;
 
 impl Fusion {
     /// Create a new Fusion display backend
-    pub fn new_backend(display: crate::graphics::vesa::VesaDisplay) -> FusionDisplayBackend {
+    pub fn new_backend(display: crate::graphics::PlatformDisplay) -> FusionDisplayBackend {
         FusionDisplayBackend::new(display)
     }
 

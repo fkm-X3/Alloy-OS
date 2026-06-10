@@ -4,8 +4,18 @@
 
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use crate::graphics::vesa::VesaDisplay;
 use crate::graphics::Display;
+
+#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(any(feature = "i686", feature = "x86_64"))]
+use crate::graphics::vesa::VesaDisplay;
+#[cfg(feature = "aarch64")]
+use crate::graphics::pl110::Pl110Display;
+
+#[cfg(any(feature = "i686", feature = "x86_64"))]
+type PlatformDisplay = VesaDisplay;
+#[cfg(feature = "aarch64")]
+type PlatformDisplay = Pl110Display;
 
 const COMPOSITOR_CLEAR_COLOR: u32 = 0x0011141C;
 
@@ -76,7 +86,7 @@ impl SurfaceData {
 pub struct FusionDisplayBackend {
     surfaces: BTreeMap<u32, SurfaceData>,
     next_surface_id: u32,
-    display: VesaDisplay,
+    display: PlatformDisplay,
     framebuffer_width: u32,
     framebuffer_height: u32,
     dirty: bool,
@@ -94,7 +104,7 @@ impl core::fmt::Debug for FusionDisplayBackend {
 
 impl FusionDisplayBackend {
     /// Create a new Fusion display backend
-    pub fn new(mut display: VesaDisplay) -> Self {
+    pub fn new(mut display: PlatformDisplay) -> Self {
         let (width, height) = display.get_resolution();
         display.clear(COMPOSITOR_CLEAR_COLOR);
         display.swap_buffer();
@@ -295,7 +305,7 @@ impl FusionDisplayBackend {
     }
 
     /// Get mutable access to the underlying display
-    pub fn display_mut(&mut self) -> &mut VesaDisplay {
+    pub fn display_mut(&mut self) -> &mut PlatformDisplay {
         &mut self.display
     }
 

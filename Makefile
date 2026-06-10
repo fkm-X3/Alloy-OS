@@ -71,7 +71,7 @@ ARCH_DIR = $(KERNEL_C_DIR)/arch/$(ARCH)
 DRIVERS_DIR = $(KERNEL_C_DIR)/drivers
 MM_DIR = $(KERNEL_C_DIR)/mm
 
-# Source files
+# Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
 C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
@@ -80,18 +80,25 @@ C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
             $(ARCH_DIR)/gdt.c \
             $(ARCH_DIR)/idt.c \
             $(MM_DIR)/pmm.c \
-            $(MM_DIR)/paging.c \
             $(MM_DIR)/vmm.c \
             $(DRIVERS_DIR)/serial.c \
+            $(DRIVERS_DIR)/timer.c
+
+# Architecture-specific C sources
+ifeq ($(ARCH),aarch64)
+C_SOURCES += $(DRIVERS_DIR)/pl110.c \
+             $(MM_DIR)/paging_aarch64.c
+else
+C_SOURCES += $(MM_DIR)/paging.c \
             $(DRIVERS_DIR)/vga.c \
             $(DRIVERS_DIR)/vesa.c \
             $(DRIVERS_DIR)/keyboard.c \
             $(DRIVERS_DIR)/mouse.c \
-            $(DRIVERS_DIR)/timer.c \
             $(DRIVERS_DIR)/ata.c \
             $(DRIVERS_DIR)/pci.c \
             $(DRIVERS_DIR)/ahci.c \
             $(DRIVERS_DIR)/initrd.c
+endif
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))

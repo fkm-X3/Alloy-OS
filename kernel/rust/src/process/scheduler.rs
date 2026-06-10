@@ -200,28 +200,57 @@ impl Scheduler {
             None => return u32::MAX,
         };
         let mut ctx = Box::new(crate::process::task::CpuContext::new());
-        ctx.eip = entry;
-        ctx.esp = stack;
-        ctx.ebp = stack;
-        ctx.eax = arg;
-        ctx.cs = 0x1B;
-        ctx.ds = 0x23;
-        ctx.es = 0x23;
-        ctx.fs = 0x23;
-        ctx.gs = 0x23;
-        ctx.ss = 0x23;
-
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
-        let current_cr3 = sched.current_task.as_ref()
-            .map(|t| t.context().cr3)
-            .unwrap_or(kernel_pd);
-        ctx.cr3 = if current_cr3 != kernel_pd {
-            let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
-            if new_pd == 0 { return u32::MAX; }
-            new_pd
-        } else {
-            kernel_pd
-        };
+
+        #[cfg(feature = "i686")]
+        {
+            ctx.eip = entry;
+            ctx.esp = stack;
+            ctx.ebp = stack;
+            ctx.eax = arg;
+            ctx.cs = 0x1B;
+            ctx.ds = 0x23;
+            ctx.es = 0x23;
+            ctx.fs = 0x23;
+            ctx.gs = 0x23;
+            ctx.ss = 0x23;
+
+            let current_cr3 = sched.current_task.as_ref()
+                .map(|t| t.context().cr3)
+                .unwrap_or(kernel_pd);
+            ctx.cr3 = if current_cr3 != kernel_pd {
+                let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
+                if new_pd == 0 { return u32::MAX; }
+                new_pd
+            } else {
+                kernel_pd
+            };
+        }
+
+        #[cfg(feature = "x86_64")]
+        {
+            ctx.rip = entry as u64;
+            ctx.rsp = stack as u64;
+            ctx.rbp = stack as u64;
+            ctx.rax = arg as u64;
+            ctx.cs = 0x1B;
+            ctx.ds = 0x23;
+            ctx.es = 0x23;
+            ctx.fs = 0x23;
+            ctx.gs = 0x23;
+            ctx.ss = 0x23;
+
+            let current_cr3 = sched.current_task.as_ref()
+                .map(|t| t.context().cr3 as u32)
+                .unwrap_or(kernel_pd);
+            ctx.cr3 = if current_cr3 != kernel_pd {
+                let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
+                if new_pd == 0 { return u32::MAX; }
+                new_pd as u64
+            } else {
+                kernel_pd as u64
+            };
+        }
 
         let child = Box::new(Task::from_parts(
             ctx,
@@ -256,14 +285,31 @@ impl Scheduler {
 
         // Clone the CPU context for the child
         let mut child_ctx = Box::new(*parent_ctx);
-        // Child fork returns 0
-        child_ctx.eax = 0;
 
-        // Use COW-based address space cloning
-        if parent_ctx.cr3 != kernel_pd {
-            let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3) };
-            if child_pd == 0 { return u32::MAX; }
-            child_ctx.cr3 = child_pd;
+        #[cfg(feature = "i686")]
+        {
+            // Child fork returns 0
+            child_ctx.eax = 0;
+
+            // Use COW-based address space cloning
+            if parent_ctx.cr3 != kernel_pd {
+                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3) };
+                if child_pd == 0 { return u32::MAX; }
+                child_ctx.cr3 = child_pd;
+            }
+        }
+
+        #[cfg(feature = "x86_64")]
+        {
+            // Child fork returns 0
+            child_ctx.rax = 0;
+
+            // Use COW-based address space cloning
+            if parent_ctx.cr3 as u32 != kernel_pd {
+                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3 as u32) };
+                if child_pd == 0 { return u32::MAX; }
+                child_ctx.cr3 = child_pd as u64;
+            }
         }
 
         // Inherit fd table

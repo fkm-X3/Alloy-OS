@@ -41,64 +41,11 @@ pub enum TaskState {
     Terminated, // Finished execution
 }
 
-/// CPU context structure matching C++ cpu_context
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct CpuContext {
-    // General purpose registers
-    pub eax: u32,
-    pub ebx: u32,
-    pub ecx: u32,
-    pub edx: u32,
-    pub esi: u32,
-    pub edi: u32,
-    pub ebp: u32,
-    pub esp: u32,
-    
-    // Instruction pointer
-    pub eip: u32,
-    
-    // Segment registers
-    pub cs: u32,
-    pub ds: u32,
-    pub es: u32,
-    pub fs: u32,
-    pub gs: u32,
-    pub ss: u32,
-    
-    // EFLAGS register
-    pub eflags: u32,
-    // CR3 - page directory physical address
-    pub cr3: u32,
-}
-
-impl Default for CpuContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl CpuContext {
-    /// Create a zeroed context
-    pub fn new() -> Self {
-        // Default CR3 to kernel page directory
-        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() };
-
-        CpuContext {
-            eax: 0, ebx: 0, ecx: 0, edx: 0,
-            esi: 0, edi: 0, ebp: 0, esp: 0,
-            eip: 0,
-            cs: 0x08,  // Kernel code segment
-            ds: 0x10,  // Kernel data segment
-            es: 0x10,
-            fs: 0x10,
-            gs: 0x10,
-            ss: 0x10,  // Kernel stack segment
-            eflags: 0x202,  // IF (interrupt enable) flag set
-            cr3: kernel_cr3,
-        }
-    }
-}
+/// CPU context for task switching.
+///
+/// Type is re-exported from the HAL crate, which defines an architecture-specific
+/// layout matching the C `cpu_context` struct (see `kernel/hal/src/arch/mod.rs`).
+pub use alloy_kernel_hal::CpuContext;
 
 /// Represents a schedulable task
 pub struct Task {
@@ -341,14 +288,13 @@ impl Drop for Task {
             ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
         }
 
-        // If this task has its own page directory (CR3) different from the kernel's,
-        // destroy it and free all user pages and page tables.
         let pd = self.context.cr3;
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
-        if pd != 0 && pd != kernel_pd {
+        let pd_u32 = pd as u32;
+        if pd_u32 != 0 && pd_u32 != kernel_pd {
             unsafe {
                 ffi::serial_print(c"[Task] Destroying task page directory\n".as_ptr() as *const u8);
-                ffi::paging_destroy_directory(pd);
+                ffi::paging_destroy_directory(pd_u32);
             }
         }
     }
@@ -358,9 +304,7 @@ impl Drop for Task {
 extern "C" fn idle_task_entry() {
     loop {
         unsafe {
-            // Enable interrupts then halt — an interrupt (e.g. timer)
-            // will wake us and the scheduler can pick a real task.
-            core::arch::asm!("sti; hlt");
+            core::arch::asm!("sti; hlt", options(nomem, nostack));
         }
     }
 }

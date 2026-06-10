@@ -221,6 +221,35 @@ pub mod segments {
     pub const USER_DATA: u16 = 0x20;
 }
 
+impl super::CpuContext {
+    /// Create a new CPU context with sensible defaults.
+    pub fn new() -> Self {
+        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() };
+        Self {
+            eax: 0, ebx: 0, ecx: 0, edx: 0,
+            esi: 0, edi: 0, ebp: 0, esp: 0,
+            eip: 0,
+            cs: 0x08, ds: 0x10, es: 0x10, fs: 0x10, gs: 0x10, ss: 0x10,
+            eflags: 0x202,
+            cr3: kernel_cr3,
+        }
+    }
+
+    /// Set the initial entry point and stack for a task.
+    pub fn set_entry(&mut self, entry: u32, stack_top: u32, arg: u32) {
+        self.eip = entry;
+        self.esp = stack_top;
+        self.ebp = stack_top;
+        self.eax = arg;
+    }
+}
+
+impl Default for super::CpuContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 use crate::interrupt::{InterruptController, Pic8259};
 use crate::memory::{MemoryManager, Pmm};
 use crate::serial::{SerialPort, Uart16550};

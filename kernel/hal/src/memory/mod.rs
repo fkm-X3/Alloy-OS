@@ -140,29 +140,9 @@ impl Pmm {
     }
 }
 
-// C FFI functions used by the memory manager
-#[cfg(any(feature = "i686", feature = "x86_64"))]
-extern "C" {
-    fn pmm_init(multiboot_addr: u32);
-    fn pmm_alloc_frame() -> *mut c_void;
-    fn pmm_free_frame(addr: *mut c_void);
-    fn pmm_get_total_memory() -> u64;
-    fn pmm_get_available_memory() -> u64;
-    fn pmm_get_total_frames() -> u32;
-    fn pmm_get_used_frames() -> u32;
-    fn paging_create_directory_phys() -> u32;
-    fn paging_switch_to_directory(pd_phys: u32) -> bool;
-    fn paging_get_kernel_directory_phys() -> u32;
-    fn paging_get_physical_address(virt: u32) -> u32;
-    fn paging_destroy_directory(pd_phys: u32);
-    fn vmm_init();
-    fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
-    fn vmm_free_region(addr: *mut c_void, size: u32);
-    fn vmm_map(virt_addr: *mut c_void, phys_addr: *mut c_void, flags: u32) -> bool;
-    fn vmm_unmap(virt_addr: *mut c_void);
-    fn vmm_get_allocated_pages() -> u32;
-    fn vmm_get_next_virt_addr() -> u32;
-}
+// C FFI functions used by the memory manager.
+// Declarations are consolidated in crate::ffi.
+use crate::ffi;
 
 fn flags_to_raw(flags: PageFlags) -> u32 {
     let mut raw = 0u32;
@@ -176,17 +156,17 @@ fn flags_to_raw(flags: PageFlags) -> u32 {
 impl MemoryManager for Pmm {
     fn init(&mut self, multiboot_info_addr: u32) {
         unsafe {
-            pmm_init(multiboot_info_addr);
-            vmm_init();
+            ffi::pmm_init(multiboot_info_addr);
+            ffi::vmm_init();
         }
         self.bitmap = core::ptr::null_mut();
-        self.total_frames = unsafe { pmm_get_total_frames() };
-        self.used_frames = unsafe { pmm_get_used_frames() };
-        self.memory_size = unsafe { pmm_get_total_memory() };
+        self.total_frames = unsafe { ffi::pmm_get_total_frames() };
+        self.used_frames = unsafe { ffi::pmm_get_used_frames() };
+        self.memory_size = unsafe { ffi::pmm_get_total_memory() };
     }
 
     fn alloc_frame(&mut self) -> Option<*mut c_void> {
-        let ptr = unsafe { pmm_alloc_frame() };
+        let ptr = unsafe { ffi::pmm_alloc_frame() };
         if ptr.is_null() {
             None
         } else {
@@ -196,7 +176,7 @@ impl MemoryManager for Pmm {
     }
 
     fn free_frame(&mut self, addr: *mut c_void) {
-        unsafe { pmm_free_frame(addr); }
+        unsafe { ffi::pmm_free_frame(addr); }
         self.used_frames = self.used_frames.saturating_sub(1);
     }
 
@@ -206,36 +186,36 @@ impl MemoryManager for Pmm {
         phys_addr: *mut c_void,
         flags: PageFlags,
     ) -> bool {
-        vmm_map(virt_addr, phys_addr, flags_to_raw(flags))
+        ffi::vmm_map(virt_addr, phys_addr, flags_to_raw(flags))
     }
 
     unsafe fn unmap_page(&mut self, virt_addr: *mut c_void) {
-        vmm_unmap(virt_addr);
+        ffi::vmm_unmap(virt_addr);
     }
 
     fn alloc_region(&mut self, size: u32, flags: PageFlags) -> *mut c_void {
-        unsafe { vmm_alloc_region(size, flags_to_raw(flags)) }
+        unsafe { ffi::vmm_alloc_region(size, flags_to_raw(flags)) }
     }
 
     fn free_region(&mut self, addr: *mut c_void, size: u32) {
-        unsafe { vmm_free_region(addr, size); }
+        unsafe { ffi::vmm_free_region(addr, size); }
     }
 
     fn total_memory(&self) -> u64 {
         if self.memory_size == 0 {
-            unsafe { pmm_get_total_memory() }
+            unsafe { ffi::pmm_get_total_memory() }
         } else {
             self.memory_size
         }
     }
 
     fn available_memory(&self) -> u64 {
-        unsafe { pmm_get_available_memory() }
+        unsafe { ffi::pmm_get_available_memory() }
     }
 
     fn total_frames(&self) -> u32 {
         if self.total_frames == 0 {
-            unsafe { pmm_get_total_frames() }
+            unsafe { ffi::pmm_get_total_frames() }
         } else {
             self.total_frames
         }
@@ -243,30 +223,30 @@ impl MemoryManager for Pmm {
 
     fn used_frames(&self) -> u32 {
         if self.used_frames == 0 {
-            unsafe { pmm_get_used_frames() }
+            unsafe { ffi::pmm_get_used_frames() }
         } else {
             self.used_frames
         }
     }
 
     fn create_page_directory(&mut self) -> usize {
-        unsafe { paging_create_directory_phys() as usize }
+        unsafe { ffi::paging_create_directory_phys() as usize }
     }
 
     fn switch_page_directory(&mut self, pd_phys: usize) {
-        unsafe { paging_switch_to_directory(pd_phys as u32); }
+        unsafe { ffi::paging_switch_to_directory(pd_phys as u32); }
     }
 
     fn kernel_page_directory(&self) -> usize {
-        unsafe { paging_get_kernel_directory_phys() as usize }
+        unsafe { ffi::paging_get_kernel_directory_phys() as usize }
     }
 
     fn get_physical_address(&self, virt: usize) -> usize {
-        unsafe { paging_get_physical_address(virt as u32) as usize }
+        unsafe { ffi::paging_get_physical_address(virt as u32) as usize }
     }
 
     fn destroy_page_directory(&mut self, pd_phys: usize) {
-        unsafe { paging_destroy_directory(pd_phys as u32); }
+        unsafe { ffi::paging_destroy_directory(pd_phys as u32); }
     }
 }
 

@@ -42,7 +42,7 @@ use self::xdg_shell::XdgShellHandler;
 use self::layer_shell::LayerShellHandler;
 use self::xdg_output::XdgOutputManagerHandler;
 use self::compositor_integration::CompositorIntegration;
-use crate::graphics::vesa::VesaDisplay;
+use crate::graphics::PlatformDisplay;
 use crate::fusion::FusionDisplayBackend;
 
 /// Wayland server error types
@@ -227,7 +227,7 @@ impl WaylandServer {
 
 /// Initialize with framebuffer reference for compositor integration
      pub fn init_with_framebuffer(&mut self, _width: u32, _height: u32) -> WaylandResult<()> {
-         let display = VesaDisplay::new().ok_or(WaylandError::AllocationFailed)?;
+         let display = PlatformDisplay::new().ok_or(WaylandError::AllocationFailed)?;
          self.framebuffer = Some(FusionDisplayBackend::new(display));
          self.init()
      }

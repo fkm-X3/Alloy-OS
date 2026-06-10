@@ -30,6 +30,13 @@ pub mod framebuffer;
 pub mod font;
 pub mod text;
 pub mod vesa;
+#[cfg(feature = "aarch64")]
+pub mod pl110;
+
+#[cfg(any(feature = "i686", feature = "x86_64"))]
+pub use vesa::VesaDisplay as PlatformDisplay;
+#[cfg(feature = "aarch64")]
+pub use pl110::Pl110Display as PlatformDisplay;
 
 use core::fmt::Debug;
 

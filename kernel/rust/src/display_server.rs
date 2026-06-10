@@ -1,7 +1,7 @@
 use crate::ffi;
 use crate::fusion::backend::FusionDisplayBackend;
 use crate::fusion::shell::LxqtShell;
-use crate::graphics::vesa::VesaDisplay;
+use crate::graphics::PlatformDisplay;
 use crate::fusion::WaylandServer;
 use crate::utils::pointer;
 
@@ -128,25 +128,29 @@ fn set_cursor_visibility(
         .map_err(|_| DisplayServerBootError::SurfaceUpload)
 }
 
-pub fn run(display: VesaDisplay) -> Result<(), DisplayServerBootError> {
+pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
     serial_log(b"[DisplayServer] Booting LXQt-compatible Fusion runtime\n\0");
     let display_width = display.framebuffer().width();
     let display_height = display.framebuffer().height();
 
     let mut backend = FusionDisplayBackend::new(display);
 
-    let mut lxqt_shell = LxqtShell::new(&backend.display_mut());
+    let mut lxqt_shell = LxqtShell::new(backend.display_mut());
     lxqt_shell.init_surfaces(&mut backend);
 
     let mut wayland = WaylandServer::new();
     let _ = wayland.init();
 
-    // Try to use VBE hardware cursor; fall back to software composited cursor
+    // Try to use VBE hardware cursor (x86); fall back to software composited cursor
     let hw_cursor = HardwareCursor {
+        #[cfg(any(feature = "i686", feature = "x86_64"))]
         available: ffi::vesa_hardware_cursor_available(),
+        #[cfg(feature = "aarch64")]
+        available: false,
         enabled: false,
     };
 
+    #[cfg(any(feature = "i686", feature = "x86_64"))]
     if hw_cursor.available {
         ffi::vesa_hardware_cursor_set_enabled(true);
         ffi::vesa_hardware_cursor_set_position(

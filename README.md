@@ -40,3 +40,7 @@ The kernel enters Rust, initializes VFS, boots the display server with Fusion co
 ## Controls
 
 See [docs/controls.md](docs/controls.md) for keyboard shortcuts and mouse usage.
+
+## Tools
+
+see [docs/tools.md](docs/controls.md) for what the tools do and how to use them.

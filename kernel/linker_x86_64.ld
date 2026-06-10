@@ -1,5 +1,4 @@
 /* Linker script for Alloy kernel (x86_64) */
-/* TODO: This is a placeholder - x86_64 boot not yet implemented */
 
 ENTRY(start)
 

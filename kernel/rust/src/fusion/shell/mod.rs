@@ -1,5 +1,4 @@
 use crate::fusion::backend::FusionDisplayBackend;
-use crate::graphics::vesa::VesaDisplay;
 use crate::graphics::Display;
 
 pub mod desktop;
@@ -19,7 +18,7 @@ pub struct LxqtShell {
 }
 
 impl LxqtShell {
-    pub fn new(display: &VesaDisplay) -> Self {
+    pub fn new(display: &impl Display) -> Self {
         let (width, height) = display.get_resolution();
         Self {
             desktop: LxqtDesktop::new(width, height),

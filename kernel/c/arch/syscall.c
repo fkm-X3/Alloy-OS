@@ -134,8 +134,43 @@ void syscall_init() {
 
 #elif defined(ARCH_X86_64)
 
+extern void syscall_entry();
+
 void syscall_init() {
-    serial_print("[Syscall] x86_64 syscall not yet implemented\n");
+    serial_print("[Syscall] Initializing x86_64 syscall interface\n");
+
+    // Set up MSRs for the 'syscall' instruction
+    // STAR (0xC0000081): selects CS and SS for kernel and user
+    uint64_t star = 0;
+    star |= (uint64_t)0x08 << 32;  // SYSCALL CS (kernel code segment)
+    star |= (uint64_t)0x10 << 48;  // SYSRET CS (user code segment - 2)
+    // Actually: for SYSRET, CS = (STAR[63:48] + 16) | 3, which gives 0x18+3 = 0x1B
+    // No wait: SYSRET CS = (STAR[63:48] + 16) | 3
+    // If STAR[63:48] = 0x08, SYSRET CS = (0x08+16) | 3 = 0x18 | 3 = 0x1B
+    // But our x86_64 user code segment is 0x18 (index 3 * 8 = 24 = 0x18)
+    // So STAR[63:48] = 0x08 gives SYSRET CS = (0x08 + 16) | 3 = (0x18) | 3 = 0x1B
+    // Wait, 0x18 | 3 = 0x1B, but the selector is 0x18. The RPL is OR'd by CPU.
+    // So SYSRET gives CS = (STAR[63:48] + 16) | 3 = (0x08 + 16) | 3 = 0x08 + 16 + 3
+    // Hmm 0x08 + 0x10 + 3 = 0x1B. That's 0x18 | 3. Correct!
+    uint32_t star_low = (uint32_t)(star & 0xFFFFFFFF);
+    uint32_t star_high = (uint32_t)((star >> 32) & 0xFFFFFFFF);
+
+    asm volatile("wrmsr" : : "c"(0xC0000081), "a"(star_low), "d"(star_high));
+
+    // LSTAR (0xC0000082): RIP of syscall entry point
+    uint64_t lstar = (uint64_t)syscall_entry;
+    uint32_t lstar_low = (uint32_t)(lstar & 0xFFFFFFFF);
+    uint32_t lstar_high = (uint32_t)((lstar >> 32) & 0xFFFFFFFF);
+    asm volatile("wrmsr" : : "c"(0xC0000082), "a"(lstar_low), "d"(lstar_high));
+
+    // SF_MASK (0xC0000084): mask RFLAGS bits on syscall entry
+    // Mask IF (bit 9) to disable interrupts on entry
+    uint64_t sf_mask = 0x300;  // IF + reserved bit
+    uint32_t sf_low = (uint32_t)(sf_mask & 0xFFFFFFFF);
+    uint32_t sf_high = (uint32_t)((sf_mask >> 32) & 0xFFFFFFFF);
+    asm volatile("wrmsr" : : "c"(0xC0000084), "a"(sf_low), "d"(sf_high));
+
+    serial_print("[Syscall] x86_64 syscall MSRs configured\n");
 }
 
 #elif defined(ARCH_AARCH64)

@@ -1,275 +1,89 @@
-//! Foreign Function Interface (FFI) to C++ kernel functions
+//! Foreign Function Interface (FFI) to C kernel functions
 //!
-//! This module provides safe Rust wrappers around C++ functions
+//! Raw extern "C" declarations are consolidated in the HAL crate
+//! (`alloy_kernel_hal::ffi`). This module re-exports them and adds
+//! safe Rust wrappers, constants, and convenience functions.
+
+pub use alloy_kernel_hal::ffi::*;
 
 use core::ffi::c_void;
-use crate::process::CpuContext;
 
-// External C++ functions
-extern "C" {
-    pub fn serial_print(s: *const u8);
-    pub fn serial_print_hex(value: u32);
-    pub fn vga_print(s: *const u8);
-    pub fn vga_println(s: *const u8);
-    pub fn vga_putchar(c: u8);
-    pub fn vga_set_color(fg: u8, bg: u8);
-    pub fn vga_clear();
-    pub fn vga_set_cursor(x: u8, y: u8);
-    pub fn vga_get_cursor_x() -> u8;
-    pub fn vga_get_cursor_y() -> u8;
-    pub fn vga_print_hex(value: u32);
-    pub fn vga_print_dec(value: u32);
+// === Safe wrappers ===
 
-    // Memory management functions (from VMM)
-    pub fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
-    pub fn vmm_free_region(addr: *mut c_void, size: u32);
-    pub fn vmm_map(virt_addr: *mut c_void, phys_addr: *mut c_void, flags: u32) -> bool;
-    pub fn vmm_unmap(virt_addr: *mut c_void);
-    pub fn vmm_get_allocated_pages() -> u32;
-    pub fn vmm_get_heap_start() -> u32;
-    pub fn vmm_get_heap_size() -> u32;
-    pub fn vmm_get_next_virt_addr() -> u32;
-
-    // Physical memory management
-    pub fn pmm_alloc_frame() -> *mut c_void;
-    pub fn pmm_free_frame(addr: *mut c_void);
-    pub fn pmm_get_total_frames() -> u32;
-    pub fn pmm_get_used_frames() -> u32;
-    pub fn pmm_get_total_memory() -> u64;
-    pub fn pmm_get_available_memory() -> u64;
-
-    // Keyboard functions - matches C++ signatures
-    pub fn keyboard_has_data() -> bool;
-    pub fn keyboard_get_char() -> i8;  // C char is signed
-
-    // Mouse functions - matches C++ signatures
-    pub fn mouse_has_data() -> bool;
-    pub fn mouse_read_event(
-        dx: *mut i8,
-        dy: *mut i8,
-        wheel: *mut i8,
-        buttons: *mut u8,
-        flags: *mut u8,
-    ) -> bool;
-    pub fn mouse_is_initialized() -> bool;
-    pub fn mouse_last_init_error() -> u8;
-
-    // CPU information functions
-    pub fn cpu_get_vendor_ffi(vendor: *mut u8);
-    pub fn cpu_get_features_ffi() -> u32;
-    pub fn cpu_get_model_info_ffi(family: *mut u32, model: *mut u32, stepping: *mut u32);
-
-    // System uptime
-    pub fn get_system_uptime_ms() -> u64;
-
-    // Context switching (from context_switch.asm)
-    pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
-
-    // Socket/Network syscalls (for Wayland socket support)
-    pub fn socket(domain: i32, socket_type: i32, protocol: i32) -> i32;
-    pub fn bind_socket(fd: i32, addr: *const c_void, addr_len: u32) -> i32;
-    pub fn listen_socket(fd: i32, backlog: i32) -> i32;
-    pub fn accept_socket(fd: i32) -> i32;
-    pub fn connect_socket(fd: i32, addr: *const c_void, addr_len: u32) -> i32;
-    pub fn close_socket(fd: i32) -> i32;
-
-    // Paging helpers
-    pub fn paging_create_directory_phys() -> u32;
-    pub fn paging_switch_to_directory(pd_phys: u32) -> bool;
-    pub fn paging_get_kernel_directory_phys() -> u32;
-    pub fn paging_get_physical_address(virt: u32) -> u32;
-    pub fn paging_destroy_directory(pd_phys: u32);
-    pub fn paging_clone_directory(pd_phys: u32) -> u32;
-    pub fn paging_fork_directory(pd_phys: u32) -> u32;
-    pub fn paging_handle_cow_fault(fault_addr: u32) -> u8;
-    pub fn paging_map_page_in_pd(pd_phys: u32, virt_addr: u32, phys_addr: u32, flags: u32) -> bool;
-    pub fn paging_temp_map_frame(phys_addr: u32) -> *mut core::ffi::c_void;
-    pub fn paging_temp_unmap_frame();
-
-    // Physical memory manager refcounting
-    pub fn pmm_refcount_inc(addr: *mut c_void);
-    pub fn pmm_refcount_dec(addr: *mut c_void);
-
-    // Timer functions (from timer.cpp)
-    pub fn timer_init_ffi(frequency: u32);
-    pub fn timer_get_ticks_ffi() -> u64;
-    pub fn timer_get_uptime_ms_ffi() -> u64;
-    pub fn timer_get_frequency_ffi() -> u32;
-
-    // VESA VBE hardware cursor functions
-    pub fn vesa_cursor_is_available() -> u8;
-    pub fn vesa_cursor_enable(enable: u8);
-    pub fn vesa_cursor_set_position(x: u16, y: u16);
-
-    // VESA VBE graphics functions (from vesa.cpp)
-    /// Initialize VESA VBE detection and controller check
-    pub fn vesa_init();
-
-    /// Set a graphics mode
-    /// Returns: 0 on success, 1 if not initialized, 2 if mode not supported, 3 if mode setting failed
-    pub fn vesa_set_mode(mode: u16) -> u16;
-
-    /// Get current framebuffer linear address
-    /// Returns: Physical address of linear framebuffer, 0 if not available
-    pub fn vesa_get_framebuffer() -> u32;
-
-    /// Get current graphics mode resolution
-    /// Parameters: width, height - pointers to store resolution
-    pub fn vesa_get_resolution(width: *mut u16, height: *mut u16);
-
-    /// Get current graphics mode number
-    /// Returns: 0 on success, non-zero on failure
-    pub fn vesa_get_mode(mode: *mut u16) -> u16;
-
-    /// Check if VESA VBE is available
-    /// Returns: 1 if available, 0 if not
-    pub fn vesa_is_available() -> u8;
-
-    /// Get controller capabilities
-    /// Returns: Capabilities byte from VBE info block
-    pub fn vesa_get_capabilities() -> u8;
-
-    /// Get bits per pixel for current mode
-    /// Returns: 0, 16, 24, or 32 bits per pixel; 0 if not in graphics mode
-    pub fn vesa_get_bits_per_pixel() -> u8;
-
-    /// Get bytes per scanline for current mode
-    /// Returns: Bytes per scan line, or 0 if not in graphics mode
-    pub fn vesa_get_bytes_per_scanline() -> u16;
-
-    /// Get total framebuffer size in bytes
-    /// Returns: Size in bytes, or 0 if not in graphics mode
-    pub fn vesa_get_framebuffer_size() -> u32;
-
-    // ATA PIO driver functions
-    pub fn ata_init() -> i32;
-    pub fn ata_drive_present(bus: u8, drive: u8) -> i32;
-    pub fn ata_read_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *mut u8) -> i32;
-    pub fn ata_write_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *const u8) -> i32;
-
-    // PCI functions
-    pub fn pci_init();
-    pub fn pci_device_count() -> i32;
-
-    // AHCI driver functions
-    pub fn ahci_init() -> i32;
-    pub fn ahci_drive_count() -> i32;
-    pub fn ahci_read_sectors(index: i32, lba: u64, count: u8, buffer: *mut u8) -> i32;
-    pub fn ahci_write_sectors(index: i32, lba: u64, count: u8, buffer: *const u8) -> i32;
-
-    // Initrd / ramdisk functions
-    pub fn initrd_init(multiboot_addr: u32);
-    pub fn initrd_module_count() -> i32;
-    pub fn initrd_module_start_ffi(index: i32) -> u32;
-    pub fn initrd_module_end_ffi(index: i32) -> u32;
-    pub fn initrd_module_size_ffi(index: i32) -> u32;
-    pub fn initrd_module_cmdline_ffi(index: i32, buf: *mut u8, max_len: u32);
-    pub fn initrd_has_modules_ffi() -> i32;
-}
-
-// Safe wrappers
 pub fn print_str(s: &str) {
-    // Convert Rust string to null-terminated C string
     let mut buffer = [0u8; 256];
     let bytes = s.as_bytes();
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
-    buffer[len] = 0; // Null terminator
-
+    buffer[len] = 0;
     unsafe {
         serial_print(buffer.as_ptr());
     }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vga_print_str(s: &str) {
     let mut buffer = [0u8; 256];
     let bytes = s.as_bytes();
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
     buffer[len] = 0;
-
-    unsafe {
-        vga_print(buffer.as_ptr());
-    }
+    unsafe { vga_print(buffer.as_ptr()) }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vga_println_str(s: &str) {
     let mut buffer = [0u8; 256];
     let bytes = s.as_bytes();
     let len = core::cmp::min(bytes.len(), 255);
     buffer[..len].copy_from_slice(&bytes[..len]);
     buffer[len] = 0;
-
-    unsafe {
-        vga_println(buffer.as_ptr());
-    }
+    unsafe { vga_println(buffer.as_ptr()) }
 }
 
-/// Safely print C-string to serial (with null check)
-///
 /// # Safety
 /// `s` must be a valid null-terminated C string pointer or null.
-/// If non-null, every byte up to and including the null terminator must be readable.
 pub unsafe fn serial_print_safe(s: *const u8) {
     if !s.is_null() {
         serial_print(s);
     }
 }
 
-/// Safely print C-string to VGA (with null check)
-///
-/// # Safety
-/// `s` must be a valid null-terminated C string pointer or null.
-/// If non-null, every byte up to and including the null terminator must be readable.
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub unsafe fn vga_print_safe(s: *const u8) {
     if !s.is_null() {
         vga_print(s);
     }
 }
 
-/// Safely print C-string line to VGA (with null check)
-///
-/// # Safety
-/// `s` must be a valid null-terminated C string pointer or null.
-/// If non-null, every byte up to and including the null terminator must be readable.
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub unsafe fn vga_println_safe(s: *const u8) {
     if !s.is_null() {
         vga_println(s);
     }
 }
 
-/// Set VGA color
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn set_vga_color(fg: u8, bg: u8) {
-    unsafe {
-        vga_set_color(fg, bg);
-    }
+    unsafe { vga_set_color(fg, bg) }
 }
 
-/// Print a character to VGA
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn put_char(c: char) {
-    unsafe {
-        vga_putchar(c as u8);
-    }
+    unsafe { vga_putchar(c as u8) }
 }
 
-/// Check if keyboard has data
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn keyboard_has_key() -> bool {
-    unsafe {
-        keyboard_has_data()
-    }
+    unsafe { keyboard_has_data() }
 }
 
-/// Get character from keyboard (returns as u8, handles special keys 128-255)
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn keyboard_read() -> u8 {
-    unsafe {
-        let c = keyboard_get_char();
-        // Special keys use values 128-255, regular ASCII is 0-127
-        // Just cast to u8 to handle full range
-        c as u8
-    }
+    unsafe { keyboard_get_char() as u8 }
 }
 
-/// Block until a key is available, then read it.
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn keyboard_read_blocking() -> u8 {
     loop {
         if keyboard_has_key() {
@@ -281,6 +95,7 @@ pub fn keyboard_read_blocking() -> u8 {
     }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MouseEvent {
     pub dx: i8,
@@ -290,19 +105,22 @@ pub struct MouseEvent {
     pub flags: u8,
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn mouse_has_event() -> bool {
     unsafe { mouse_has_data() }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn mouse_ready() -> bool {
     unsafe { mouse_is_initialized() }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn mouse_init_error_code() -> u8 {
     unsafe { mouse_last_init_error() }
 }
 
-/// Block until a mouse event is available, then read it.
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn mouse_read_blocking() -> MouseEvent {
     loop {
         if let Some(event) = mouse_read() {
@@ -314,6 +132,7 @@ pub fn mouse_read_blocking() -> MouseEvent {
     }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn mouse_read() -> Option<MouseEvent> {
     let mut dx: i8 = 0;
     let mut dy: i8 = 0;
@@ -335,13 +154,7 @@ pub fn mouse_read() -> Option<MouseEvent> {
         return None;
     }
 
-    Some(MouseEvent {
-        dx,
-        dy,
-        wheel,
-        buttons,
-        flags,
-    })
+    Some(MouseEvent { dx, dy, wheel, buttons, flags })
 }
 
 // Special key codes (match C++ keyboard.h)
@@ -397,18 +210,15 @@ pub const PAGE_WRITE: u32 = 0x002;
 pub const PAGE_USER: u32 = 0x004;
 
 // ============================================================================
-// VESA VBE Graphics Safe Wrappers
+// VESA VBE Graphics Safe Wrappers (x86 only)
 // ============================================================================
 
-/// Initialize VESA VBE graphics mode detection
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_initialize() {
-    unsafe {
-        vesa_init();
-    }
+    unsafe { vesa_init() }
 }
 
-/// Set graphics mode with error handling
-/// Returns tuple of (success, error_code)
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
     unsafe {
         let result = vesa_set_mode(mode);
@@ -416,21 +226,15 @@ pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
     }
 }
 
-/// Get framebuffer physical address
-/// Returns None if not available
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_framebuffer_addr() -> Option<u32> {
     unsafe {
         let addr = vesa_get_framebuffer();
-        if addr != 0 {
-            Some(addr)
-        } else {
-            None
-        }
+        if addr != 0 { Some(addr) } else { None }
     }
 }
 
-/// Get current display resolution in pixels
-/// Returns (width, height) or (0, 0) if not available
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_display_resolution() -> (u16, u16) {
     unsafe {
         let mut width: u16 = 0;
@@ -440,74 +244,60 @@ pub fn vesa_display_resolution() -> (u16, u16) {
     }
 }
 
-/// Get current graphics mode
-/// Returns Some(mode) on success, None on failure
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_current_mode() -> Option<u16> {
     unsafe {
         let mut mode: u16 = 0;
         let result = vesa_get_mode(&mut mode);
-        if result == 0 {
-            Some(mode)
-        } else {
-            None
-        }
+        if result == 0 { Some(mode) } else { None }
     }
 }
 
-/// Check if VESA VBE graphics is available
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_available() -> bool {
-    unsafe {
-        vesa_is_available() != 0
-    }
+    unsafe { vesa_is_available() != 0 }
 }
 
-/// Get VESA controller capabilities
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_controller_capabilities() -> u8 {
-    unsafe {
-        vesa_get_capabilities()
-    }
+    unsafe { vesa_get_capabilities() }
 }
 
-/// Get current color depth in bits per pixel
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_color_depth() -> u8 {
-    unsafe {
-        vesa_get_bits_per_pixel()
-    }
+    unsafe { vesa_get_bits_per_pixel() }
 }
 
-/// Get scanline stride in bytes
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_scanline_bytes() -> u16 {
-    unsafe {
-        vesa_get_bytes_per_scanline()
-    }
+    unsafe { vesa_get_bytes_per_scanline() }
 }
 
-/// Get total framebuffer size in bytes
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_buffer_size() -> u32 {
-    unsafe {
-        vesa_get_framebuffer_size()
-    }
+    unsafe { vesa_get_framebuffer_size() }
 }
 
-/// Check if VBE hardware cursor is available via I/O ports
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_hardware_cursor_available() -> bool {
     unsafe { vesa_cursor_is_available() != 0 }
 }
 
-/// Enable or disable VBE hardware cursor
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_hardware_cursor_set_enabled(enabled: bool) {
     unsafe { vesa_cursor_enable(enabled as u8) }
 }
 
-/// Set VBE hardware cursor position (top-left corner)
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn vesa_hardware_cursor_set_position(x: u16, y: u16) {
     unsafe { vesa_cursor_set_position(x, y) }
 }
 
 // ============================================================================
-// ATA PIO Driver Safe Wrappers
+// ATA PIO Driver Safe Wrappers (x86 only)
 // ============================================================================
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub struct AtaDriveInfo {
     pub present: bool,
     pub is_lba48: bool,
@@ -515,6 +305,7 @@ pub struct AtaDriveInfo {
     pub model: [u8; 41],
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 impl AtaDriveInfo {
     pub fn probe(bus: u8, drive: u8) -> Self {
         let present = unsafe { ata_drive_present(bus, drive) != 0 };
@@ -525,26 +316,31 @@ impl AtaDriveInfo {
     }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ata_initialize() -> bool {
     unsafe { ata_init() != 0 }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ata_drive_exists(bus: u8, drive: u8) -> bool {
     unsafe { ata_drive_present(bus, drive) != 0 }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ata_read(bus: u8, drive: u8, lba: u64, count: u8, buf: &mut [u8]) -> bool {
     unsafe { ata_read_sectors(bus, drive, lba, count, buf.as_mut_ptr()) != 0 }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ata_write(bus: u8, drive: u8, lba: u64, count: u8, buf: &[u8]) -> bool {
     unsafe { ata_write_sectors(bus, drive, lba, count, buf.as_ptr()) != 0 }
 }
 
 // ============================================================================
-// AHCI Driver Safe Wrappers
+// AHCI Driver Safe Wrappers (x86 only)
 // ============================================================================
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub struct AhciDriveInfo {
     pub present: bool,
     pub port_num: u8,
@@ -552,6 +348,7 @@ pub struct AhciDriveInfo {
     pub model: [u8; 41],
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 impl AhciDriveInfo {
     #[allow(unused_variables)]
     pub fn probe(index: i32) -> Self {
@@ -559,54 +356,63 @@ impl AhciDriveInfo {
     }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ahci_initialize() -> bool {
     unsafe { ahci_init() != 0 }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ahci_drive_count_ffi() -> i32 {
     unsafe { ahci_drive_count() }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ahci_read(drive: i32, lba: u64, count: u8, buf: &mut [u8]) -> bool {
     unsafe { ahci_read_sectors(drive, lba, count, buf.as_mut_ptr()) != 0 }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn ahci_write(drive: i32, lba: u64, count: u8, buf: &[u8]) -> bool {
     unsafe { ahci_write_sectors(drive, lba, count, buf.as_ptr()) != 0 }
 }
 
 // ============================================================================
-// Initrd / Ramdisk Safe Wrappers
+// Initrd / Ramdisk Safe Wrappers (x86 only)
 // ============================================================================
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_initialize(multiboot_addr: u32) {
     unsafe { initrd_init(multiboot_addr) }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_module_count_ffi() -> i32 {
     unsafe { initrd_module_count() }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_module_start(index: i32) -> u32 {
     unsafe { initrd_module_start_ffi(index) }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_module_end(index: i32) -> u32 {
     unsafe { initrd_module_end_ffi(index) }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_module_size(index: i32) -> u32 {
     unsafe { initrd_module_size_ffi(index) }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_module_cmdline(index: i32) -> [u8; 64] {
     let mut buf = [0u8; 64];
-    unsafe {
-        initrd_module_cmdline_ffi(index, buf.as_mut_ptr(), 64);
-    }
+    unsafe { initrd_module_cmdline_ffi(index, buf.as_mut_ptr(), 64); }
     buf
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub fn initrd_has_modules() -> bool {
     unsafe { initrd_has_modules_ffi() != 0 }
 }

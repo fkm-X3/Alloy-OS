@@ -116,8 +116,8 @@ void pl110_set_pixel(uint16_t x, uint16_t y, uint16_t color) {
 void pl110_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color) {
     if (!pl110_initialized) return;
     volatile uint16_t* fb = (volatile uint16_t*)(uintptr_t)framebuffer_phys;
-    for (uint16_t row = y; row < y + h && row < fb_height; row++) {
-        for (uint16_t col = x; col < x + w && col < fb_width; col++) {
+    for (uint32_t row = y; row < y + h && row < fb_height; row++) {
+        for (uint32_t col = x; col < x + w && col < fb_width; col++) {
             fb[row * fb_width + col] = color;
         }
     }

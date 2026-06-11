@@ -136,7 +136,7 @@ unsigned int wl_registry_bind(struct wl_registry *reg, unsigned int name,
                           + padded + sizeof(version) + sizeof(new_id));
 
     unsigned char payload[512];
-    unsigned short off = 0;
+    unsigned int off = 0;
     mymemcpy(payload + off, &name, sizeof(name)); off += sizeof(name);
     mymemcpy(payload + off, &iface_len, sizeof(iface_len)); off += sizeof(iface_len);
     mymemcpy(payload + off, interface, iface_len); off += iface_len;

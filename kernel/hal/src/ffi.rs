@@ -160,6 +160,6 @@ extern "C" {
     pub fn pl110_init(fb_addr: u32, width: u16, height: u16);
     pub fn pl110_is_available() -> i32;
     pub fn pl110_get_framebuffer() -> u32;
-    pub fn pl110_get_resolution(width: *mut u16, height: *mut u16);
+    pub fn pl110_get_resolution(width: *mut u32, height: *mut u32);
     pub fn pl110_get_bits_per_pixel() -> u8;
 }

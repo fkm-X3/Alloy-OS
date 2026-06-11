@@ -72,8 +72,8 @@ impl Pl110Display {
             return None;
         }
 
-        let mut width: u16 = 0;
-        let mut height: u16 = 0;
+        let mut width: u32 = 0;
+        let mut height: u32 = 0;
         unsafe {
             ffi::pl110_get_resolution(&mut width, &mut height);
         }

@@ -32,8 +32,8 @@
 
 // PL110 state
 static uint32_t framebuffer_phys = 0;
-static uint16_t fb_width = 1024;
-static uint16_t fb_height = 768;
+static uint32_t fb_width = 1024;
+static uint32_t fb_height = 768;
 static uint8_t fb_bpp = 16;
 static int pl110_initialized = 0;
 
@@ -98,7 +98,7 @@ uint32_t pl110_get_framebuffer() {
     return framebuffer_phys;
 }
 
-void pl110_get_resolution(uint16_t* width, uint16_t* height) {
+void pl110_get_resolution(uint32_t* width, uint32_t* height) {
     if (width)  *width  = fb_width;
     if (height) *height = fb_height;
 }

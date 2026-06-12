@@ -111,7 +111,7 @@ OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch userland
+.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review print-arch userland
 
 all: userland $(KERNEL_ELF)
 
@@ -245,31 +245,3 @@ print-arch:
 print-%:
 	@echo $* = $($*)
 
-# Docker build: Create image
-docker-build:
-	@echo "Building Alloy OS Docker image..."
-	docker build -t alloy-os-dev:latest .
-	@echo "Docker image built: alloy-os-dev:latest"
-
-docker-build-prod:
-		@echo "Building Alloy OS Docker image..."
-		docker build -t alloy-os:latest .
-		@echo "Docker image built: alloy-os:latest"
-
-# Docker run: Start container
-docker-run: docker-build
-	@echo "Starting Alloy OS container..."
-	docker compose run --rm -it alloy
-
-docker-run-prod: docker-build
-	@echo "Starting Alloy OS container..."
-	docker run --rm -it \
-		-p 22:22 \
-		-v "$(CURDIR):/workspace" \
-		-v "$(HOME)/.local/i686-elf:/root/.local/i686-elf" \
-		-v "$(HOME)/.cargo/registry:/root/.cargo/registry" \
-		-v "$(HOME)/.cargo/git:/root/.cargo/git" \
-		-w /workspace \
-		--name alloy-os \
-		alloy-os:latest \
-		bash

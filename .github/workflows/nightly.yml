@@ -22,6 +22,39 @@ jobs:
           fetch-depth: 1
           submodules: recursive
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            nasm \
+            grub-pc-bin \
+            grub-common \
+            xorriso \
+            mtools \
+            dosfstools \
+            curl \
+            bison \
+            flex \
+            libgmp3-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            texinfo \
+            wget \
+            tar
+
+      - name: Install Rust nightly
+        run: |
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          rustup component add rust-src
+
+      - name: Build cross-compiler toolchain
+        run: |
+          chmod +x build-toolchain.sh
+          sed -i 's/\r$//' build-toolchain.sh
+          ./build-toolchain.sh
+
       - name: Generate Version Tag
         id: vars
         run: |
@@ -29,12 +62,10 @@ jobs:
           echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Build release in Docker
-        uses: ./.github/actions/docker-ci
-        with:
-          command: |
-            make clean
-            make iso
+      - name: Build kernel
+        run: |
+          make clean
+          make iso
 
       - name: Prepare Artifacts
         run: |
@@ -59,7 +90,7 @@ jobs:
             ```bash
             qemu-system-i386 -cdrom alloy.iso -serial stdio
             ```
-          generate_release_notes: true #
+          generate_release_notes: true
           draft: false
           prerelease: true
           files: |

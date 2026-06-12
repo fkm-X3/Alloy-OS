@@ -28,10 +28,10 @@
 
 | Workflow | What it does |
 |---|---|
-| `build-and-test.yml` | Full Docker build + ISO + boot verification via serial log |
+| `build-and-test.yml` | Full build + ISO + boot verification via serial log |
 | `quick-check.yml` | PR syntax checks (nasm, fmt, clippy) |
 
-All CI runs inside Docker via `.github/actions/docker-ci`.
+CI installs dependencies and builds natively on ubuntu-latest.
 
 ## Gotchas
 

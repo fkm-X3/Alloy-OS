@@ -1,21 +1,18 @@
 # Build & Run
 
-## Docker (recommended)
+## Prerequisites
 
-```sh
-docker compose build
-docker compose run --rm alloy make output
-```
+- Cross-compiler (`i686-elf-gcc`) — built via `build-toolchain.sh`
+- nasm, QEMU, Rust nightly
+- On Linux: `build-essential`, `grub-pc-bin`, `xorriso`, `mtools`, `dosfstools`
 
-The repo is bind-mounted into `/workspace`, so host edits are visible immediately.
-
-## Native workflow
+## Build and run
 
 ```sh
 make iso       # build kernel + bootable ISO
 make lazy      # clean rebuild + ISO
 make run       # QEMU with GUI window
-make output    # QEMU headless, serial output only (works in Docker)
+make output    # QEMU headless, serial output only
 make screenshot # headless boot + auto-capture desktop PNG
 make mouse-smoke        # scripted mouse interaction test
 make mouse-screenshot   # mouse test + screenshot
@@ -23,7 +20,7 @@ make debug     # QEMU with GDB stub (-s -S)
 make clean     # remove all build outputs
 ```
 
-`make run` opens a GUI QEMU window and may need display forwarding in Docker. Headless targets work well in containers.
+`make run` opens a GUI QEMU window.
 
 ## Validation
 

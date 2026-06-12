@@ -13,10 +13,14 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
     - name: Checkout code
@@ -25,55 +29,34 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          build-essential \
-          nasm \
-          grub-pc-bin \
-          grub-common \
-          xorriso \
-          mtools \
-          dosfstools \
-          qemu-system-x86 \
-          python3 \
-          python3-pip \
-          curl \
-          bison \
-          flex \
-          libgmp3-dev \
-          libmpc-dev \
-          libmpfr-dev \
-          texinfo \
-          wget \
-          tar
-
-    - name: Install Rust nightly
-      run: |
-        curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        rustup component add rust-src rustfmt clippy
-
-    - name: Build cross-compiler toolchain
-      run: |
-        chmod +x build-toolchain.sh
-        sed -i 's/\r$//' build-toolchain.sh
-        ./build-toolchain.sh
-
     - name: Cache Rust target directories
       uses: actions/cache@v5
       with:
         path: |
           kernel/rust/target
-        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'build-toolchain.sh') }}
+        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
         restore-keys: |
           cargo-target-${{ runner.os }}-
 
+    - name: Log in to GHCR
+      uses: docker/login-action@v4
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set lowercase image tag
+      id: set-image
+      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
+
     - name: Build kernel
-      run: |
-        make
-        make iso
+      uses: ./.github/actions/docker-ci
+      with:
+        pull: false
+        image-tag: ${{ steps.set-image.outputs.image-tag }}
+        command: |
+          make
+          make iso
 
     - name: Verify build artifacts
       if: always()
@@ -105,6 +88,9 @@ jobs:
   boot-test:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
     - name: Checkout code

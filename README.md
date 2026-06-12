@@ -14,9 +14,12 @@ Kernel boot, Fusion display, Wayland support, and desktop runtime in one repo. B
 
 ## Quick start
 
-See [docs/build.md](docs/build.md) for make targets, native builds, and validation commands.
+```sh
+docker compose build
+docker compose run --rm alloy make output
+```
 
-Prerequisites: cross-compiler (`i686-elf-gcc`), nasm, QEMU, Rust nightly. The cross-compiler is built via `build-toolchain.sh`.
+See [docs/build.md](docs/build.md) for all make targets, native builds, and validation commands.
 
 ## Architecture
 

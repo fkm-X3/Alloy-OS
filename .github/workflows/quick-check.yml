@@ -22,17 +22,6 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends nasm build-essential
-
-    - name: Install Rust nightly
-      run: |
-        curl -fsSL https://sh.rustup.rs | sh -s -- -y --default-toolchain nightly --profile minimal
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        rustup component add rust-src rustfmt clippy
-
     - name: Cache Rust dependencies
       uses: actions/cache@v5
       with:
@@ -45,20 +34,22 @@ jobs:
         restore-keys: |
           rust-${{ runner.os }}-quick-
 
-    - name: Syntax checks
-      run: |
-        echo "Checking assembly files..."
-        for asm_file in $(find . -name "*.asm"); do
-          echo "Checking $asm_file"
-          nasm -f elf32 -o /dev/null "$asm_file"
-        done
-        echo "All assembly files are valid!"
+    - name: Syntax checks in Docker
+      uses: ./.github/actions/docker-ci
+      with:
+        command: |
+          echo "Checking assembly files..."
+          for asm_file in $(find . -name "*.asm"); do
+            echo "Checking $asm_file"
+            nasm -f elf32 -o /dev/null "$asm_file"
+          done
+          echo "All assembly files are valid!"
 
-        echo "Building userland binaries (needed by Rust include_bytes!)..."
-        make -C os/userland
-        cp os/userland/build/hello hello 2>/dev/null || true
-        cp os/userland/build/compositor compositor 2>/dev/null || true
+          echo "Building userland binaries (needed by Rust include_bytes!)..."
+          make -C os/userland
+          cp os/userland/build/hello hello 2>/dev/null || true
+          cp os/userland/build/compositor compositor 2>/dev/null || true
 
-        cd kernel/rust
-        cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
-        cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
+          cd kernel/rust
+          cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
+          cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"

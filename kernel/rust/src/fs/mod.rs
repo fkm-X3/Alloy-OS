@@ -148,6 +148,23 @@ pub fn vfs_init() {
         }
     }
 
+    let alloy_de_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../alloy_de"));
+    if !alloy_de_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/alloy_de", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, alloy_de_bytes.to_vec());
+                unsafe { crate::ffi::serial_print(c"[VFS] /alloy_de embedded into VFS\n".as_ptr() as *const u8); }
+            }
+        }
+        if let Ok(id2) = vfs_open("/bin/alloy_de", 0, 0) {
+            let mut g2 = VFS_STATE.lock();
+            if let Some(state2) = g2.as_mut() {
+                state2.data.insert(id2, alloy_de_bytes.to_vec());
+            }
+        }
+    }
+
     unsafe { crate::ffi::serial_print(c"[VFS] Initializing block devices...\n".as_ptr() as *const u8); }
 
     let devices = crate::block::init_block_devices();

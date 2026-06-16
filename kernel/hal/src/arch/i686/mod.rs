@@ -41,10 +41,10 @@ impl Arch for I686Arch {
 
         unsafe {
             core::arch::asm!(
-                "push rbx",
+                "push ebx",
                 "cpuid",
                 "mov {0:e}, ebx",
-                "pop rbx",
+                "pop ebx",
                 out(reg) ebx,
                 in("eax") 0,
                 out("ecx") ecx,
@@ -76,9 +76,9 @@ impl Arch for I686Arch {
         let edx: u32;
         unsafe {
             core::arch::asm!(
-                "push rbx",
+                "push ebx",
                 "cpuid",
-                "pop rbx",
+                "pop ebx",
                 in("eax") 1,
                 in("ecx") 0,
                 lateout("edx") edx,
@@ -93,9 +93,9 @@ impl Arch for I686Arch {
         let eax: u32;
         unsafe {
             core::arch::asm!(
-                "push rbx",
+                "push ebx",
                 "cpuid",
-                "pop rbx",
+                "pop ebx",
                 in("eax") 1,
                 in("ecx") 0,
                 lateout("eax") eax,

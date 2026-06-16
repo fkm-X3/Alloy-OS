@@ -113,7 +113,7 @@ pub fn composite_frame(
 
     /// Composite with explicit buffer and damage information
 pub fn composite_surface(
-         _backend: &mut FusionDisplayBackend,
+         backend: &mut FusionDisplayBackend,
          buffer: &ShmBuffer,
          damage: &[DamageRect],
          surface_x: i32,
@@ -129,9 +129,12 @@ pub fn composite_surface(
             return Ok(());
         }
 
-        if buffer.kernel_vaddr.is_none() {
-            return Ok(());
-        }
+        let base = match buffer.kernel_vaddr {
+            Some(vaddr) => vaddr as *const u8,
+            None => return Ok(()),
+        };
+
+        let bpp = buffer.format.bytes_per_pixel() as u32;
 
         for damage_rect in damage {
             let bounds = DamageRect::full(buffer.width as i32, buffer.height as i32);
@@ -140,11 +143,6 @@ pub fn composite_surface(
                 None => continue,
             };
 
-            let _bytes_per_pixel = buffer.format.bytes_per_pixel() as u32;
-            let source_offset = buffer.offset
-                .saturating_add(clipped.y as u32 * buffer.stride)
-                .saturating_add(clipped.x as u32 * _bytes_per_pixel);
-
             let dest_x = surface_x.saturating_add(clipped.x);
             let dest_y = surface_y.saturating_add(clipped.y);
 
@@ -152,15 +150,58 @@ pub fn composite_surface(
                 continue;
             }
 
+            let w = clipped.width as u32;
+            let h = clipped.height as u32;
+            let row_stride = buffer.stride as usize;
+            let base_offset = buffer.offset as usize
+                + clipped.y as usize * row_stride
+                + clipped.x as usize * bpp as usize;
+
             match buffer.format {
                 ShmFormat::Argb8888 => {
-                    let _ = (source_offset, dest_x, dest_y);
+                    let mut pixels = alloc::vec![0u32; (w * h) as usize];
+                    for row in 0..h {
+                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        for col in 0..w {
+                            let pixel = unsafe {
+                                core::ptr::read_unaligned(row_ptr.add(col as usize * 4) as *const u32)
+                            };
+                            pixels[(row * w + col) as usize] = pixel;
+                        }
+                    }
+                    backend.composite_shm_buffer(&pixels, w, h, dest_x, dest_y, 0, 0, w, h);
                 }
                 ShmFormat::Xrgb8888 => {
-                    let _ = (source_offset, dest_x, dest_y);
+                    let mut pixels = alloc::vec![0u32; (w * h) as usize];
+                    for row in 0..h {
+                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        for col in 0..w {
+                            let pixel = unsafe {
+                                core::ptr::read_unaligned(row_ptr.add(col as usize * 4) as *const u32)
+                            };
+                            pixels[(row * w + col) as usize] = pixel | 0xFF000000;
+                        }
+                    }
+                    backend.composite_shm_buffer(&pixels, w, h, dest_x, dest_y, 0, 0, w, h);
                 }
                 ShmFormat::Rgb565 => {
-                    let _ = (source_offset, dest_x, dest_y);
+                    let mut pixels = alloc::vec![0u32; (w * h) as usize];
+                    for row in 0..h {
+                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        for col in 0..w {
+                            let pixel16 = unsafe {
+                                core::ptr::read_unaligned(row_ptr.add(col as usize * 2) as *const u16)
+                            };
+                            let r = ((pixel16 >> 11) & 0x1F) as u32;
+                            let g = ((pixel16 >> 5) & 0x3F) as u32;
+                            let b = (pixel16 & 0x1F) as u32;
+                            let r8 = (r << 3) | (r >> 2);
+                            let g8 = (g << 2) | (g >> 4);
+                            let b8 = (b << 3) | (b >> 2);
+                            pixels[(row * w + col) as usize] = 0xFF000000 | (r8 << 16) | (g8 << 8) | b8;
+                        }
+                    }
+                    backend.composite_shm_buffer(&pixels, w, h, dest_x, dest_y, 0, 0, w, h);
                 }
             }
         }

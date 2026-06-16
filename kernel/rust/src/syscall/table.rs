@@ -26,6 +26,8 @@ pub const BRK: u32 = 19;
 pub const HAS_PENDING_CONNECTIONS: u32 = 18;
 pub const SOCKET_READ: u32 = 23;
 pub const SOCKET_WRITE: u32 = 24;
+pub const ALLOC_SHM: u32 = 25;
+pub const SHM_USER_VADDR: u32 = 26;
 
 /// Enum representation of syscall numbers
 #[repr(u32)]
@@ -56,6 +58,8 @@ pub enum SyscallNumber {
     WaitPid = WAITPID,
     SocketRead = SOCKET_READ,
     SocketWrite = SOCKET_WRITE,
+    AllocShm = ALLOC_SHM,
+    ShmUserVaddr = SHM_USER_VADDR,
 }
 
 impl SyscallNumber {
@@ -86,6 +90,8 @@ impl SyscallNumber {
             WAITPID => Some(SyscallNumber::WaitPid),
             SOCKET_READ => Some(SyscallNumber::SocketRead),
             SOCKET_WRITE => Some(SyscallNumber::SocketWrite),
+            ALLOC_SHM => Some(SyscallNumber::AllocShm),
+            SHM_USER_VADDR => Some(SyscallNumber::ShmUserVaddr),
             _ => None,
         }
     }

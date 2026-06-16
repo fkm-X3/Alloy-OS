@@ -33,6 +33,8 @@ pub fn dispatch_syscall(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
         Some(table::SyscallNumber::Fork) => crate::syscall::rust_sys_fork(),
         Some(table::SyscallNumber::Clone) => crate::syscall::rust_sys_clone(ebx, ecx, edx),
         Some(table::SyscallNumber::WaitPid) => crate::syscall::rust_sys_waitpid(ebx, ecx),
+        Some(table::SyscallNumber::AllocShm) => crate::syscall::rust_sys_alloc_shm(ebx, ecx, edx),
+        Some(table::SyscallNumber::ShmUserVaddr) => crate::syscall::rust_sys_shm_user_vaddr(ebx),
         None => {
             u32::MAX
         }

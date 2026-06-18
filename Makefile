@@ -119,10 +119,7 @@ iso: $(KERNEL_ISO)
 
 # Build userland binaries (embedded into kernel VFS via include_bytes!)
 userland:
-	$(MAKE) -C $(USERLAND_DIR) ARCH=$(ARCH)
-	@cp $(USERLAND_DIR)/build/hello hello 2>/dev/null || true
-	@cp $(USERLAND_DIR)/build/compositor compositor 2>/dev/null || true
-	@cp $(USERLAND_DIR)/build/alloy_de alloy_de 2>/dev/null || true
+	$(MAKE) -C alloy_de ARCH=$(ARCH)
 
 # Build the Qt6/QML DE for host development (requires Qt6 SDK)
 de-build:
@@ -220,7 +217,8 @@ clean:
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
 	rm -rf de/build
-	rm -f alloy_de hello compositor
+	rm -rf alloy_de/build
+	rm -f hello compositor
 
 # Create a FAT32 disk image (requires mkfs.fat in PATH)
 fat32-img: $(BUILD_DIR)

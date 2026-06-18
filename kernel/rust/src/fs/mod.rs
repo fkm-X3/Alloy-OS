@@ -148,7 +148,7 @@ pub fn vfs_init() {
         }
     }
 
-    let alloy_de_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../alloy_de"));
+    let alloy_de_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../alloy_de/build/alloy_de"));
     if !alloy_de_bytes.is_empty() {
         if let Ok(id) = vfs_open("/alloy_de", 0, 0) {
             let mut g = VFS_STATE.lock();

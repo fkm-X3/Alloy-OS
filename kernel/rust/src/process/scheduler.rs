@@ -254,7 +254,7 @@ impl Scheduler {
 
         let child = Box::new(Task::from_parts(
             ctx,
-            Some(Box::new([0u8; 4096])),
+            Some(Box::new([0u8; 16384])),
             String::from("clone"),
             [None; 32],
             0x01000000,

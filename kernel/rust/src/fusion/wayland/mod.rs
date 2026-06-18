@@ -42,7 +42,7 @@ use self::xdg_shell::XdgShellHandler;
 use self::layer_shell::LayerShellHandler;
 use self::xdg_output::XdgOutputManagerHandler;
 use self::compositor_integration::CompositorIntegration;
-use crate::graphics::PlatformDisplay;
+use crate::graphics::{Display, PlatformDisplay};
 use crate::fusion::FusionDisplayBackend;
 
 /// Wayland server error types
@@ -213,24 +213,29 @@ impl WaylandServer {
     pub fn init(&mut self) -> WaylandResult<()> {
         // Create and bind Unix domain socket at standard Wayland path
         let mut socket = UnixSocket::new()?;
-        socket.bind("/run/user/1000/wayland-0")?;
+        socket.bind("/tmp/wayland-0")?;
         socket.listen()?;
 
         self.socket = Some(socket);
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland] Server initialized at /run/user/1000/wayland-0\n".as_ptr() as *const u8);
+            crate::ffi::serial_print(c"[Wayland] Server initialized at /tmp/wayland-0\n".as_ptr() as *const u8);
         }
 
         Ok(())
     }
 
-/// Initialize with framebuffer reference for compositor integration
-     pub fn init_with_framebuffer(&mut self, _width: u32, _height: u32) -> WaylandResult<()> {
-         let display = PlatformDisplay::new().ok_or(WaylandError::AllocationFailed)?;
-         self.framebuffer = Some(FusionDisplayBackend::new(display));
-         self.init()
-     }
+    /// Set the framebuffer backend for compositor integration
+    pub fn set_framebuffer(&mut self, backend: FusionDisplayBackend) {
+        self.framebuffer = Some(backend);
+    }
+
+    /// Initialize with framebuffer reference for compositor integration
+    pub fn init_with_framebuffer(&mut self, _width: u32, _height: u32) -> WaylandResult<()> {
+        let display = PlatformDisplay::new().ok_or(WaylandError::AllocationFailed)?;
+        self.framebuffer = Some(FusionDisplayBackend::new(display));
+        self.init()
+    }
 
     /// Accept a new client connection
     pub fn accept_client(&mut self) -> WaylandResult<()> {
@@ -258,38 +263,124 @@ impl WaylandServer {
     /// Send initial global objects to a newly connected client
     fn send_initial_globals(&mut self, client_id: ClientId) {
         if let Some(connection) = self.clients.get_mut(&client_id) {
-            // Client creates registry object (ID 2) on connect
-            let _registry = connection.state.register_object(
+            connection.state.register_object(
                 crate::fusion::wayland::client::ObjectType::Registry,
                 1,
             );
 
-            // Send initial globals to the new client
             let globals = self.registry_handler.get_global_events_for_client(client_id, 2);
             for msg in globals {
-                let _ = msg;
+                let _ = self.write_message_to_client(client_id, msg);
+            }
+        }
+    }
+
+    /// Encode and write a Wayland message to a client's socket
+    fn write_message_to_client(&mut self, client_id: ClientId, msg: WaylandMessage) -> WaylandResult<()> {
+        let fd = self.clients.get(&client_id)
+            .ok_or(WaylandError::ObjectNotFound)?
+            .fd as i32;
+        let encoded = msg.encode()?;
+        let written = crate::net::socket_write(fd, &encoded);
+        if written < 0 {
+            return Err(WaylandError::WriteFailed);
+        }
+        Ok(())
+    }
+
+    /// Read and decode a Wayland message from a client's socket.
+    /// Blocks until a complete message is available or the client disconnects.
+    pub fn read_message_from_client(&mut self, client_id: ClientId) -> WaylandResult<Option<WaylandMessage>> {
+        let fd = self.clients.get(&client_id)
+            .ok_or(WaylandError::ObjectNotFound)?
+            .fd as i32;
+
+        // Read header (8 bytes) — blocks until at least 8 bytes arrive
+        let mut header = [0u8; 8];
+        let mut off = 0;
+        while off < 8 {
+            let n = crate::net::socket_read(fd, &mut header[off..]);
+            if n < 0 {
+                let _ = self.disconnect_client(client_id);
+                return Err(WaylandError::ReadFailed);
+            }
+            off += n as usize;
+        }
+
+        let length_le = [header[6], header[7]];
+        let total = u16::from_le_bytes(length_le) as usize;
+
+        if total < 8 || total > 4096 {
+            let _ = self.disconnect_client(client_id);
+            return Err(WaylandError::ProtocolViolation);
+        }
+
+        let mut full = alloc::vec![0u8; total];
+        full[..8].copy_from_slice(&header);
+
+        // Read remaining payload
+        while off < total {
+            let n = crate::net::socket_read(fd, &mut full[off..]);
+            if n < 0 {
+                let _ = self.disconnect_client(client_id);
+                return Err(WaylandError::ReadFailed);
+            }
+            off += n as usize;
+        }
+
+        match WaylandMessage::decode(&full) {
+            Ok(Some(msg)) => Ok(Some(msg)),
+            _ => {
+                let _ = self.disconnect_client(client_id);
+                Err(WaylandError::ProtocolViolation)
+            }
+        }
+    }
+
+    /// Poll all connected clients and dispatch their pending messages
+    pub fn poll_clients(&mut self) {
+        let client_ids: Vec<ClientId> = self.clients.keys().copied().collect();
+        for cid in client_ids {
+            loop {
+                match self.read_message_from_client(cid) {
+                    Ok(Some(msg)) => {
+                        let _ = self.dispatch_message(cid, msg);
+                    }
+                    Ok(None) => break,
+                    Err(_) => break,
+                }
             }
         }
     }
 
     /// Dispatch a message from a client
     pub fn dispatch_message(&mut self, client_id: ClientId, message: WaylandMessage) -> WaylandResult<()> {
-        let Some(client) = self.clients.get(&client_id) else {
-            return Err(WaylandError::ObjectNotFound);
+        let object_type = match self.clients.get(&client_id) {
+            Some(client) => client.state().get_object(message.object_id.0)
+                .map(|e| e.object_type())
+                .unwrap_or(crate::fusion::wayland::client::ObjectType::Custom),
+            None => return Err(WaylandError::ObjectNotFound),
         };
-
-        let object_type = client.state().get_object(message.object_id.0)
-            .map(|e| e.object_type())
-            .unwrap_or(crate::fusion::wayland::client::ObjectType::Custom);
-
-        let _ = client;
 
         match object_type {
             crate::fusion::wayland::client::ObjectType::Display => {
                 let response = self.display_handler.handle_request(
                     client_id, message.opcode, &message.payload
                 )?;
-                let _ = response;
+                match response {
+                    crate::fusion::wayland::display_handler::DisplayResponse::SyncAck { callback_id, callback_data } => {
+                        if let Ok(done_msg) = crate::fusion::wayland::display_handler::DisplayHandler::emit_callback_done(callback_id, callback_data) {
+                            let _ = self.write_message_to_client(client_id, done_msg);
+                        }
+                    }
+                    crate::fusion::wayland::display_handler::DisplayResponse::RegistryCreated { registry_id } => {
+                        let globals = self.registry_handler.get_global_events(registry_id);
+                        for msg in globals {
+                            let _ = self.write_message_to_client(client_id, msg);
+                        }
+                    }
+                    _ => {}
+                }
             }
             crate::fusion::wayland::client::ObjectType::Registry => {
                 let response = self.registry_handler.handle_request(
@@ -329,10 +420,9 @@ impl WaylandServer {
                 }
             }
             crate::fusion::wayland::client::ObjectType::Compositor => {
-                let response = self.compositor_handler.handle_compositor_request(
+                let _response = self.compositor_handler.handle_compositor_request(
                     client_id, message.opcode, &message.payload
                 )?;
-                let _ = response;
             }
             crate::fusion::wayland::client::ObjectType::Surface => {
                 let _ = self.compositor_handler.handle_surface_request(
@@ -340,10 +430,9 @@ impl WaylandServer {
                 )?;
             }
             crate::fusion::wayland::client::ObjectType::XdgWmBase => {
-                let response = self.xdg_shell_handler.handle_wm_base_request(
+                let _response = self.xdg_shell_handler.handle_wm_base_request(
                     client_id, message.opcode, &message.payload
                 )?;
-                let _ = response;
             }
             crate::fusion::wayland::client::ObjectType::XdgSurface => {
                 let _ = self.xdg_shell_handler.handle_xdg_surface_request(
@@ -399,8 +488,7 @@ impl WaylandServer {
                 callback.callback_id,
                 callback.callback_data,
             ) {
-                // In a full implementation, this message would be sent back to the client
-                let _ = msg;
+                let _ = self.write_message_to_client(callback.client_id, msg);
             }
         }
     }
@@ -419,6 +507,7 @@ impl WaylandServer {
                 shm_mgr,
                 &surfaces,
             );
+            backend.display_mut().swap_buffer();
         }
     }
 

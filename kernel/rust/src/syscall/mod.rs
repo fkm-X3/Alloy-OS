@@ -647,6 +647,19 @@ pub fn sbrk(incr: i32) -> u32 {
     syscall(SyscallNumber::Brk, new, 0, 0)
 }
 
+/// Allocate shared memory buffer for Wayland SHM
+#[no_mangle]
+pub extern "C" fn rust_sys_alloc_shm(width: u32, height: u32, bpp: u32) -> u32 {
+    let fd = crate::shm_alloc::shm_alloc(width, height, bpp);
+    if fd < 0 { u32::MAX } else { fd as u32 }
+}
+
+/// Get user virtual address of an SHM buffer
+#[no_mangle]
+pub extern "C" fn rust_sys_shm_user_vaddr(fd: u32) -> u32 {
+    crate::shm_alloc::shm_user_vaddr(fd as i32)
+}
+
 /// Dispatcher wrapper callable from C/C++: routes raw registers to Rust dispatcher
 #[no_mangle]
 pub extern "C" fn rust_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {

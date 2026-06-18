@@ -55,7 +55,7 @@ pub struct Task {
     state: TaskState,
     context: Box<CpuContext>,
     #[allow(dead_code)]
-    stack: Option<Box<[u8; 4096]>>,  // 4KB kernel stack
+    stack: Option<Box<[u8; 16384]>>,  // 16KB kernel stack
     name: String,
     // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
     fds: [Option<(u64, usize)>; 32],
@@ -73,14 +73,14 @@ impl Task {
     pub fn new(entry: extern "C" fn(), name: &str) -> Self {
         let id = TaskId::new();
         
-        // Allocate kernel stack (4KB)
-        let mut stack = Box::new([0u8; 4096]);
+        // Allocate kernel stack (16KB)
+        let mut stack = Box::new([0u8; 16384]);
         
         // Set up initial context
         let mut context = Box::new(CpuContext::new());
         
         // Stack grows downward, so ESP points to the end
-        let stack_top = stack.as_mut_ptr() as usize + 4096;
+        let stack_top = stack.as_mut_ptr() as usize + 16384;
         context.esp = stack_top as u32;
         context.ebp = stack_top as u32;
         
@@ -183,7 +183,7 @@ impl Task {
     /// Create a task from raw parts (used by clone/fork)
     pub fn from_parts(
         context: Box<CpuContext>,
-        stack: Option<Box<[u8; 4096]>>,
+        stack: Option<Box<[u8; 16384]>>,
         name: String,
         fds: [Option<(u64, usize)>; 32],
         heap_break: u32,

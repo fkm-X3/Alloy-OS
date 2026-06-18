@@ -27,6 +27,8 @@
 #define SYS_WAITPID 22
 #define SYS_SOCKET_READ  23
 #define SYS_SOCKET_WRITE 24
+#define SYS_ALLOC_SHM   25
+#define SYS_SHM_USER_VADDR 26
 
 // INT 0x80 calling convention:
 //   eax = syscall number

@@ -111,7 +111,7 @@ OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
 KERNEL_ISO = $(BUILD_DIR)/alloy.iso
 
-.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch userland
+.PHONY: all clean run iso output screenshot mouse-smoke mouse-screenshot debug review-install review docker-build docker-run print-arch userland de-build run-de
 
 all: userland $(KERNEL_ELF)
 
@@ -119,9 +119,18 @@ iso: $(KERNEL_ISO)
 
 # Build userland binaries (embedded into kernel VFS via include_bytes!)
 userland:
-	$(MAKE) -C $(USERLAND_DIR) ARCH=$(ARCH)
-	@cp $(USERLAND_DIR)/build/hello hello 2>/dev/null || true
-	@cp $(USERLAND_DIR)/build/compositor compositor 2>/dev/null || true
+	$(MAKE) -C alloy_de ARCH=$(ARCH)
+
+# Build the Qt6/QML DE for host development (requires Qt6 SDK)
+de-build:
+	@echo "Building DE (host)..."
+	cd de && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
+	@echo "DE binary at: de/build/AlloyDE"
+
+# Run the DE on the host for development/testing
+run-de: de-build
+	@echo "Running DE (host)..."
+	cd de/build && ./AlloyDE
 
 # Link kernel
 $(KERNEL_ELF): userland $(OBJECTS) $(RUST_LIB)
@@ -207,6 +216,9 @@ debug: $(KERNEL_ISO)
 clean:
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
+	rm -rf de/build
+	rm -rf alloy_de/build
+	rm -f hello compositor
 
 # Create a FAT32 disk image (requires mkfs.fat in PATH)
 fat32-img: $(BUILD_DIR)

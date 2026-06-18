@@ -110,9 +110,7 @@ impl UnixSocket {
 
         unsafe {
             ffi::serial_print(c"[Wayland Socket] Bound to ".as_ptr() as *const u8);
-            for byte in path.as_bytes().iter() {
-                ffi::vga_putchar(*byte);
-            }
+            ffi::serial_print(path.as_ptr());
             ffi::serial_print(c"\n".as_ptr() as *const u8);
         }
 

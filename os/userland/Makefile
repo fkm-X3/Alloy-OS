@@ -2,10 +2,22 @@
 ARCH ?= i686
 
 ifeq ($(ARCH),i686)
-    CC = i686-elf-gcc
-    LD = i686-elf-ld
-    CFLAGS = -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
-    LDFLAGS = -T userland.ld -static -nostdlib
+    CC = gcc
+    LD = ld
+    CFLAGS = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
+    LDFLAGS = -m elf_i386 -T userland.ld -static -nostdlib
+else ifeq ($(ARCH),x86_64)
+    CC = gcc
+    LD = ld
+    CFLAGS = -m64 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
+    LDFLAGS = -m elf_x86_64 -T userland.ld -static -nostdlib
+else ifeq ($(ARCH),aarch64)
+    CC = aarch64-linux-gnu-gcc
+    LD = aarch64-linux-gnu-ld
+    CFLAGS = -march=armv8-a -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
+    LDFLAGS = -m aarch64elf -T userland.ld -static -nostdlib
+else
+    $(error Unsupported architecture: $(ARCH). Use i686, x86_64, or aarch64)
 endif
 
 LIB_DIR = lib

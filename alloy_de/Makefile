@@ -1,11 +1,11 @@
 ARCH ?= i686
 
+# Only i686 is supported (linker script and crt0 are i386-specific)
 ifeq ($(ARCH),i686)
-    CC = i686-elf-gcc
-    LD = i686-elf-ld
-    CFLAGS = -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Isrc -I../os/userland/lib
-    LDFLAGS = -T alloy_de.ld -static -nostdlib
-endif
+    CC = gcc
+    LD = ld
+    CFLAGS = -m32 -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Isrc -I../os/userland/lib
+    LDFLAGS = -m elf_i386 -T alloy_de.ld -static -nostdlib
 
 LIB_DIR = ../os/userland/lib
 BUILD_DIR = build
@@ -41,3 +41,14 @@ $(BUILD_DIR)/alloy_de: $(OBJS) $(LIB_OBJS)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+else
+# No-op for unsupported architectures (avoids CI failure for x86_64/aarch64)
+.PHONY: all clean
+
+all:
+	@echo "alloy_de: skipping build for $(ARCH) (i686 only)"
+
+clean:
+	@echo "alloy_de: skipping clean for $(ARCH)"
+endif

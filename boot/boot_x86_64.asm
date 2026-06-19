@@ -85,7 +85,7 @@ start:
 
     ; Load 64-bit GDT (far jump to switch to long mode)
     lgdt [gdtp]
-    jmp 0x08:.long_mode_entry
+    jmp 0x08:long_mode_entry
 
 .no_multiboot:
     mov esi, msg_no_multiboot
@@ -140,7 +140,7 @@ setup_page_tables:
 
 bits 64
 
-.long_mode_entry:
+long_mode_entry:
     ; Now in 64-bit long mode
     mov ax, 0x10       ; Kernel data segment
     mov ds, ax

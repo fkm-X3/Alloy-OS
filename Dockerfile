@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     HOME=/root \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xorriso \
     mtools \
     dosfstools \
-    qemu-system-x86 \
+    qemu-system-x86_64 \
     qemu-system-arm \
     python3 \
     python3-pip \

@@ -14,9 +14,46 @@ permissions:
   contents: read
 
 jobs:
-  syntax-check:
+  assembly-check:
     runs-on: ubuntu-latest
-    
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Check assembly files
+      uses: ./.github/actions/docker-ci
+      with:
+        command: |
+          echo "=== Checking NASM (.asm) files ==="
+          for asm_file in $(find . -name "*.asm"); do
+            echo "Checking $asm_file"
+            if [[ "$asm_file" == *"/arch/x86_64/"* || "$asm_file" == *"x86_64"* ]]; then
+              nasm -f elf64 -o /dev/null "$asm_file"
+            else
+              nasm -f elf32 -o /dev/null "$asm_file"
+            fi
+          done
+          echo "All NASM files are valid!"
+
+          echo "=== Checking GAS (.S) files ==="
+          for s_file in $(find . -name "*.S"); do
+            echo "Checking $s_file"
+            aarch64-linux-gnu-gcc -c -march=armv8-a -o /dev/null "$s_file"
+          done
+          echo "All GAS files are valid!"
+
+  clippy:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i686, x86_64, aarch64]
+
+    runs-on: ubuntu-latest
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v6
@@ -32,25 +69,14 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           kernel/rust/target/
-        key: rust-${{ runner.os }}-quick-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+        key: rust-${{ runner.os }}-quick-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
         restore-keys: |
-          rust-${{ runner.os }}-quick-
+          rust-${{ runner.os }}-quick-${{ matrix.arch }}-
 
-    - name: Syntax checks in Docker
+    - name: Syntax checks in Docker (${{ matrix.arch }})
       uses: ./.github/actions/docker-ci
       with:
         command: |
-          echo "Checking assembly files..."
-          for asm_file in $(find . -name "*.asm"); do
-            echo "Checking $asm_file"
-            if [[ "$asm_file" == *"/arch/x86_64/"* || "$asm_file" == *"x86_64"* ]]; then
-              nasm -f elf64 -o /dev/null "$asm_file"
-            else
-              nasm -f elf32 -o /dev/null "$asm_file"
-            fi
-          done
-          echo "All assembly files are valid!"
-
           echo "Building userland binaries (needed by Rust include_bytes!)..."
           make -C os/userland
           cp os/userland/build/hello hello 2>/dev/null || true
@@ -58,4 +84,4 @@ jobs:
 
           cd kernel/rust
           cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
-          cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
+          cargo +nightly clippy --target ${{ matrix.arch }}-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"

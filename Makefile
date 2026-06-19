@@ -7,7 +7,8 @@ ARCH ?= i686
 # Architecture-specific configuration
 ifeq ($(ARCH),i686)
     TARGET = i686-alloy
-    CROSS_PREFIX = $(HOME)/.local/i686-elf/bin/i686-elf-
+    CC = gcc
+    LD = ld
     AS = nasm
     ASFLAGS = -f elf32
     CFLAGS_ARCH = -m32 -DARCH_I686
@@ -21,7 +22,8 @@ ifeq ($(ARCH),i686)
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
 else ifeq ($(ARCH),x86_64)
     TARGET = x86_64-alloy
-    CROSS_PREFIX = $(HOME)/.local/x86_64-elf/bin/x86_64-elf-
+    CC = gcc
+    LD = ld
     AS = nasm
     ASFLAGS = -f elf64
     CFLAGS_ARCH = -m64 -DARCH_X86_64
@@ -35,8 +37,9 @@ else ifeq ($(ARCH),x86_64)
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
 else ifeq ($(ARCH),aarch64)
     TARGET = aarch64-alloy
-    CROSS_PREFIX = $(HOME)/.local/aarch64-elf/bin/aarch64-elf-
-    AS = $(CROSS_PREFIX)gcc
+    CC = aarch64-linux-gnu-gcc
+    LD = aarch64-linux-gnu-ld
+    AS = aarch64-linux-gnu-gcc
     ASFLAGS = -c -march=armv8-a
     CFLAGS_ARCH = -march=armv8-a -DARCH_AARCH64
     LDFLAGS_ARCH = -m aarch64elf
@@ -50,10 +53,6 @@ else ifeq ($(ARCH),aarch64)
 else
     $(error Unsupported architecture: $(ARCH). Use i686, x86_64, or aarch64)
 endif
-
-# Cross-compiler toolchain
-CC = $(CROSS_PREFIX)gcc
-LD = $(CROSS_PREFIX)ld
 RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 

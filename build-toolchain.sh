@@ -1,66 +1,33 @@
 #!/bin/bash
 set -e
 
-# i686-elf Cross-Compiler Build Script
-# This builds GCC and binutils for i686-elf target
+# Development environment setup script
+# Installs mainstream GCC packages for all three target architectures
+# (i686 via gcc-multilib, x86_64 natively, aarch64 via cross-compiler)
 
-export PREFIX="$HOME/.local/i686-elf"
-export TARGET=i686-elf
-export PATH="$PREFIX/bin:$PATH"
 if [ "$(id -u)" -eq 0 ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
-BINUTILS_VERSION=2.40
-GCC_VERSION=13.2.0
-
-if [ -z "${SKIP_TOOLCHAIN_DEPS:-}" ]; then
-    echo "Installing dependencies..."
-    $SUDO apt-get update
-    $SUDO apt-get install -y build-essential bison flex libgmp3-dev libmpc-dev libmpfr-dev texinfo wget
-fi
-
-echo "Creating build directory..."
-mkdir -p ~/toolchain-build
-cd ~/toolchain-build
-
-# Build Binutils
-if [ ! -f "$PREFIX/bin/$TARGET-ld" ]; then
-    echo "Building binutils..."
-    wget -nc --retry-connrefused --waitretry=10 --read-timeout=30 --timeout=30 --tries=5 https://ftp.gnu.org/gnu/binutils/binutils-$BINUTILS_VERSION.tar.gz
-    tar -xf binutils-$BINUTILS_VERSION.tar.gz
-    mkdir -p build-binutils
-    cd build-binutils
-    ../binutils-$BINUTILS_VERSION/configure --target=$TARGET --prefix="$PREFIX" --with-sysroot --disable-nls --disable-werror
-    make -j$(nproc)
-    make install
-    cd ..
-else
-    echo "Binutils already installed, skipping..."
-fi
-
-# Build GCC
-if [ ! -f "$PREFIX/bin/$TARGET-gcc" ]; then
-    echo "Building GCC..."
-    wget -nc --retry-connrefused --waitretry=10 --read-timeout=30 --timeout=30 --tries=5 https://ftp.gnu.org/gnu/gcc/gcc-$GCC_VERSION/gcc-$GCC_VERSION.tar.gz
-    tar -xf gcc-$GCC_VERSION.tar.gz
-    mkdir -p build-gcc
-    cd build-gcc
-    ../gcc-$GCC_VERSION/configure --target=$TARGET --prefix="$PREFIX" --disable-nls --enable-languages=c,c++ --without-headers
-    make -j$(nproc) all-gcc
-    make -j$(nproc) all-target-libgcc
-    make install-gcc
-    make install-target-libgcc
-    cd ..
-else
-    echo "GCC already installed, skipping..."
-fi
+$SUDO apt-get update
+$SUDO apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc-multilib \
+    g++-multilib \
+    gcc-aarch64-linux-gnu \
+    g++-aarch64-linux-gnu
 
 echo ""
-echo "Cross-compiler toolchain installed successfully!"
-echo "Add this to your ~/.bashrc or ~/.profile:"
-echo "export PATH=\"$PREFIX/bin:\$PATH\""
+echo "============================================"
+echo "Development toolchain installed!"
+echo "============================================"
 echo ""
-echo "Then run: source ~/.bashrc"
+echo "  i686:    gcc -m32"
+echo "  x86_64:  gcc -m64"
+echo "  aarch64: aarch64-linux-gnu-gcc"
+echo ""
+echo "Now run: make ARCH=i686       # 32-bit x86 build"
+echo "         make ARCH=x86_64     # 64-bit x86 build"
+echo "         make ARCH=aarch64    # ARM64 build"

@@ -17,6 +17,11 @@ env:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i686, x86_64, aarch64]
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,7 +39,7 @@ jobs:
       with:
         path: |
           kernel/rust/target
-        key: cargo-target-${{ runner.os }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
+        key: cargo-target-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
         restore-keys: |
           cargo-target-${{ runner.os }}-
 
@@ -49,14 +54,16 @@ jobs:
       id: set-image
       run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
 
-    - name: Build kernel
+    - name: Build kernel (${{ matrix.arch }})
       uses: ./.github/actions/docker-ci
       with:
         pull: false
         image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |
-          make
-          make iso
+          make ARCH=${{ matrix.arch }}
+          if [ "${{ matrix.arch }}" != "aarch64" ]; then
+            make ARCH=${{ matrix.arch }} iso
+          fi
 
     - name: Verify build artifacts
       if: always()
@@ -67,26 +74,30 @@ jobs:
           echo "ERROR: Kernel ELF not found!"
           exit 1
         fi
-        if [ ! -f "build/alloy.iso" ]; then
+        if [ "${{ matrix.arch }}" != "aarch64" ] && [ ! -f "build/alloy.iso" ]; then
           echo "ERROR: Kernel ISO not found!"
           exit 1
         fi
         echo "Build artifacts verified!"
         file build/alloy.elf
-        file build/alloy.iso
 
     - name: Upload build artifacts
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: kernel-build
+        name: kernel-build-${{ matrix.arch }}
         path: |
           build/alloy.elf
-          build/alloy.iso
+          build/alloy.iso*
         retention-days: 7
 
   boot-test:
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i686, x86_64, aarch64]
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -102,42 +113,71 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v8
       with:
-        name: kernel-build
+        name: kernel-build-${{ matrix.arch }}
         path: ${{ github.workspace }}
 
     - name: List workspace contents
       run: find ${{ github.workspace }} -name '*.iso' -o -name '*.elf' 2>/dev/null | head -20
 
     - name: Install QEMU
-      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qemu-system-x86
-
-    - name: Boot test
       run: |
-        echo "Testing kernel boot..."
+        sudo apt-get update
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          sudo apt-get install -y --no-install-recommends qemu-system-arm
+        else
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+        fi
+
+    - name: Boot test (${{ matrix.arch }})
+      run: |
+        echo "Testing kernel boot (${{ matrix.arch }})..."
         echo "Current directory: $(pwd)"
         echo "Workspace: ${{ github.workspace }}"
-        
-        # Find the ISO file
-        ISO_FILE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
-        
-        if [ -z "$ISO_FILE" ]; then
-          echo "ERROR: alloy.iso not found!"
-          find ${{ github.workspace }} -type f -name "*.iso" -o -name "*.elf" | head -20
-          exit 1
+
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          # aarch64 boots ELF directly via -kernel
+          ELF_FILE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
+          if [ -z "$ELF_FILE" ]; then
+            echo "ERROR: alloy.elf not found!"
+            find ${{ github.workspace }} -type f -name "*.elf" | head -20
+            exit 1
+          fi
+          echo "Found ELF: $ELF_FILE"
+          ls -lh "$ELF_FILE"
+          timeout 60s qemu-system-aarch64 \
+            -machine virt -cpu cortex-a53 \
+            -kernel "$ELF_FILE" \
+            -serial file:serial.log \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            -D qemu.log || true
+        else
+          # x86 arches boot via ISO
+          ISO_FILE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
+          if [ -z "$ISO_FILE" ]; then
+            echo "ERROR: alloy.iso not found!"
+            find ${{ github.workspace }} -type f -name "*.iso" | head -20
+            exit 1
+          fi
+          echo "Found ISO: $ISO_FILE"
+          ls -lh "$ISO_FILE"
+
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            QEMU_BIN="qemu-system-x86_64"
+          else
+            QEMU_BIN="qemu-system-i386"
+          fi
+
+          timeout 60s "$QEMU_BIN" \
+            -cdrom "$ISO_FILE" \
+            -serial file:serial.log \
+            -display none \
+            -no-reboot \
+            -no-shutdown \
+            -D qemu.log || true
         fi
-        
-        echo "Found ISO: $ISO_FILE"
-        ls -lh "$ISO_FILE"
-        
-        # Run QEMU with serial output to file
-        timeout 60s qemu-system-i386 \
-          -cdrom "$ISO_FILE" \
-          -serial file:serial.log \
-          -display none \
-          -no-reboot \
-          -no-shutdown \
-          -D qemu.log || true
-        
+
         echo "=== serial.log ==="
         cat serial.log 2>/dev/null || echo "(file not found or empty)"
         echo "=== qemu.log ==="
@@ -150,7 +190,7 @@ jobs:
           echo "ERROR: No serial output found!"
           exit 1
         fi
-        echo "=== Boot log ==="
+        echo "=== Boot log (${{ matrix.arch }}) ==="
         head -100 serial.log
         echo "... (truncated) ..."
         tail -50 serial.log
@@ -159,18 +199,18 @@ jobs:
           cat serial.log
           exit 1
         fi
-        if ! grep -qE "GDT|IDT|PMM|VMM" serial.log; then
+        if ! grep -qE "GDT|IDT|PMM|VMM|PL110|Generic Timer" serial.log; then
           echo "ERROR: Init messages not found"
           cat serial.log
           exit 1
         fi
-        echo "Boot verification passed!"
+        echo "Boot verification passed for ${{ matrix.arch }}!"
 
     - name: Upload boot logs
       if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: boot-logs
+        name: boot-logs-${{ matrix.arch }}
         path: |
           serial.log
           qemu.log

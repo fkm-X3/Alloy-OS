@@ -43,7 +43,11 @@ jobs:
           echo "Checking assembly files..."
           for asm_file in $(find . -name "*.asm"); do
             echo "Checking $asm_file"
-            nasm -f elf32 -o /dev/null "$asm_file"
+            if [[ "$asm_file" == *"/arch/x86_64/"* ]]; then
+              nasm -f elf64 -o /dev/null "$asm_file"
+            else
+              nasm -f elf32 -o /dev/null "$asm_file"
+            fi
           done
           echo "All assembly files are valid!"
 

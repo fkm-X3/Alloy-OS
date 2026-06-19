@@ -39,7 +39,7 @@ jobs:
       with:
         path: |
           kernel/rust/target
-        key: cargo-target-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', 'Dockerfile', 'build-toolchain.sh') }}
+        key: cargo-target-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('kernel/rust/Cargo.lock', 'kernel/rust/Cargo.toml', format('Dockerfile.{0}', matrix.arch), 'build-toolchain.sh') }}
         restore-keys: |
           cargo-target-${{ runner.os }}-
 
@@ -52,11 +52,12 @@ jobs:
 
     - name: Set lowercase image tag
       id: set-image
-      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci:latest" >> $GITHUB_OUTPUT
+      run: echo "image-tag=ghcr.io/${GITHUB_REPOSITORY,,}-ci-${{ matrix.arch }}:latest" >> $GITHUB_OUTPUT
 
     - name: Build kernel (${{ matrix.arch }})
       uses: ./.github/actions/docker-ci
       with:
+        arch: ${{ matrix.arch }}
         pull: false
         image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |

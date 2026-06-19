@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  assembly-check:
+  nasm-check:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,10 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Check assembly files
+    - name: Check NASM assembly files
       uses: ./.github/actions/docker-ci
       with:
+        arch: i686
         command: |
           echo "=== Checking NASM (.asm) files ==="
           for asm_file in $(find . -name "*.asm"); do
@@ -39,6 +40,21 @@ jobs:
           done
           echo "All NASM files are valid!"
 
+  gas-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Check GAS assembly files
+      uses: ./.github/actions/docker-ci
+      with:
+        arch: aarch64
+        command: |
           echo "=== Checking GAS (.S) files ==="
           for s_file in $(find . -name "*.S"); do
             echo "Checking $s_file"
@@ -76,6 +92,7 @@ jobs:
     - name: Syntax checks in Docker (${{ matrix.arch }})
       uses: ./.github/actions/docker-ci
       with:
+        arch: ${{ matrix.arch }}
         command: |
           echo "Building userland binaries (needed by Rust include_bytes!)..."
           make -C os/userland

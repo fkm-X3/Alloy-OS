@@ -1,4 +1,4 @@
-name: Docker Nightly Image
+name: Docker Nightly Images
 
 on:
   schedule:
@@ -11,11 +11,15 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: alloy-os-nightly
 
 jobs:
   build-and-push:
-    name: Build & Push Docker Image
+    name: Build & Push Docker Image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i686, x86_64, aarch64]
+
     runs-on: ubuntu-latest
 
     permissions:
@@ -29,13 +33,13 @@ jobs:
           fetch-depth: 1
 
       - name: Set lowercase image name
-        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY_OWNER,,}/alloy-os-nightly" >> $GITHUB_ENV
+        run: echo "IMAGE_NAME=${GITHUB_REPOSITORY_OWNER,,}/alloy-os-nightly-${{ matrix.arch }}" >> $GITHUB_ENV
 
       - name: Generate build metadata
         id: meta
         run: |
           DATE="$(date +'%Y.%m.%d')"
-          TAG="nightly-${DATE}-${{ github.run_number }}"
+          TAG="nightly-${DATE}-${{ github.run_number }}-${{ matrix.arch }}"
           echo "date=${DATE}"              >> $GITHUB_OUTPUT
           echo "tag=${TAG}"               >> $GITHUB_OUTPUT
           echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
@@ -56,9 +60,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: /tmp/.buildx-cache
-          key: buildx-${{ runner.os }}-${{ hashFiles('Dockerfile', 'build-toolchain.sh') }}
+          key: buildx-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles(format('Dockerfile.{0}', matrix.arch), 'build-toolchain.sh') }}
           restore-keys: |
-            buildx-${{ runner.os }}-
+            buildx-${{ runner.os }}-${{ matrix.arch }}-
 
       - name: Extract Docker metadata
         id: docker_meta
@@ -66,15 +70,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Versioned nightly tag  e.g. nightly-2025.05.12-42
             type=raw,value=${{ steps.meta.outputs.tag }}
-            # Floating "latest-nightly" tag always points to the newest image
             type=raw,value=latest-nightly
-            # Short SHA tag for traceability
             type=sha,prefix=sha-,format=short
           labels: |
-            org.opencontainers.image.title=Alloy OS Nightly
-            org.opencontainers.image.description=Automated nightly build of the Alloy OS CI environment
+            org.opencontainers.image.title=Alloy OS Nightly (${{ matrix.arch }})
+            org.opencontainers.image.description=Automated nightly build of the Alloy OS CI environment for ${{ matrix.arch }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.meta.outputs.date }}
@@ -83,7 +84,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.${{ matrix.arch }}
           push: true
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
@@ -98,7 +99,7 @@ jobs:
 
       - name: Write job summary
         run: |
-          echo "## 🐳 Docker Nightly Image Published" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Docker Nightly Image Published (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY

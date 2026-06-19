@@ -256,24 +256,24 @@ print-arch:
 print-%:
 	@echo $* = $($*)
 
-# Docker build: Create image
+# Docker build: Create image for the selected ARCH
 docker-build:
-	@echo "Building Alloy OS Docker image..."
-	docker build -t alloy-os-dev:latest .
-	@echo "Docker image built: alloy-os-dev:latest"
+	@echo "Building Alloy OS Docker image for $(ARCH)..."
+	docker build -t alloy-os-dev-$(ARCH):latest -f Dockerfile.$(ARCH) .
+	@echo "Docker image built: alloy-os-dev-$(ARCH):latest"
 
 docker-build-prod:
-		@echo "Building Alloy OS Docker image..."
-		docker build -t alloy-os:latest .
-		@echo "Docker image built: alloy-os:latest"
+	@echo "Building Alloy OS Docker image for $(ARCH)..."
+	docker build -t alloy-os-$(ARCH):latest -f Dockerfile.$(ARCH) .
+	@echo "Docker image built: alloy-os-$(ARCH):latest"
 
 # Docker run: Start container
 docker-run: docker-build
-	@echo "Starting Alloy OS container..."
-	docker compose run --rm -it alloy
+	@echo "Starting Alloy OS container for $(ARCH)..."
+	ALLOY_ARCH=$(ARCH) docker compose run --rm -it alloy
 
 docker-run-prod: docker-build
-	@echo "Starting Alloy OS container..."
+	@echo "Starting Alloy OS container for $(ARCH)..."
 	docker run --rm -it \
 		-p 22:22 \
 		-v "$(CURDIR):/workspace" \
@@ -281,6 +281,6 @@ docker-run-prod: docker-build
 		-v "$(HOME)/.cargo/registry:/root/.cargo/registry" \
 		-v "$(HOME)/.cargo/git:/root/.cargo/git" \
 		-w /workspace \
-		--name alloy-os \
-		alloy-os:latest \
+		--name alloy-os-$(ARCH) \
+		alloy-os-$(ARCH):latest \
 		bash

@@ -30,6 +30,7 @@ jobs:
       - name: Build release in Docker
         uses: ./.github/actions/docker-ci
         with:
+          arch: ${{ matrix.arch }}
           command: |
             make clean
             make ARCH=${{ matrix.arch }}

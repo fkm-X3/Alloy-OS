@@ -2,8 +2,8 @@ services:
   alloy:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: alloy-os-dev
+      dockerfile: Dockerfile.${ALLOY_ARCH:-i686}
+    image: alloy-os-dev-${ALLOY_ARCH:-i686}
     working_dir: /workspace
     environment:
       HOME: /root

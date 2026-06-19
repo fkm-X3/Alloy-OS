@@ -31,9 +31,9 @@ syscall_entry:
     sub rsp, 8    ; alignment
 
     ; Push user RSP and return address
-    push gs:0     ; user RSP
-    push rcx      ; user return RIP (RCX on syscall)
-    push r11      ; user RFLAGS (R11 on syscall)
+    push qword [gs:0]     ; user RSP
+    push rcx              ; user return RIP (RCX on syscall)
+    push r11              ; user RFLAGS (R11 on syscall)
 
     ; Save callee-saved registers
     push r15

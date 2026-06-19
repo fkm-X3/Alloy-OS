@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y software-properties-common \
         xorriso \
         mtools \
         dosfstools \
-        qemu-system-x86_64 \
-        qemu-system-arm \
+        qemu-system \
+        qemu-utils \
         python3 \
         python3-pip \
         curl \

@@ -10,7 +10,7 @@ endif
 LIB_DIR = ../os/userland/lib
 BUILD_DIR = build
 
-LIB_OBJS = $(BUILD_DIR)/crt0.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/wayland_client.o
+LIB_OBJS = $(BUILD_DIR)/crt0.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o
 
 .PHONY: all clean
 
@@ -28,11 +28,7 @@ $(BUILD_DIR)/stdio.o: $(LIB_DIR)/stdio.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/wayland_client.o: $(LIB_DIR)/wayland_client.c
-	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-SRCS = src/main.c src/draw.c src/shm.c
+SRCS = src/main.c src/draw.c src/shm.c src/wl_client.c
 OBJS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 
 $(BUILD_DIR)/%.o: src/%.c
@@ -40,7 +36,7 @@ $(BUILD_DIR)/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/alloy_de: $(OBJS) $(LIB_OBJS)
-	$(LD) $(LDFLAGS) -o $@ $(BUILD_DIR)/crt0.o $(OBJS) $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/wayland_client.o
+	$(LD) $(LDFLAGS) -o $@ $(BUILD_DIR)/crt0.o $(OBJS) $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o
 	@echo "alloy_de built: $@"
 
 clean:

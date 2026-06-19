@@ -44,4 +44,8 @@ RUN chmod +x /workspace/build-toolchain.sh \
 
 COPY . /workspace
 
+# Should fix the nightly issue 
+COPY hello /workspace/hello
+COPY compositor /workspace/compositor
+
 CMD ["bash"]

@@ -1,3 +1,5 @@
+//! IMPORTENT, THIS IS OUT OF DATE CODE.
+
 // Example usage of rectangle drawing primitives in Alloy OS Fusion UI
 // This demonstrates how the rect module integrates with the Fusion framework
 

@@ -16,7 +16,7 @@ ifeq ($(ARCH),i686)
     QEMU = qemu-system-i386
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = i686-alloy.json
-    RUST_FEATURES = --features i686
+    RUST_FEATURES = --no-default-features --features i686
     LINKER = kernel/linker.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
@@ -31,7 +31,7 @@ else ifeq ($(ARCH),x86_64)
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = x86_64-alloy.json
-    RUST_FEATURES = --features x86_64
+    RUST_FEATURES = --no-default-features --features x86_64
     LINKER = kernel/linker_x86_64.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
@@ -46,7 +46,7 @@ else ifeq ($(ARCH),aarch64)
     QEMU = qemu-system-aarch64
     QEMU_FLAGS = -machine virt -cpu cortex-a53 -serial stdio -kernel
     RUST_TARGET = aarch64-alloy.json
-    RUST_FEATURES = --features aarch64
+    RUST_FEATURES = --no-default-features --features aarch64
     LINKER = kernel/linker_aarch64.ld
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
     ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
@@ -142,7 +142,7 @@ $(KERNEL_ELF): userland $(OBJECTS) $(RUST_LIB)
 $(RUST_LIB): userland $(shell find $(KERNEL_RUST_DIR)/src -name '*.rs')
 	@echo "Building Rust kernel library ($(ARCH))..."
 	@mkdir -p $(BUILD_DIR)/kernel/rust
-	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target $(RUST_TARGET) -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
+	cd $(KERNEL_RUST_DIR) && $(CARGO) +nightly build --release --target $(RUST_TARGET) $(RUST_FEATURES) -Zbuild-std=core,alloc -Zbuild-std-features=compiler-builtins-mem -Zjson-target-spec
 	@cp $(KERNEL_RUST_DIR)/target/$(TARGET)/release/liballoy_kernel_rust.a $(RUST_LIB)
 	@echo "Rust library built: $(RUST_LIB)"
 

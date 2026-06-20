@@ -1,12 +1,13 @@
 #include "paging.h"
 #include "pmm.h"
 #include "../drivers/serial.h"
+#include <stdbool.h>
 
 // Minimal aarch64 paging stubs.
 // ARM64 uses translation tables configured via TTBR0_EL1/TTBR1_EL1,
 // MAIR_EL1, TCR_EL1. This provides FFI-compatible stubs for the Rust kernel.
 
-static uint32_t kernel_page_dir_phys = 0;
+static uintptr_t kernel_page_dir_phys = 0;
 
 // 4KB aligned page for first-level translation table (L0)
 static uint64_t kernel_tt_l0[512] __attribute__((aligned(4096)));
@@ -27,7 +28,7 @@ void paging_init() {
         kernel_tt_l0[i] = block_addr | 0xC01;     // Valid | Block | AF | Device | RW
     }
 
-    kernel_page_dir_phys = (uint32_t)(uintptr_t)&kernel_tt_l0[0];
+    kernel_page_dir_phys = (uintptr_t)&kernel_tt_l0[0];
 }
 
 void paging_enable() {
@@ -39,53 +40,51 @@ void paging_enable() {
     asm volatile("isb");
 }
 
-uint32_t paging_create_directory_phys() {
-    // Return current translation table base (L0 physical)
+uintptr_t paging_create_directory_phys() {
     return kernel_page_dir_phys;
 }
 
-uint8_t paging_switch_to_directory(uint32_t pd_phys) {
-    if (pd_phys == 0) return 0;
+bool paging_switch_to_directory(uintptr_t pd_phys) {
+    if (pd_phys == 0) return false;
     asm volatile("msr ttbr0_el1, %0" : : "r"((uint64_t)pd_phys));
     asm volatile("isb; tlbi vmalle1; dsb sy; isb");
-    return 1;
+    return true;
 }
 
-uint32_t paging_get_kernel_directory_phys() {
+uintptr_t paging_get_kernel_directory_phys() {
     return kernel_page_dir_phys;
 }
 
-uint32_t paging_get_physical_address(uint32_t virt) {
-    return virt;
+uintptr_t paging_get_physical_address(uintptr_t virt_addr) {
+    return virt_addr;
 }
 
-void paging_destroy_directory(uint32_t pd_phys) {
+void paging_destroy_directory(uintptr_t pd_phys) {
     (void)pd_phys;
 }
 
-uint32_t paging_clone_directory(uint32_t pd_phys) {
+uintptr_t paging_clone_directory(uintptr_t pd_phys) {
     return pd_phys;
 }
 
-uint32_t paging_fork_directory(uint32_t pd_phys) {
+uintptr_t paging_fork_directory(uintptr_t pd_phys) {
     return pd_phys;
 }
 
-uint8_t paging_handle_cow_fault(uint32_t fault_addr) {
+uint8_t paging_handle_cow_fault(uintptr_t fault_addr) {
     (void)fault_addr;
     return 0;
 }
 
-uint8_t paging_map_page_in_pd(uint32_t pd_phys, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
-    // TODO: implement 4-level page table walk for proper mapping
+bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags) {
     (void)pd_phys;
     (void)virt_addr;
     (void)phys_addr;
     (void)flags;
-    return 1;
+    return true;
 }
 
-void* paging_temp_map_frame(uint32_t phys_addr) {
+void* paging_temp_map_frame(uintptr_t phys_addr) {
     return (void*)(uintptr_t)phys_addr;
 }
 

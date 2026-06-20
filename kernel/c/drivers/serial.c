@@ -1,5 +1,7 @@
 #include "serial.h"
 
+#if defined(ARCH_X86_64) || defined(ARCH_I686)
+
 #define SERIAL_COM1 0x3F8
 
 #define SERIAL_DATA(base) (base)
@@ -35,18 +37,30 @@ static int serial_transmit_empty() {
 
 static void serial_putchar(char c) {
     while (serial_transmit_empty() == 0);
-    outb(SERIAL_DATA(SERIAL_COM1), c);
+    outb(SERIAL_DATA(SERIAL_COM1), (uint8_t)c);
 }
+
+#elif defined(ARCH_AARCH64)
+
+/*
+ * Temporary aarch64-safe stubs.
+ * Replace with PL011 MMIO UART implementation for real output.
+ */
+void init_serial() {}
+
+static void serial_putchar(char c) {
+    (void)c;
+}
+
+#else
+#error "Unsupported architecture for serial driver"
+#endif
 
 void serial_print(const char* str) {
     if (!str) return;
-
     while (*str) {
-        if (*str == '\n') {
-            serial_putchar('\r');
-        }
-        serial_putchar(*str);
-        str++;
+        if (*str == '\n') serial_putchar('\r');
+        serial_putchar(*str++);
     }
 }
 
@@ -54,12 +68,10 @@ void serial_print_hex(uint32_t value) {
     char hex_chars[] = "0123456789ABCDEF";
     char buffer[9];
     buffer[8] = '\0';
-
     for (int i = 7; i >= 0; i--) {
         buffer[i] = hex_chars[value & 0xF];
         value >>= 4;
     }
-
     serial_print(buffer);
 }
 
@@ -67,12 +79,10 @@ void serial_print_hex64(uint64_t value) {
     char hex_chars[] = "0123456789ABCDEF";
     char buffer[17];
     buffer[16] = '\0';
-
     for (int i = 15; i >= 0; i--) {
         buffer[i] = hex_chars[value & 0xF];
         value >>= 4;
     }
-
     serial_print(buffer);
 }
 

@@ -4,7 +4,7 @@
 #include "../boot/types.h"
 
 typedef struct {
-    uint32_t next_virt_addr;
+    uintptr_t next_virt_addr;
     uint32_t allocated_pages;
 } VirtualMemoryManager;
 
@@ -15,14 +15,14 @@ extern "C" {
 #endif
 
 void vmm_init();
-void* vmm_alloc_region(uint32_t size, uint32_t flags);
-void vmm_free_region(void* virt_addr, uint32_t size);
+void* vmm_alloc_region(uintptr_t size, uint32_t flags);
+void vmm_free_region(void* virt_addr, uintptr_t size);
 bool vmm_map(void* virt_addr, void* phys_addr, uint32_t flags);
 void vmm_unmap(void* virt_addr);
 uint32_t vmm_get_allocated_pages();
-uint32_t vmm_get_heap_start();
-uint32_t vmm_get_heap_size();
-uint32_t vmm_get_next_virt_addr();
+uintptr_t vmm_get_heap_start();
+uintptr_t vmm_get_heap_size();
+uintptr_t vmm_get_next_virt_addr();
 
 #ifdef __cplusplus
 }

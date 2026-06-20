@@ -297,14 +297,14 @@ extern "C" {
     void vesa_init();
     void vesa_init_from_multiboot(uint32_t multiboot_addr);
     uint16_t vesa_set_mode(uint16_t mode);
-    uint32_t vesa_get_framebuffer();
+    uint64_t vesa_get_framebuffer();
     void vesa_get_resolution(uint16_t* width, uint16_t* height);
     uint16_t vesa_get_mode(uint16_t* mode);
     uint8_t vesa_is_available();
     uint8_t vesa_get_capabilities();
     uint8_t vesa_get_bits_per_pixel();
     uint16_t vesa_get_bytes_per_scanline();
-    uint32_t vesa_get_framebuffer_size();
+    uint64_t vesa_get_framebuffer_size();
 
     // VBE hardware cursor functions
     uint8_t vesa_cursor_is_available();

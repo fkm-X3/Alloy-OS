@@ -240,8 +240,8 @@ impl Scheduler {
             ctx.gs = 0x23;
             ctx.ss = 0x23;
 
-            let current_cr3 = sched.current_task.as_ref()
-                .map(|t| t.context().cr3 as u32)
+            let current_cr3: usize = sched.current_task.as_ref()
+                .map(|t| t.context().cr3 as usize)
                 .unwrap_or(kernel_pd);
             ctx.cr3 = if current_cr3 != kernel_pd {
                 let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
@@ -305,8 +305,8 @@ impl Scheduler {
             child_ctx.rax = 0;
 
             // Use COW-based address space cloning
-            if parent_ctx.cr3 as u32 != kernel_pd {
-                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3 as u32) };
+            if parent_ctx.cr3 as usize != kernel_pd {
+                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3 as usize) };
                 if child_pd == 0 { return u32::MAX; }
                 child_ctx.cr3 = child_pd as u64;
             }
@@ -466,7 +466,7 @@ impl Scheduler {
     }
 
     #[no_mangle]
-    pub extern "C" fn rust_handle_page_fault(_addr: u32, _err: u32) {
+    pub extern "C" fn rust_handle_page_fault(_addr: usize, _err: u32) {
         unsafe {
             crate::ffi::serial_print(c"[Scheduler] rust_handle_page_fault invoked — terminating task\n".as_ptr() as *const u8);
         }

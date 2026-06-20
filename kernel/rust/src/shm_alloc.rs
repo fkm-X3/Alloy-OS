@@ -7,7 +7,7 @@ struct ShmRegion {
     height: u32,
     bpp: u32,
     size: u32,
-    pages: Vec<u32>,
+    pages: Vec<usize>,
 }
 
 static SHM_REGIONS: SpinLock<Option<BTreeMap<i32, ShmRegion>>> = SpinLock::new(None);
@@ -30,7 +30,7 @@ pub fn shm_alloc(width: u32, height: u32, bpp: u32) -> i32 {
             }
             return -1;
         }
-        pages.push(phys as u32);
+        pages.push(phys as usize);
     }
 
     let mut fd_guard = NEXT_FD.lock();

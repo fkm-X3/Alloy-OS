@@ -75,11 +75,11 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
             }
-            let phys_u32 = phys as u32;
+            let phys_addr = phys as usize;
 
             // Map the physical frame into a kernel-window slot so we can
             // write data to it, then unmap and wire it into the new PD.
-            let temp = unsafe { ffi::paging_temp_map_frame(phys_u32) };
+            let temp = unsafe { ffi::paging_temp_map_frame(phys_addr) };
             let page_off = page_addr.saturating_sub(vaddr);
             if page_off < filesz {
                 let copy_from = page_off;
@@ -92,7 +92,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
             unsafe { ffi::paging_temp_unmap_frame(); }
 
             // Map the frame into the new process's page directory
-            let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr as u32, phys_u32, page_flags) };
+            let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr as usize, phys_addr, page_flags) };
             if !ok {
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
@@ -120,7 +120,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
             unsafe { ffi::paging_destroy_directory(pd_phys); }
             return false;
         }
-        let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr, phys as u32, stack_flags) };
+        let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr as usize, phys as usize, stack_flags) };
         if !ok {
             unsafe { ffi::paging_destroy_directory(pd_phys); }
             return false;

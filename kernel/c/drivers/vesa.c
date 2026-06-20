@@ -14,8 +14,8 @@ static struct {
     uint16_t x_resolution;
     uint16_t y_resolution;
     uint8_t bits_per_pixel;
-    uint32_t linear_framebuffer;
-    uint32_t framebuffer_size;
+    uint64_t linear_framebuffer;
+    uint64_t framebuffer_size;
     uint16_t supported_modes[128];
     uint8_t num_supported_modes;
 } g_vesa_state = {0};
@@ -58,11 +58,6 @@ static uint8_t load_multiboot_framebuffer(uint32_t multiboot_addr) {
                 return 0;
             }
 
-            if ((fb->framebuffer_addr >> 32) != 0) {
-                serial_print("[VESA] Framebuffer address above 4GB is unsupported\n");
-                return 0;
-            }
-
             if (fb->framebuffer_addr == 0 ||
                 fb->framebuffer_pitch == 0 ||
                 fb->framebuffer_width == 0 ||
@@ -75,7 +70,7 @@ static uint8_t load_multiboot_framebuffer(uint32_t multiboot_addr) {
                 return 0;
             }
 
-            g_vesa_state.linear_framebuffer = (uint32_t)fb->framebuffer_addr;
+            g_vesa_state.linear_framebuffer = fb->framebuffer_addr;
             g_vesa_state.bytes_per_scanline = (uint16_t)fb->framebuffer_pitch;
             g_vesa_state.x_resolution = (uint16_t)fb->framebuffer_width;
             g_vesa_state.y_resolution = (uint16_t)fb->framebuffer_height;
@@ -83,11 +78,7 @@ static uint8_t load_multiboot_framebuffer(uint32_t multiboot_addr) {
 
             uint64_t fb_size = ((uint64_t)g_vesa_state.bytes_per_scanline) *
                                ((uint64_t)g_vesa_state.y_resolution);
-            if (fb_size > 0xFFFFFFFFULL) {
-                serial_print("[VESA] Framebuffer size overflow\n");
-                return 0;
-            }
-            g_vesa_state.framebuffer_size = (uint32_t)fb_size;
+            g_vesa_state.framebuffer_size = fb_size;
             g_vesa_state.current_mode = mode_for_dimensions(
                 g_vesa_state.x_resolution,
                 g_vesa_state.y_resolution,
@@ -219,7 +210,7 @@ uint8_t vesa_get_capabilities() {
     return g_vesa_state.capabilities;
 }
 
-uint32_t vesa_get_framebuffer() {
+uint64_t vesa_get_framebuffer() {
     if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }
@@ -268,7 +259,7 @@ uint16_t vesa_get_bytes_per_scanline() {
     return g_vesa_state.bytes_per_scanline;
 }
 
-uint32_t vesa_get_framebuffer_size() {
+uint64_t vesa_get_framebuffer_size() {
     if (!g_vesa_state.available || !g_vesa_state.framebuffer_ready) {
         return 0;
     }

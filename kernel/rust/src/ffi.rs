@@ -227,7 +227,7 @@ pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
 }
 
 #[cfg(any(feature = "i686", feature = "x86_64"))]
-pub fn vesa_framebuffer_addr() -> Option<u32> {
+pub fn vesa_framebuffer_addr() -> Option<u64> {
     unsafe {
         let addr = vesa_get_framebuffer();
         if addr != 0 { Some(addr) } else { None }
@@ -274,7 +274,7 @@ pub fn vesa_scanline_bytes() -> u16 {
 }
 
 #[cfg(any(feature = "i686", feature = "x86_64"))]
-pub fn vesa_buffer_size() -> u32 {
+pub fn vesa_buffer_size() -> u64 {
     unsafe { vesa_get_framebuffer_size() }
 }
 
@@ -391,17 +391,17 @@ pub fn initrd_module_count_ffi() -> i32 {
 }
 
 #[cfg(any(feature = "i686", feature = "x86_64"))]
-pub fn initrd_module_start(index: i32) -> u32 {
+pub fn initrd_module_start(index: i32) -> usize {
     unsafe { initrd_module_start_ffi(index) }
 }
 
 #[cfg(any(feature = "i686", feature = "x86_64"))]
-pub fn initrd_module_end(index: i32) -> u32 {
+pub fn initrd_module_end(index: i32) -> usize {
     unsafe { initrd_module_end_ffi(index) }
 }
 
 #[cfg(any(feature = "i686", feature = "x86_64"))]
-pub fn initrd_module_size(index: i32) -> u32 {
+pub fn initrd_module_size(index: i32) -> usize {
     unsafe { initrd_module_size_ffi(index) }
 }
 

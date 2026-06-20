@@ -550,14 +550,14 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
     if new_page > old_page {
         let alloc_size = new_page - old_page;
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
-        let ptr = unsafe { ffi::vmm_alloc_region(alloc_size, flags) };
+        let ptr = unsafe { ffi::vmm_alloc_region(alloc_size as usize, flags) };
         if ptr.is_null() {
             return u32::MAX;
         }
     } else if new_page < old_page {
         let free_start = new_page;
         let free_size = old_page - new_page;
-        unsafe { ffi::vmm_free_region(free_start as *mut core::ffi::c_void, free_size); }
+        unsafe { ffi::vmm_free_region(free_start as *mut core::ffi::c_void, free_size as usize); }
     }
 
     let _ = crate::process::Scheduler::with_current_task_mut(|task| {

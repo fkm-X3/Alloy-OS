@@ -71,17 +71,17 @@ int initrd_get_module(int index, struct initrd_module* mod) {
     return 1;
 }
 
-uint32_t initrd_module_start_ffi(int index) {
+uintptr_t initrd_module_start_ffi(int index) {
     if (index < 0 || index >= g_module_count) return 0;
     return g_modules[index].start;
 }
 
-uint32_t initrd_module_end_ffi(int index) {
+uintptr_t initrd_module_end_ffi(int index) {
     if (index < 0 || index >= g_module_count) return 0;
     return g_modules[index].end;
 }
 
-uint32_t initrd_module_size_ffi(int index) {
+uintptr_t initrd_module_size_ffi(int index) {
     if (index < 0 || index >= g_module_count) return 0;
     return g_modules[index].size;
 }

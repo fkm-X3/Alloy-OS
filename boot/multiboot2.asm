@@ -6,8 +6,12 @@ header_start:
     ; Multiboot2 magic number
     dd 0xe85250d6
     
-    ; Architecture: i386 (0 = 32-bit protected mode)
+    ; Architecture: i386 (0) or x86_64 (4)
+    %ifdef ARCH_X86_64
+    dd 4
+    %else
     dd 0
+    %endif
     
     ; Header length
     dd header_end - header_start

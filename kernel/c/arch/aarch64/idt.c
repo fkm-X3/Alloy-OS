@@ -4,7 +4,7 @@
 // This file provides C handlers for the assembly vector stubs
 
 // Forward declarations for C handlers called from assembly
-extern void rust_handle_page_fault(uint32_t addr, uint32_t err_code);
+extern void rust_handle_page_fault(uintptr_t addr, uint32_t err_code);
 
 void exception_handler_el1() {
     // Called from sync_handler_el1 for synchronous exceptions
@@ -21,11 +21,10 @@ void irq_handler_el1() {
 
 void page_fault_handler(uint64_t far, uint64_t esr) {
     // Handle page faults from userspace
-    uint32_t fault_addr = (uint32_t)far;
     uint32_t err_code = (uint32_t)(esr & 0xFF);
 
     // Forward to Rust handler for task termination
-    rust_handle_page_fault(fault_addr, err_code);
+    rust_handle_page_fault(far, err_code);
 }
 
 void svc_handler(uint64_t num, uint64_t arg0, uint64_t arg1,

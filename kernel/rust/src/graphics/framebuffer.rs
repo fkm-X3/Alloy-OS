@@ -87,7 +87,7 @@ impl fmt::Display for FramebufferError {
 #[derive(Debug, Clone, Copy)]
 pub struct FramebufferInfo {
     /// Physical address of the framebuffer in video memory
-    pub address: u32,
+    pub address: u64,
     /// Width of the display in pixels
     pub width: u32,
     /// Height of the display in pixels
@@ -123,7 +123,7 @@ impl FramebufferInfo {
     /// `Ok(FramebufferInfo)` if all parameters are valid, or an error otherwise.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        address: u32,
+        address: u64,
         width: u32,
         height: u32,
         pitch: u32,

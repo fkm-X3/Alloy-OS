@@ -227,7 +227,7 @@ static const char* exception_messages[] = {
     "Machine Check"
 };
 
-extern void rust_handle_page_fault(uint32_t addr, uint32_t err_code);
+extern void rust_handle_page_fault(uintptr_t addr, uint32_t err_code);
 extern uint8_t paging_handle_cow_fault(uint32_t fault_addr);
 
 void exception_handler(struct interrupt_frame* frame) {

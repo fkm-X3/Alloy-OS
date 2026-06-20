@@ -230,23 +230,23 @@ impl MemoryManager for Pmm {
     }
 
     fn create_page_directory(&mut self) -> usize {
-        unsafe { ffi::paging_create_directory_phys() as usize }
+        unsafe { ffi::paging_create_directory_phys() }
     }
 
     fn switch_page_directory(&mut self, pd_phys: usize) {
-        unsafe { ffi::paging_switch_to_directory(pd_phys as u32); }
+        unsafe { ffi::paging_switch_to_directory(pd_phys); }
     }
 
     fn kernel_page_directory(&self) -> usize {
-        unsafe { ffi::paging_get_kernel_directory_phys() as usize }
+        unsafe { ffi::paging_get_kernel_directory_phys() }
     }
 
     fn get_physical_address(&self, virt: usize) -> usize {
-        unsafe { ffi::paging_get_physical_address(virt as u32) as usize }
+        unsafe { ffi::paging_get_physical_address(virt) }
     }
 
     fn destroy_page_directory(&mut self, pd_phys: usize) {
-        unsafe { ffi::paging_destroy_directory(pd_phys as u32); }
+        unsafe { ffi::paging_destroy_directory(pd_phys); }
     }
 }
 

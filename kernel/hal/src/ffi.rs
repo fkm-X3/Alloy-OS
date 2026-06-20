@@ -16,17 +16,18 @@ extern "C" {
     // --- Serial ---
     pub fn serial_print(s: *const u8);
     pub fn serial_print_hex(value: u32);
+    pub fn serial_print_hex64(value: u64);
 
     // --- Virtual memory manager ---
     pub fn vmm_init();
-    pub fn vmm_alloc_region(size: u32, flags: u32) -> *mut c_void;
-    pub fn vmm_free_region(addr: *mut c_void, size: u32);
+    pub fn vmm_alloc_region(size: usize, flags: u32) -> *mut c_void;
+    pub fn vmm_free_region(addr: *mut c_void, size: usize);
     pub fn vmm_map(virt_addr: *mut c_void, phys_addr: *mut c_void, flags: u32) -> bool;
     pub fn vmm_unmap(virt_addr: *mut c_void);
     pub fn vmm_get_allocated_pages() -> u32;
-    pub fn vmm_get_heap_start() -> u32;
-    pub fn vmm_get_heap_size() -> u32;
-    pub fn vmm_get_next_virt_addr() -> u32;
+    pub fn vmm_get_heap_start() -> usize;
+    pub fn vmm_get_heap_size() -> usize;
+    pub fn vmm_get_next_virt_addr() -> usize;
 
     // --- Physical memory manager ---
     pub fn pmm_init(multiboot_addr: u32);
@@ -60,16 +61,16 @@ extern "C" {
 
     // --- Paging ---
     pub fn paging_init();
-    pub fn paging_create_directory_phys() -> u32;
-    pub fn paging_switch_to_directory(pd_phys: u32) -> bool;
-    pub fn paging_get_kernel_directory_phys() -> u32;
-    pub fn paging_get_physical_address(virt: u32) -> u32;
-    pub fn paging_destroy_directory(pd_phys: u32);
-    pub fn paging_clone_directory(pd_phys: u32) -> u32;
-    pub fn paging_fork_directory(pd_phys: u32) -> u32;
-    pub fn paging_handle_cow_fault(fault_addr: u32) -> u8;
-    pub fn paging_map_page_in_pd(pd_phys: u32, virt_addr: u32, phys_addr: u32, flags: u32) -> bool;
-    pub fn paging_temp_map_frame(phys_addr: u32) -> *mut c_void;
+    pub fn paging_create_directory_phys() -> usize;
+    pub fn paging_switch_to_directory(pd_phys: usize) -> bool;
+    pub fn paging_get_kernel_directory_phys() -> usize;
+    pub fn paging_get_physical_address(virt: usize) -> usize;
+    pub fn paging_destroy_directory(pd_phys: usize);
+    pub fn paging_clone_directory(pd_phys: usize) -> usize;
+    pub fn paging_fork_directory(pd_phys: usize) -> usize;
+    pub fn paging_handle_cow_fault(fault_addr: usize) -> u8;
+    pub fn paging_map_page_in_pd(pd_phys: usize, virt_addr: usize, phys_addr: usize, flags: u32) -> bool;
+    pub fn paging_temp_map_frame(phys_addr: usize) -> *mut c_void;
     pub fn paging_temp_unmap_frame();
 
     // --- Timer ---
@@ -115,14 +116,14 @@ extern "C" {
     pub fn vesa_cursor_set_position(x: u16, y: u16);
     pub fn vesa_init();
     pub fn vesa_set_mode(mode: u16) -> u16;
-    pub fn vesa_get_framebuffer() -> u32;
+    pub fn vesa_get_framebuffer() -> u64;
     pub fn vesa_get_resolution(width: *mut u16, height: *mut u16);
     pub fn vesa_get_mode(mode: *mut u16) -> u16;
     pub fn vesa_is_available() -> u8;
     pub fn vesa_get_capabilities() -> u8;
     pub fn vesa_get_bits_per_pixel() -> u8;
     pub fn vesa_get_bytes_per_scanline() -> u16;
-    pub fn vesa_get_framebuffer_size() -> u32;
+    pub fn vesa_get_framebuffer_size() -> u64;
 
     // ATA PIO
     pub fn ata_init() -> i32;
@@ -143,9 +144,9 @@ extern "C" {
     // Initrd / ramdisk
     pub fn initrd_init(multiboot_addr: u32);
     pub fn initrd_module_count() -> i32;
-    pub fn initrd_module_start_ffi(index: i32) -> u32;
-    pub fn initrd_module_end_ffi(index: i32) -> u32;
-    pub fn initrd_module_size_ffi(index: i32) -> u32;
+    pub fn initrd_module_start_ffi(index: i32) -> usize;
+    pub fn initrd_module_end_ffi(index: i32) -> usize;
+    pub fn initrd_module_size_ffi(index: i32) -> usize;
     pub fn initrd_module_cmdline_ffi(index: i32, buf: *mut u8, max_len: u32);
     pub fn initrd_has_modules_ffi() -> i32;
 }
@@ -157,9 +158,9 @@ extern "C" {
 #[cfg(feature = "aarch64")]
 extern "C" {
     // PL110 display controller
-    pub fn pl110_init(fb_addr: u32, width: u16, height: u16);
+    pub fn pl110_init(fb_addr: u64, width: u16, height: u16);
     pub fn pl110_is_available() -> i32;
-    pub fn pl110_get_framebuffer() -> u32;
+    pub fn pl110_get_framebuffer() -> u64;
     pub fn pl110_get_resolution(width: *mut u32, height: *mut u32);
     pub fn pl110_get_bits_per_pixel() -> u8;
 }

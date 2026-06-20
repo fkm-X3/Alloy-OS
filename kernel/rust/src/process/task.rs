@@ -288,13 +288,12 @@ impl Drop for Task {
             ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
         }
 
-        let pd = self.context.cr3;
+        let pd = self.context.cr3 as usize;
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
-        let pd_u32 = pd as u32;
-        if pd_u32 != 0 && pd_u32 != kernel_pd {
+        if pd != 0 && pd != kernel_pd {
             unsafe {
                 ffi::serial_print(c"[Task] Destroying task page directory\n".as_ptr() as *const u8);
-                ffi::paging_destroy_directory(pd_u32);
+                ffi::paging_destroy_directory(pd);
             }
         }
     }

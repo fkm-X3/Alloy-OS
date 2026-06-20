@@ -12,10 +12,10 @@ use super::framebuffer::{Framebuffer, FramebufferInfo};
 use super::{Display, FramebufferBuffer as FramebufferBufferTrait};
 use crate::ffi;
 
-const PAGE_SIZE: u32 = 4096;
-const IDENTITY_MAP_LIMIT: u32 = 0x0100_0000;
+const PAGE_SIZE: u64 = 4096;
+const IDENTITY_MAP_LIMIT: u64 = 0x0100_0000;
 
-fn map_framebuffer_for_kernel_access(fb_addr: u32, fb_size: u32) -> Option<u32> {
+fn map_framebuffer_for_kernel_access(fb_addr: u64, fb_size: u64) -> Option<u64> {
     if fb_size == 0 {
         return None;
     }

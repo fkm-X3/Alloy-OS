@@ -123,7 +123,7 @@ impl HeapAllocator {
         let alloc_size = pages_needed * 4096;
         
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
-        let ptr = ffi::vmm_alloc_region(alloc_size as u32, flags) as *mut u8;
+        let ptr = ffi::vmm_alloc_region(alloc_size, flags) as *mut u8;
         
         if ptr.is_null() {
             ffi::serial_print(c"[Heap] ERROR: VMM allocation failed!\n".as_ptr() as *const u8);

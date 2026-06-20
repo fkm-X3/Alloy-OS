@@ -197,8 +197,8 @@ static const char* exception_messages[] = {
     "Coprocessor Fault", "Alignment Check", "Machine Check"
 };
 
-extern void rust_handle_page_fault(uint32_t addr, uint32_t err_code);
-extern uint8_t paging_handle_cow_fault(uint32_t fault_addr);
+extern void rust_handle_page_fault(uintptr_t addr, uint32_t err_code);
+extern uint8_t paging_handle_cow_fault(uintptr_t fault_addr);
 
 void exception_handler(struct interrupt_frame* frame) {
     uint64_t int_no = frame->int_no;
@@ -210,23 +210,23 @@ void exception_handler(struct interrupt_frame* frame) {
 
         // Check for COW fault: user-mode (bit 2), write (bit 1), present (bit 0)
         if ((err_code & 0x7) == 0x7) {
-            if (paging_handle_cow_fault((uint32_t)fault_addr)) {
+            if (paging_handle_cow_fault((uintptr_t)fault_addr)) {
                 serial_print("[COW] Resolved COW page fault at 0x");
-                serial_print_hex((uint32_t)fault_addr);
+                serial_print_hex64(fault_addr);
                 serial_print("\n");
                 return;
             }
         }
 
         serial_print("\n!!! PAGE FAULT at 0x");
-        serial_print_hex((uint32_t)fault_addr);
+        serial_print_hex64(fault_addr);
         serial_print(" Error Code: ");
         serial_print_hex((uint32_t)err_code);
         serial_print("\n");
 
         if (err_code & 0x4) {
             serial_print("User-mode page fault, terminating current task...\n");
-            rust_handle_page_fault((uint32_t)fault_addr, (uint32_t)err_code);
+            rust_handle_page_fault(fault_addr, (uint32_t)err_code);
             return;
         }
     }

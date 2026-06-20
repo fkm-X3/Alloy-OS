@@ -25,7 +25,7 @@ else ifeq ($(ARCH),x86_64)
     CC = gcc
     LD = ld
     AS = nasm
-    ASFLAGS = -f elf64
+    ASFLAGS = -f elf64 -dARCH_X86_64
     CFLAGS_ARCH = -m64 -DARCH_X86_64
     LDFLAGS_ARCH = -m elf_x86_64
     QEMU = qemu-system-x86_64

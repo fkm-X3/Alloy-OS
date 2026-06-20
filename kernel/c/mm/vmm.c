@@ -23,19 +23,19 @@ void vmm_init() {
     serial_print("\n");
 }
 
-void* vmm_alloc_region(uint32_t size, uint32_t flags) {
+void* vmm_alloc_region(uintptr_t size, uint32_t flags) {
     if (size % PAGE_SIZE != 0) {
         size = ((size / PAGE_SIZE) + 1) * PAGE_SIZE;
     }
 
-    uint32_t num_pages = size / PAGE_SIZE;
+    uintptr_t num_pages = size / PAGE_SIZE;
 
     if (g_vmm.next_virt_addr + size > KERNEL_HEAP_END) {
         serial_print("VMM: ERROR - Out of virtual address space\n");
         return 0;
     }
 
-    void* virt_start = (void*)g_vmm.next_virt_addr;
+    void* virt_start = (void*)(uintptr_t)g_vmm.next_virt_addr;
 
     for (uint32_t i = 0; i < num_pages; i++) {
         void* phys_frame = pmm_alloc_frame();
@@ -44,8 +44,8 @@ void* vmm_alloc_region(uint32_t size, uint32_t flags) {
             return 0;
         }
 
-        uint32_t virt = g_vmm.next_virt_addr + (i * PAGE_SIZE);
-        if (!paging_map_page(virt, (uint32_t)phys_frame, flags)) {
+        uintptr_t virt = g_vmm.next_virt_addr + (i * PAGE_SIZE);
+        if (!paging_map_page(virt, (uintptr_t)phys_frame, flags)) {
             serial_print("VMM: ERROR - Failed to map page\n");
             pmm_free_frame(phys_frame);
             return 0;
@@ -59,7 +59,7 @@ void* vmm_alloc_region(uint32_t size, uint32_t flags) {
     return virt_start;
 }
 
-void vmm_free_region(void* virt_addr, uint32_t size) {
+void vmm_free_region(void* virt_addr, uintptr_t size) {
     if (!virt_addr) {
         return;
     }
@@ -68,12 +68,12 @@ void vmm_free_region(void* virt_addr, uint32_t size) {
         size = ((size / PAGE_SIZE) + 1) * PAGE_SIZE;
     }
 
-    uint32_t num_pages = size / PAGE_SIZE;
-    uint32_t virt = (uint32_t)virt_addr;
+    uintptr_t num_pages = size / PAGE_SIZE;
+    uintptr_t virt = (uintptr_t)virt_addr;
 
     for (uint32_t i = 0; i < num_pages; i++) {
-        uint32_t page_virt = virt + (i * PAGE_SIZE);
-        uint32_t phys = paging_get_physical_address(page_virt);
+        uintptr_t page_virt = virt + (i * PAGE_SIZE);
+        uintptr_t phys = paging_get_physical_address(page_virt);
 
         if (phys != 0) {
             pmm_free_frame((void*)(phys & 0xFFFFF000));
@@ -84,25 +84,25 @@ void vmm_free_region(void* virt_addr, uint32_t size) {
 }
 
 bool vmm_map(void* virt_addr, void* phys_addr, uint32_t flags) {
-    return paging_map_page((uint32_t)virt_addr, (uint32_t)phys_addr, flags);
+    return paging_map_page((uintptr_t)virt_addr, (uintptr_t)phys_addr, flags);
 }
 
 void vmm_unmap(void* virt_addr) {
-    paging_unmap_page((uint32_t)virt_addr);
+    paging_unmap_page((uintptr_t)virt_addr);
 }
 
 uint32_t vmm_get_allocated_pages() {
     return g_vmm.allocated_pages;
 }
 
-uint32_t vmm_get_heap_start() {
+uintptr_t vmm_get_heap_start() {
     return KERNEL_HEAP_START;
 }
 
-uint32_t vmm_get_heap_size() {
+uintptr_t vmm_get_heap_size() {
     return g_vmm.next_virt_addr - KERNEL_HEAP_START;
 }
 
-uint32_t vmm_get_next_virt_addr() {
+uintptr_t vmm_get_next_virt_addr() {
     return g_vmm.next_virt_addr;
 }

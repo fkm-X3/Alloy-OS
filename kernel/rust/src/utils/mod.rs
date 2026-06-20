@@ -19,7 +19,7 @@ pub fn user_range_check(start: usize, len: usize) -> bool {
     if len > USER_MAX_COPY { return false; }
     if start.checked_add(len).map_or(true, |end| end > USER_SPACE_LIMIT) { return false; }
     // Ensure end is below vmm_get_next_virt_addr() which represents allocated virtual space
-    let next = unsafe { ffi::vmm_get_next_virt_addr() } as usize;
+    let next = unsafe { ffi::vmm_get_next_virt_addr() };
     if start.checked_add(len).map_or(true, |end| end > next) { return false; }
 
     // Additionally, verify that each page in the range is mapped (non-zero physical address)
@@ -28,7 +28,7 @@ pub fn user_range_check(start: usize, len: usize) -> bool {
     let mut addr = start & !(PAGE_SIZE - 1);
     let mut pages_checked = 0;
     while addr < end {
-        let phys = unsafe { ffi::paging_get_physical_address(addr as u32) } as usize;
+        let phys = unsafe { ffi::paging_get_physical_address(addr) };
         if phys == 0 { return false; }
         pages_checked += 1;
         if pages_checked > 1024 { // safety cap for extremely large ranges
@@ -55,7 +55,7 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
 
     while remaining > 0 {
         // Check page mapping
-        let phys = ffi::paging_get_physical_address((cur & !(PAGE_SIZE - 1)) as u32) as usize;
+        let phys = ffi::paging_get_physical_address(cur & !(PAGE_SIZE - 1));
         if phys == 0 {
             if out_off > 0 { return Ok(out_off); } else { return Err(-1); }
         }
@@ -87,7 +87,7 @@ pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
     let mut in_off = 0usize;
 
     while remaining > 0 {
-        let phys = ffi::paging_get_physical_address((cur & !(PAGE_SIZE - 1)) as u32) as usize;
+        let phys = ffi::paging_get_physical_address(cur & !(PAGE_SIZE - 1));
         if phys == 0 {
             if in_off > 0 { return Ok(in_off); } else { return Err(-1); }
         }

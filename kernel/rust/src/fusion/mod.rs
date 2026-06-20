@@ -4,6 +4,7 @@
 //! Manages framebuffer-based rendering, Wayland protocol support, and the LXQt shell.
 
 pub mod backend;
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub mod terminal;
 pub mod framebuffer;
 pub mod wayland;
@@ -11,6 +12,7 @@ pub mod protocol_types;
 pub mod shell;
 
 pub use backend::FusionDisplayBackend;
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub use terminal::TerminalSurface;
 pub use framebuffer::{FramebufferRenderer, Color};
 pub use wayland::WaylandServer;

@@ -110,6 +110,7 @@ impl<T> SpinlockIRQ<T> {
     }
     
     /// Disable interrupts and return previous state
+    #[cfg(any(feature = "i686", feature = "x86_64"))]
     #[inline]
     fn disable_interrupts(&self) -> u32 {
         #[cfg(feature = "x86_64")]
@@ -140,13 +141,37 @@ impl<T> SpinlockIRQ<T> {
         }
     }
     
-    /// Restore interrupt state
+    /// Restore interrupt state (x86)
+    #[cfg(any(feature = "i686", feature = "x86_64"))]
     #[inline]
     fn restore_interrupts(&self, flags: u32) {
         unsafe {
             // Check if interrupts were enabled (IF bit = bit 9)
             if (flags & 0x200) != 0 {
                 core::arch::asm!("sti");
+            }
+        }
+    }
+
+    #[cfg(feature = "aarch64")]
+    #[inline]
+    fn disable_interrupts(&self) -> u32 {
+        let flags: u64;
+        unsafe {
+            core::arch::asm!("mrs {}, daif", out(reg) flags);
+            core::arch::asm!("msr daifset, #2"); // Mask IRQ (DAIF bit 1)
+        }
+        // Return DAIF state: bit 1 = IRQ mask
+        ((flags >> 1) & 1) as u32
+    }
+
+    #[cfg(feature = "aarch64")]
+    #[inline]
+    fn restore_interrupts(&self, flags: u32) {
+        unsafe {
+            if (flags & 1) == 0 {
+                // Was not masked, so unmask IRQ
+                core::arch::asm!("msr daifclr, #2"); // Unmask IRQ
             }
         }
     }

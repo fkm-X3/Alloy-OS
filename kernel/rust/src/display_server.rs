@@ -82,9 +82,10 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
         }
 
         // 6. Yield CPU
-        unsafe {
-            core::arch::asm!("hlt");
-        }
+        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        unsafe { core::arch::asm!("hlt"); }
+        #[cfg(feature = "aarch64")]
+        unsafe { core::arch::asm!("wfi"); }
     }
 
     serial_log(b"[DisplayServer] Stopped\n\0");

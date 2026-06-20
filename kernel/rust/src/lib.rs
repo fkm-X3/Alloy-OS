@@ -10,6 +10,7 @@ pub mod slab;
 pub mod sync;
 pub mod ffi;
 pub mod panic;
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub mod terminal;
 pub mod utils_rs;
 pub use utils_rs as utils;

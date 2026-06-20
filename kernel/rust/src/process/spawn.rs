@@ -162,6 +162,16 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         eflags: 0x202,
         cr3: pd_phys,
     });
+    #[cfg(feature = "aarch64")]
+    let ctx = Box::new(CpuContext {
+        x19: 0, x20: 0, x21: 0, x22: 0,
+        x23: 0, x24: 0, x25: 0, x26: 0,
+        x27: 0, x28: 0, fp: (STACK_BASE + STACK_SIZE) as u64,
+        lr: 0, sp: (STACK_BASE + STACK_SIZE) as u64,
+        elr: entry as u64,
+        spsr: 0,
+        ttbr0: pd_phys as u64,
+    });
 
     let task = Box::new(Task::from_parts(
         ctx,

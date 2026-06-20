@@ -487,6 +487,7 @@ impl Scheduler {
     pub fn start() -> ! {
         unsafe {
             ffi::serial_print(c"[Scheduler] Starting scheduler\n".as_ptr() as *const u8);
+            #[cfg(any(feature = "i686", feature = "x86_64"))]
             ffi::vga_println(c"\nStarting multitasking...\n".as_ptr() as *const u8);
         }
 
@@ -522,7 +523,10 @@ impl Scheduler {
             ffi::serial_print(c"[Scheduler] ERROR: Scheduler returned!\n".as_ptr() as *const u8);
         }
         loop {
+            #[cfg(any(feature = "i686", feature = "x86_64"))]
             unsafe { core::arch::asm!("hlt"); }
+            #[cfg(feature = "aarch64")]
+            unsafe { core::arch::asm!("wfi"); }
         }
     }
 }

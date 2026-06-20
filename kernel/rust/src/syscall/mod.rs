@@ -383,12 +383,20 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
                     ctx.esp = argc_addr;
                     ctx.cr3 = pd_phys;
                 }
-                ctx.cs = 0x1B;
-                ctx.ds = 0x23;
-                ctx.es = 0x23;
-                ctx.fs = 0x23;
-                ctx.gs = 0x23;
-                ctx.ss = 0x23;
+                #[cfg(any(feature = "i686", feature = "x86_64"))]
+                {
+                    ctx.cs = 0x1B;
+                    ctx.ds = 0x23;
+                    ctx.es = 0x23;
+                    ctx.fs = 0x23;
+                    ctx.gs = 0x23;
+                    ctx.ss = 0x23;
+                }
+                #[cfg(feature = "aarch64")]
+                {
+                    ctx.ttbr0 = pd_phys as u64;
+                    ctx.spsr = 0;
+                }
             });
 
             0
@@ -576,7 +584,8 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
     new_brk
 }
 
-/// Invoke a syscall (for testing/internal use)
+/// Invoke a syscall (for testing/internal use) — x86 only
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     let result: u32;
@@ -598,59 +607,70 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     result
 }
 
-/// Convenience wrappers for syscalls
+/// Convenience wrappers for syscalls (x86 only)
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn exit(code: u32) -> ! {
     syscall(SyscallNumber::Exit, code, 0, 0);
     loop { unsafe { core::arch::asm!("hlt"); } }
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn yield_cpu() {
     syscall(SyscallNumber::Yield, 0, 0, 0);
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn getpid() -> u32 {
     syscall(SyscallNumber::GetPid, 0, 0, 0)
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sleep(ms: u32) {
     syscall(SyscallNumber::Sleep, ms, 0, 0);
 }
 
-/// Socket convenience wrappers
+/// Socket convenience wrappers (x86 only)
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_socket(domain: i32, socket_type: i32, protocol: i32) -> i32 {
     syscall(SyscallNumber::Socket, domain as u32, socket_type as u32, protocol as u32) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_bind(fd: i32, addr: u32, addr_len: u32) -> i32 {
     syscall(SyscallNumber::Bind, fd as u32, addr, addr_len) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_listen(fd: i32, backlog: i32) -> i32 {
     syscall(SyscallNumber::Listen, fd as u32, backlog as u32, 0) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_accept(fd: i32) -> i32 {
     syscall(SyscallNumber::Accept, fd as u32, 0, 0) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_connect(fd: i32, addr: u32, addr_len: u32) -> i32 {
     syscall(SyscallNumber::Connect, fd as u32, addr, addr_len) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sys_close_socket(fd: i32) -> i32 {
     syscall(SyscallNumber::CloseSocket, fd as u32, 0, 0) as i32
 }
 
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 #[allow(dead_code)]
 pub fn sbrk(incr: i32) -> u32 {
     let current = syscall(SyscallNumber::Brk, 0, 0, 0);

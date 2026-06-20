@@ -29,6 +29,7 @@ pub mod color;
 pub mod framebuffer;
 pub mod font;
 pub mod text;
+#[cfg(any(feature = "i686", feature = "x86_64"))]
 pub mod vesa;
 #[cfg(feature = "aarch64")]
 pub mod pl110;

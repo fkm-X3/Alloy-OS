@@ -295,7 +295,10 @@ impl Drop for Task {
             ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
         }
 
+        #[cfg(any(feature = "i686", feature = "x86_64"))]
         let pd = self.context.cr3 as usize;
+        #[cfg(feature = "aarch64")]
+        let pd = self.context.ttbr0 as usize;
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
         if pd != 0 && pd != kernel_pd {
             unsafe {
@@ -309,8 +312,9 @@ impl Drop for Task {
 /// Entry point for the idle task
 extern "C" fn idle_task_entry() {
     loop {
-        unsafe {
-            core::arch::asm!("sti; hlt", options(nomem, nostack));
-        }
+        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        unsafe { core::arch::asm!("sti; hlt", options(nomem, nostack)); }
+        #[cfg(feature = "aarch64")]
+        unsafe { core::arch::asm!("wfi"); }
     }
 }

@@ -95,10 +95,11 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     
     let _ = write!(writer, "\nSystem halted. Please reboot.\n");
     
-    // Also print to VGA
+    // Also print to VGA (x86 only)
+    #[cfg(any(feature = "i686", feature = "x86_64"))]
     unsafe {
         ffi::vga_set_color(4, 0); // Red text
-        ffi::vga_println(c"\n!!! KERNEL PANIC !!!".as_ptr() as *const u8);
+        ffi::vga_println(c"\n!!! KERNEL PANIC !!!\n".as_ptr() as *const u8);
         if let Some(_location) = info.location() {
             ffi::vga_print(c"Location: ".as_ptr() as *const u8);
         }
@@ -107,8 +108,9 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     
     // Halt the system
     loop {
-        unsafe {
-            core::arch::asm!("hlt");
-        }
+        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        unsafe { core::arch::asm!("hlt"); }
+        #[cfg(feature = "aarch64")]
+        unsafe { core::arch::asm!("wfi"); }
     }
 }

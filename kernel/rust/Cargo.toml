@@ -14,7 +14,7 @@ aarch64 = ["alloy-kernel-hal/aarch64"]
 debug-alloc = []
 
 [dependencies]
-alloy-kernel-hal = { path = "../hal" }
+alloy-kernel-hal = { path = "../hal", default-features = false }
 
 [profile.dev]
 panic = "abort"

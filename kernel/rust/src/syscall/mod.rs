@@ -371,15 +371,24 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
 
             let _ = Scheduler::with_current_task_mut(|task| {
                 let ctx = task.context_mut();
-                ctx.eip = entry;
+                #[cfg(feature = "x86_64")]
+                {
+                    ctx.rip = entry as u64;
+                    ctx.rsp = argc_addr as u64;
+                    ctx.cr3 = pd_phys as u64;
+                }
+                #[cfg(feature = "i686")]
+                {
+                    ctx.eip = entry;
+                    ctx.esp = argc_addr;
+                    ctx.cr3 = pd_phys;
+                }
                 ctx.cs = 0x1B;
                 ctx.ds = 0x23;
                 ctx.es = 0x23;
                 ctx.fs = 0x23;
                 ctx.gs = 0x23;
                 ctx.ss = 0x23;
-                ctx.cr3 = pd_phys;
-                ctx.esp = argc_addr;
             });
 
             0
@@ -573,11 +582,16 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     let result: u32;
     unsafe {
         core::arch::asm!(
+            "push rbx",
+            "mov ebx, {arg0}e",
             "int 0x80",
+            "pop rbx",
+            arg0 = in(reg) arg0,
             inlateout("eax") num as u32 => result,
-            inout("ebx") arg0 => _,
             in("ecx") arg1,
             in("edx") arg2,
+            lateout("ecx") _,
+            lateout("edx") _,
             options(preserves_flags),
         );
     }

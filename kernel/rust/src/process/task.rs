@@ -79,13 +79,20 @@ impl Task {
         // Set up initial context
         let mut context = Box::new(CpuContext::new());
         
-        // Stack grows downward, so ESP points to the end
+        // Stack grows downward, so ESP/RSP points to the end
         let stack_top = stack.as_mut_ptr() as usize + 16384;
-        context.esp = stack_top as u32;
-        context.ebp = stack_top as u32;
-        
-        // Set entry point
-        context.eip = entry as usize as u32;
+        #[cfg(feature = "x86_64")]
+        {
+            context.rsp = stack_top as u64;
+            context.rbp = stack_top as u64;
+            context.rip = entry as usize as u64;
+        }
+        #[cfg(feature = "i686")]
+        {
+            context.esp = stack_top as u32;
+            context.ebp = stack_top as u32;
+            context.eip = entry as usize as u32;
+        }
         
         unsafe {
             ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);

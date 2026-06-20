@@ -140,17 +140,25 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
     }
 
     // ── Build user-mode CPU context ──────────────────────────────────
+    #[cfg(feature = "x86_64")]
+    let ctx = Box::new(CpuContext {
+        rax: 0, rbx: 0, rcx: 0, rdx: 0,
+        rsi: 0, rdi: 0, rbp: (STACK_BASE + STACK_SIZE) as u64,
+        rsp: (STACK_BASE + STACK_SIZE) as u64,
+        r8: 0, r9: 0, r10: 0, r11: 0,
+        r12: 0, r13: 0, r14: 0, r15: 0,
+        rip: entry as u64,
+        cs: 0x1B, ds: 0x23, es: 0x23, fs: 0x23, gs: 0x23, ss: 0x23,
+        rflags: 0x202,
+        cr3: pd_phys as u64,
+    });
+    #[cfg(feature = "i686")]
     let ctx = Box::new(CpuContext {
         eax: 0, ebx: 0, ecx: 0, edx: 0,
         esi: 0, edi: 0, ebp: STACK_BASE + STACK_SIZE,
         esp: STACK_BASE + STACK_SIZE,
         eip: entry,
-        cs: 0x1B,
-        ds: 0x23,
-        es: 0x23,
-        fs: 0x23,
-        gs: 0x23,
-        ss: 0x23,
+        cs: 0x1B, ds: 0x23, es: 0x23, fs: 0x23, gs: 0x23, ss: 0x23,
         eflags: 0x202,
         cr3: pd_phys,
     });

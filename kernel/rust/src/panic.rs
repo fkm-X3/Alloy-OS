@@ -42,28 +42,55 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     let _ = write!(writer, "Message:  {}\n\n", info.message());
     
     // Dump some CPU registers (simplified to avoid register pressure)
-    let _ = writeln!(writer, "Register dump:");
-    unsafe {
-        let esp: u32;
-        let ebp: u32;
-        let eflags: u32;
-        
-        core::arch::asm!(
-            "mov {0:e}, esp",
-            "mov {1:e}, ebp",
-            out(reg) esp,
-            out(reg) ebp,
-        );
-        
-        // Get EFLAGS
-        core::arch::asm!(
-            "pushfd",
-            "pop {0:e}",
-            out(reg) eflags,
-        );
-        
-        let _ = writeln!(writer, "  EBP: 0x{:08X}  ESP: 0x{:08X}", ebp, esp);
-        let _ = writeln!(writer, "  EFLAGS: 0x{:08X}", eflags);
+    #[cfg(feature = "x86_64")]
+    {
+        let _ = writeln!(writer, "Register dump:");
+        unsafe {
+            let rsp: u64;
+            let rbp: u64;
+            let rflags: u64;
+            
+            core::arch::asm!(
+                "mov {0:r}, rsp",
+                "mov {1:r}, rbp",
+                out(reg) rsp,
+                out(reg) rbp,
+            );
+            
+            core::arch::asm!(
+                "pushfq",
+                "pop {0:r}",
+                out(reg) rflags,
+            );
+            
+            let _ = writeln!(writer, "  RBP: 0x{:016X}  RSP: 0x{:016X}", rbp, rsp);
+            let _ = writeln!(writer, "  RFLAGS: 0x{:016X}", rflags);
+        }
+    }
+    #[cfg(feature = "i686")]
+    {
+        let _ = writeln!(writer, "Register dump:");
+        unsafe {
+            let esp: u32;
+            let ebp: u32;
+            let eflags: u32;
+            
+            core::arch::asm!(
+                "mov {0:e}, esp",
+                "mov {1:e}, ebp",
+                out(reg) esp,
+                out(reg) ebp,
+            );
+            
+            core::arch::asm!(
+                "pushfd",
+                "pop {0:e}",
+                out(reg) eflags,
+            );
+            
+            let _ = writeln!(writer, "  EBP: 0x{:08X}  ESP: 0x{:08X}", ebp, esp);
+            let _ = writeln!(writer, "  EFLAGS: 0x{:08X}", eflags);
+        }
     }
     
     let _ = write!(writer, "\nSystem halted. Please reboot.\n");

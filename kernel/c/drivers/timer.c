@@ -43,22 +43,22 @@ static uint64_t g_timer_freq_hz = 0;
 
 static inline uint64_t read_cntfrq_el0() {
     uint64_t val;
-    asm volatile("mrs %0, cntfrq_el0" : "=r"(val));
+    asm volatile("mrs %0, S3_3_C14_C0_0" : "=r"(val));
     return val;
 }
 
 static inline uint64_t read_cntpct_el0() {
     uint64_t val;
-    asm volatile("mrs %0, cntpct_el0" : "=r"(val));
+    asm volatile("mrs %0, S3_3_C14_C0_1" : "=r"(val));
     return val;
 }
 
 static inline void write_cntp_cval_el1(uint64_t val) {
-    asm volatile("msr cntp_cval_el1, %0" : : "r"(val));
+    asm volatile("msr S3_0_C14_C2_0, %0" : : "r"(val));
 }
 
 static inline void write_cntp_ctl_el1(uint64_t val) {
-    asm volatile("msr cntp_ctl_el1, %0" : : "r"(val));
+    asm volatile("msr S3_0_C14_C2_1, %0" : : "r"(val));
 }
 
 // GICv2 MMIO base for QEMU virt

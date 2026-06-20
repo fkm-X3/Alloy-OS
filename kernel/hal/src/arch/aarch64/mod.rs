@@ -20,7 +20,7 @@ mod sysregs {
     pub fn read_cntfrq_el0() -> u64 {
         let val: u64;
         unsafe {
-            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) val);
+            core::arch::asm!("mrs {}, S3_3_C14_C0_0", out(reg) val);
         }
         val
     }
@@ -29,7 +29,7 @@ mod sysregs {
     pub fn read_cntpct_el0() -> u64 {
         let val: u64;
         unsafe {
-            core::arch::asm!("mrs {}, cntpct_el0", out(reg) val);
+            core::arch::asm!("mrs {}, S3_3_C14_C0_1", out(reg) val);
         }
         val
     }

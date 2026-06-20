@@ -107,7 +107,7 @@ impl Timer for ArmGenericTimer {
         // Read counter frequency from CNTFRQ_EL0
         let freq: u64;
         unsafe {
-            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq);
+            core::arch::asm!("mrs {}, S3_3_C14_C0_0", out(reg) freq);
         }
         self.frequency = freq as u32;
     }
@@ -115,7 +115,7 @@ impl Timer for ArmGenericTimer {
     fn ticks(&self) -> u64 {
         let count: u64;
         unsafe {
-            core::arch::asm!("mrs {}, cntpct_el0", out(reg) count);
+            core::arch::asm!("mrs {}, S3_3_C14_C0_1", out(reg) count);
         }
         count
     }
@@ -135,15 +135,15 @@ impl Timer for ArmGenericTimer {
 
         unsafe {
             // Set compare value and enable timer
-            core::arch::asm!("msr cntp_tval_el0, {}", in(reg) target_ticks);
-            core::arch::asm!("msr cntp_ctl_el0, {}", in(reg) 1); // Enable timer
+            core::arch::asm!("msr S3_3_C14_C2_0, {}", in(reg) target_ticks);
+            core::arch::asm!("msr S3_3_C14_C2_1, {}", in(reg) 1);
 
             // Wait until timer fires
             while self.ticks() < compare {
                 core::arch::asm!("wfi");
             }
 
-            core::arch::asm!("msr cntp_ctl_el0, {}", in(reg) 0); // Disable
+            core::arch::asm!("msr S3_3_C14_C2_1, {}", in(reg) 0);
         }
     }
 }

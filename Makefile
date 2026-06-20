@@ -16,7 +16,7 @@ ifeq ($(ARCH),i686)
     QEMU = qemu-system-i386
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = i686-alloy.json
-    RUST_FEATURES = --no-default-features --features i686
+    RUST_FEATURES = --features i686
     LINKER = kernel/linker.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm

@@ -583,7 +583,7 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     unsafe {
         core::arch::asm!(
             "push rbx",
-            "mov ebx, {0:e}",
+            "mov ebx, {arg0}e",
             "int 0x80",
             "pop rbx",
             arg0 = in(reg) arg0,

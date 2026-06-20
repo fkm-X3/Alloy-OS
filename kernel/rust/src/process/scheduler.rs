@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
-use crate::process::task::{Task, TaskState};
+use crate::process::task::{Task, TaskId, TaskState};
 use crate::process::WaitQueue;
 use crate::sync::SpinLock;
 use crate::ffi;

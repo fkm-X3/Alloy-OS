@@ -175,6 +175,9 @@ void syscall_init() {
 
 #elif defined(ARCH_AARCH64)
 
+void svc_handler() {
+}
+
 void syscall_init() {
     serial_print("[Syscall] ARM64 SVC interface ready\n");
 }

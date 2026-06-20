@@ -20,9 +20,11 @@
 
 .section .text.exception_vectors, "ax"
 .global _exception_vectors
+.global exception_vectors
 .align 11
 
 _exception_vectors:
+exception_vectors:
     /* ===== Current EL with SP0 ===== */
 .org 0x000
 vector_sync_sp0:
@@ -224,6 +226,16 @@ fiq_handler_el1:
 
 serr_handler_el1:
     b .
+
+sync_lower_el_handler:
+    /* SVC from lower EL (AArch64 userspace) */
+    stp x29, x30, [sp, #-16]!
+    stp x0, x1, [sp, #-16]!
+    mov x0, x8                  /* syscall number from x8 */
+    bl svc_handler
+    ldp x0, x1, [sp], #16
+    ldp x29, x30, [sp], #16
+    eret
 
 fiq_lower_el_handler:
     b .

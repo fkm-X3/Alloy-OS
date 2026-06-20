@@ -52,8 +52,8 @@ el2_entry:
     eret
 
 el1_entry:
-    /* Set up exception vectors */
-    adr x0, exception_vectors
+    /* Set up exception vectors (defined in exception_vectors.S) */
+    ldr x0, =_exception_vectors
     msr vbar_el1, x0
 
     /* Set up stack pointer */
@@ -140,130 +140,6 @@ memset:
     b.ne 1b
 2:
     ret
-
-/* Exception vectors - 2KB aligned, 16 entries of 128 bytes each */
-.align 11
-.global _exception_vectors
-_exception_vectors:
-exception_vectors:
-    /* Current EL with SP0 */
-    b sync_cur_el0              /* at +0x000 */
-    .balign 0x80
-    b irq_cur_el0               /* at +0x080 */
-    .balign 0x80
-    b fiq_cur_el0               /* at +0x100 */
-    .balign 0x80
-    b serr_cur_el0              /* at +0x180 */
-
-    /* Current EL with SPx */
-    .balign 0x80
-    b sync_cur_elx              /* at +0x200 */
-    .balign 0x80
-    b irq_cur_elx               /* at +0x280 */
-    .balign 0x80
-    b fiq_cur_elx               /* at +0x300 */
-    .balign 0x80
-    b serr_cur_elx              /* at +0x380 */
-
-    /* Lower EL, AArch64 */
-    .balign 0x80
-    b sync_lower_64             /* at +0x400 (SVC from userspace) */
-    .balign 0x80
-    b irq_lower_64              /* at +0x480 */
-    .balign 0x80
-    b fiq_lower_64              /* at +0x500 */
-    .balign 0x80
-    b serr_lower_64             /* at +0x580 */
-
-    /* Lower EL, AArch32 */
-    .balign 0x80
-    b sync_lower_32             /* at +0x600 */
-    .balign 0x80
-    b irq_lower_32              /* at +0x680 */
-    .balign 0x80
-    b fiq_lower_32              /* at +0x700 */
-    .balign 0x80
-    b serr_lower_32             /* at +0x780 */
-
-sync_cur_el0:
-    /* Sync exception at current EL using SP0 - shouldn't happen */
-    b hang
-irq_cur_el0:
-    b hang
-fiq_cur_el0:
-    b hang
-serr_cur_el0:
-    b hang
-
-sync_cur_elx:
-    /* Sync exception at current EL using SPx */
-    /* Save context */
-    stp x29, x30, [sp, #-16]!
-    mrs x0, esr_el1
-    mrs x1, far_el1
-    /* Check exception class */
-    lsr x0, x0, #26
-    cmp x0, #0x25               /* Data abort from current EL */
-    beq data_abort_cur
-    cmp x0, #0x21               /* Instruction abort from current EL */
-    beq inst_abort_cur
-    /* Unknown sync exception */
-    ldp x29, x30, [sp], #16
-    b hang
-
-data_abort_cur:
-    /* Data abort - print fault address and halt */
-    ldp x29, x30, [sp], #16
-    b hang
-
-inst_abort_cur:
-    ldp x29, x30, [sp], #16
-    b hang
-
-irq_cur_elx:
-    /* IRQ at current EL - dispatch to C handler */
-    stp x29, x30, [sp, #-16]!
-    bl irq_handler_el1
-    ldp x29, x30, [sp], #16
-    eret
-
-fiq_cur_elx:
-    b hang
-serr_cur_elx:
-    b hang
-
-sync_lower_64:
-    /* SVC from lower EL (AArch64 userspace) */
-    stp x29, x30, [sp, #-16]!
-    stp x0, x1, [sp, #-16]!
-    /* Read syscall number and args from registers */
-    /* x0-x5 have syscall args, x8 has syscall number */
-    mov x0, x8                  /* syscall number */
-    /* x1-x5 are already in place as args */
-    bl svc_handler
-    ldp x0, x1, [sp], #16
-    ldp x29, x30, [sp], #16
-    eret
-
-irq_lower_64:
-    stp x29, x30, [sp, #-16]!
-    bl irq_handler_el1
-    ldp x29, x30, [sp], #16
-    eret
-
-fiq_lower_64:
-    b hang
-serr_lower_64:
-    b hang
-
-sync_lower_32:
-    b hang
-irq_lower_32:
-    b hang
-fiq_lower_32:
-    b hang
-serr_lower_32:
-    b hang
 
 .section .rodata
 msg_boot:  .asciz "[ASM] ARM64 boot entry reached\r\n"

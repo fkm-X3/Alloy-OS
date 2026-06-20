@@ -54,7 +54,7 @@ vector_serr_spx:
     /* ===== Lower EL, AArch64 ===== */
 .org 0x400
 vector_sync_lower_64:
-    b sync_handler_el1
+    b sync_lower_el_handler
 .org 0x480
 vector_irq_lower_64:
     b irq_lower_el_handler
@@ -136,22 +136,17 @@ inst_abort_el1:
     b .
 
 data_abort_lower:
-    mrs x2, esr_el1
-    mov x3, x1
+    /* Page fault in userspace - call C handler */
     ldp x0, x1, [sp], #16
     ldp x29, x30, [sp], #16
-    mov x0, x3
-    mov x1, x2
+    /* x0 = fault address (FAR_EL1), x1 = ESR_EL1 */
+    mov x0, x1
+    /* Call page fault handler */
     bl page_fault_handler
     eret
 
 inst_abort_lower:
-    mrs x2, esr_el1
-    mov x3, x1
-    ldp x0, x1, [sp], #16
-    ldp x29, x30, [sp], #16
-    mov x0, x3
-    mov x1, x2
+    mov x0, x1
     bl page_fault_handler
     eret
 

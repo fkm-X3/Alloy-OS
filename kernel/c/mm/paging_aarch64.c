@@ -90,14 +90,3 @@ void* paging_temp_map_frame(uintptr_t phys_addr) {
 
 void paging_temp_unmap_frame() {
 }
-
-bool paging_map_page(uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags) {
-    (void)virt_addr;
-    (void)phys_addr;
-    (void)flags;
-    return true;
-}
-
-void paging_unmap_page(uintptr_t virt_addr) {
-    (void)virt_addr;
-}

@@ -143,6 +143,8 @@ memset:
 
 /* Exception vectors - 2KB aligned, 16 entries of 128 bytes each */
 .align 11
+.global _exception_vectors
+_exception_vectors:
 exception_vectors:
     /* Current EL with SP0 */
     b sync_cur_el0              /* at +0x000 */

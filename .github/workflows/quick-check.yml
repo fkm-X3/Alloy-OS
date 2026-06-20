@@ -99,6 +99,9 @@ jobs:
           cp os/userland/build/hello hello 2>/dev/null || true
           cp os/userland/build/compositor compositor 2>/dev/null || true
 
+          echo "Building alloy_de (needed by Rust include_bytes! for i686)..."
+          make -C alloy_de ARCH=${{ matrix.arch }}
+
           cd kernel/rust
           cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
           cargo +nightly clippy --target ${{ matrix.arch }}-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"

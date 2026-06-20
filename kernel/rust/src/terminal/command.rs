@@ -508,7 +508,7 @@ impl Command for MeminfoCommand {
             crate::ffi::vga_println_str("Virtual Memory Manager:");
             
             // Heap start address
-            let heap_start_hex = format::u32_to_hex(heap_start);
+            let heap_start_hex = format::u32_to_hex(heap_start as u32);
             crate::ffi::vga_print(c"  Heap start:       ".as_ptr() as *const u8);
             crate::ffi::vga_println(&heap_start_hex[0] as *const u8);
             

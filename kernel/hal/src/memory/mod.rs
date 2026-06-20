@@ -88,10 +88,10 @@ pub trait MemoryManager {
     unsafe fn unmap_page(&mut self, virt_addr: *mut c_void);
 
     /// Allocate a virtual memory region
-    fn alloc_region(&mut self, size: u32, flags: PageFlags) -> *mut c_void;
+    fn alloc_region(&mut self, size: usize, flags: PageFlags) -> *mut c_void;
 
     /// Free a virtual memory region
-    fn free_region(&mut self, addr: *mut c_void, size: u32);
+    fn free_region(&mut self, addr: *mut c_void, size: usize);
 
     /// Get total physical memory in bytes
     fn total_memory(&self) -> u64;
@@ -193,11 +193,11 @@ impl MemoryManager for Pmm {
         ffi::vmm_unmap(virt_addr);
     }
 
-    fn alloc_region(&mut self, size: u32, flags: PageFlags) -> *mut c_void {
+    fn alloc_region(&mut self, size: usize, flags: PageFlags) -> *mut c_void {
         unsafe { ffi::vmm_alloc_region(size, flags_to_raw(flags)) }
     }
 
-    fn free_region(&mut self, addr: *mut c_void, size: u32) {
+    fn free_region(&mut self, addr: *mut c_void, size: usize) {
         unsafe { ffi::vmm_free_region(addr, size); }
     }
 

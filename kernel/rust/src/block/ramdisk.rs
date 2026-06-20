@@ -2,12 +2,12 @@ use super::BlockDevice;
 use super::SECTOR_SIZE;
 
 pub struct Ramdisk {
-    phys_start: u32,
+    phys_start: usize,
     num_sectors: u64,
 }
 
 impl Ramdisk {
-    pub fn new(phys_start: u32, size_bytes: u32) -> Self {
+    pub fn new(phys_start: usize, size_bytes: usize) -> Self {
         Ramdisk {
             phys_start,
             num_sectors: size_bytes as u64 / SECTOR_SIZE as u64,

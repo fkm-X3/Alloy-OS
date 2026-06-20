@@ -83,7 +83,7 @@ pub struct CpuContext {
     pub gs: u32,
     pub ss: u32,
     pub eflags: u32,
-    pub cr3: u32,
+    pub cr3: usize,
 }
 
 #[cfg(all(feature = "x86_64", not(any(feature = "i686", feature = "aarch64"))))]

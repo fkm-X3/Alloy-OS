@@ -176,7 +176,7 @@ pub fn init_block_devices() -> Vec<Box<dyn BlockDevice>> {
             let start = crate::ffi::initrd_module_start(i);
             let size = crate::ffi::initrd_module_size(i);
             let cmdline = crate::ffi::initrd_module_cmdline(i);
-            if size > 0 && (size % SECTOR_SIZE as u32) == 0 {
+            if size > 0 && (size % SECTOR_SIZE) == 0 {
                 let name = core::str::from_utf8(&cmdline).unwrap_or("initrd");
                 crate::ffi::print_str(&alloc::format!("[block] ramdisk #{i}: {name} start=0x{start:x} size={size}\n"));
                 devices.push(Box::new(ramdisk::Ramdisk::new(start, size)));

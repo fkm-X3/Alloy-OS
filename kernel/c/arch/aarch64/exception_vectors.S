@@ -211,6 +211,9 @@ irq_handler_el1_asm:
     ldp x29, x30, [sp], #16
     eret
 
+sync_lower_el_handler:
+    b sync_handler_el1
+
 irq_lower_el_handler:
     stp x29, x30, [sp, #-16]!
     stp x0, x1, [sp, #-16]!

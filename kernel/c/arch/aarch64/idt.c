@@ -48,10 +48,6 @@ void init_idt() {
     asm volatile("msr daifclr, #0b0010");  // Clear IRQ mask only
 }
 
-void init_gdt() {
-    // ARM64 doesn't use GDT
-}
-
 uint64_t get_system_uptime_ms() {
     return timer_get_uptime_ms_ffi();
 }

@@ -147,44 +147,43 @@ memset:
 _exception_vectors:
 exception_vectors:
     /* Current EL with SP0 */
-.org 0x000
-    b sync_cur_el0              /* Sync */
-.org 0x080
-    b irq_cur_el0               /* IRQ */
-.org 0x100
-    b fiq_cur_el0               /* FIQ */
-.org 0x180
-    b serr_cur_el0              /* SError */
+    b sync_cur_el0              /* Sync at +0x000 */
+    .balign 0x080
+    b irq_cur_el0               /* IRQ at +0x080 */
+    .balign 0x100
+    b fiq_cur_el0               /* FIQ at +0x100 */
+    .balign 0x180
+    b serr_cur_el0              /* SError at +0x180 */
 
     /* Current EL with SPx */
-.org 0x200
-    b sync_cur_elx              /* Sync */
-.org 0x280
-    b irq_cur_elx               /* IRQ */
-.org 0x300
-    b fiq_cur_elx               /* FIQ */
-.org 0x380
-    b serr_cur_elx              /* SError */
+    .balign 0x200
+    b sync_cur_elx              /* Sync at +0x200 */
+    .balign 0x280
+    b irq_cur_elx               /* IRQ at +0x280 */
+    .balign 0x300
+    b fiq_cur_elx               /* FIQ at +0x300 */
+    .balign 0x380
+    b serr_cur_elx              /* SError at +0x380 */
 
     /* Lower EL, AArch64 */
-.org 0x400
-    b sync_lower_64             /* Sync (SVC from userspace) */
-.org 0x480
-    b irq_lower_64              /* IRQ from lower EL */
-.org 0x500
-    b fiq_lower_64              /* FIQ */
-.org 0x580
-    b serr_lower_64             /* SError */
+    .balign 0x400
+    b sync_lower_64             /* Sync at +0x400 (SVC from userspace) */
+    .balign 0x480
+    b irq_lower_64              /* IRQ at +0x480 */
+    .balign 0x500
+    b fiq_lower_64              /* FIQ at +0x500 */
+    .balign 0x580
+    b serr_lower_64             /* SError at +0x580 */
 
     /* Lower EL, AArch32 */
-.org 0x600
-    b sync_lower_32             /* Sync */
-.org 0x680
-    b irq_lower_32              /* IRQ */
-.org 0x700
-    b fiq_lower_32              /* FIQ */
-.org 0x780
-    b serr_lower_32             /* SError */
+    .balign 0x600
+    b sync_lower_32             /* Sync at +0x600 */
+    .balign 0x680
+    b irq_lower_32              /* IRQ at +0x680 */
+    .balign 0x700
+    b fiq_lower_32              /* FIQ at +0x700 */
+    .balign 0x780
+    b serr_lower_32             /* SError at +0x780 */
 
 sync_cur_el0:
     /* Sync exception at current EL using SP0 - shouldn't happen */

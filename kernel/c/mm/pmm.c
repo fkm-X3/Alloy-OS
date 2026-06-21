@@ -66,76 +66,89 @@ void pmm_init(uint32_t multiboot_addr) {
         frame_refcounts[i] = 0;
     }
 
-    struct multiboot_tag* tag = (struct multiboot_tag*)(multiboot_addr + 8);
-
-    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
-        if (tag->type == MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
-            struct multiboot_tag_basic_meminfo* meminfo =
-                (struct multiboot_tag_basic_meminfo*)tag;
-            serial_print("PMM: Basic memory info:\n");
-            serial_print("  Lower memory: ");
-            serial_print_hex(meminfo->mem_lower);
-            serial_print(" KB\n");
-            serial_print("  Upper memory: ");
-            serial_print_hex(meminfo->mem_upper);
-            serial_print(" KB\n");
+    if (multiboot_addr == 0) {
+        serial_print("PMM: No multiboot info (aarch64), using default memory layout\n");
+        g_pmm.total_memory = 128 * 1024 * 1024;
+        g_pmm.available_memory = 128 * 1024 * 1024;
+        /* QEMU virt: RAM at 0x40000000, 128MB */
+        uint32_t ram_start_frame = 0x40000000 / PAGE_SIZE;
+        uint32_t ram_end_frame = 0x48000000 / PAGE_SIZE;
+        g_pmm.total_frames = ram_end_frame;
+        for (uint32_t i = ram_start_frame; i < ram_end_frame; i++) {
+            clear_frame(i);
         }
-        else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
-            struct multiboot_tag_mmap* mmap = (struct multiboot_tag_mmap*)tag;
-            serial_print("PMM: Memory map:\n");
+    } else {
+        struct multiboot_tag* tag = (struct multiboot_tag*)(multiboot_addr + 8);
 
-            for (uint8_t* entry_ptr = (uint8_t*)mmap->entries;
-                 entry_ptr < (uint8_t*)tag + tag->size;
-                 entry_ptr += mmap->entry_size) {
+        while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+            if (tag->type == MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
+                struct multiboot_tag_basic_meminfo* meminfo =
+                    (struct multiboot_tag_basic_meminfo*)tag;
+                serial_print("PMM: Basic memory info:\n");
+                serial_print("  Lower memory: ");
+                serial_print_hex(meminfo->mem_lower);
+                serial_print(" KB\n");
+                serial_print("  Upper memory: ");
+                serial_print_hex(meminfo->mem_upper);
+                serial_print(" KB\n");
+            }
+            else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
+                struct multiboot_tag_mmap* mmap = (struct multiboot_tag_mmap*)tag;
+                serial_print("PMM: Memory map:\n");
 
-                struct multiboot_mmap_entry* entry =
-                    (struct multiboot_mmap_entry*)entry_ptr;
+                for (uint8_t* entry_ptr = (uint8_t*)mmap->entries;
+                     entry_ptr < (uint8_t*)tag + tag->size;
+                     entry_ptr += mmap->entry_size) {
 
-                serial_print("  Region: addr=0x");
-                serial_print_hex((uint32_t)entry->addr);
-                serial_print(", len=0x");
-                serial_print_hex((uint32_t)entry->len);
-                serial_print(", type=");
-                serial_print_hex(entry->type);
-                serial_print("\n");
+                    struct multiboot_mmap_entry* entry =
+                        (struct multiboot_mmap_entry*)entry_ptr;
 
-                g_pmm.total_memory += entry->len;
+                    serial_print("  Region: addr=0x");
+                    serial_print_hex((uint32_t)entry->addr);
+                    serial_print(", len=0x");
+                    serial_print_hex((uint32_t)entry->len);
+                    serial_print(", type=");
+                    serial_print_hex(entry->type);
+                    serial_print("\n");
 
-                if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
-                    g_pmm.available_memory += entry->len;
+                    g_pmm.total_memory += entry->len;
 
-                    uint64_t base = entry->addr;
-                    uint64_t length = entry->len;
+                    if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
+                        g_pmm.available_memory += entry->len;
 
-                    if (base % PAGE_SIZE != 0) {
-                        uint64_t offset = PAGE_SIZE - (base % PAGE_SIZE);
-                        base += offset;
-                        if (length > offset) {
-                            length -= offset;
-                        } else {
-                            length = 0;
+                        uint64_t base = entry->addr;
+                        uint64_t length = entry->len;
+
+                        if (base % PAGE_SIZE != 0) {
+                            uint64_t offset = PAGE_SIZE - (base % PAGE_SIZE);
+                            base += offset;
+                            if (length > offset) {
+                                length -= offset;
+                            } else {
+                                length = 0;
+                            }
                         }
-                    }
 
-                    length = (length / PAGE_SIZE) * PAGE_SIZE;
+                        length = (length / PAGE_SIZE) * PAGE_SIZE;
 
-                    uint32_t start_frame = base / PAGE_SIZE;
-                    uint32_t num_frames = length / PAGE_SIZE;
+                        uint32_t start_frame = base / PAGE_SIZE;
+                        uint32_t num_frames = length / PAGE_SIZE;
 
-                    for (uint32_t i = 0; i < num_frames; i++) {
-                        uint32_t frame = start_frame + i;
-                        if (frame < 1024 * 1024) {
-                            clear_frame(frame);
-                            if (frame >= g_pmm.total_frames) {
-                                g_pmm.total_frames = frame + 1;
+                        for (uint32_t i = 0; i < num_frames; i++) {
+                            uint32_t frame = start_frame + i;
+                            if (frame < 1024 * 1024) {
+                                clear_frame(frame);
+                                if (frame >= g_pmm.total_frames) {
+                                    g_pmm.total_frames = frame + 1;
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+            tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+        }
     }
 
     for (uint32_t frame = 0; frame < 256; frame++) {

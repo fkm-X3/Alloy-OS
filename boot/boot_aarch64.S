@@ -106,8 +106,8 @@ el1_entry:
     bl uart_print
 
     /* Clear BSS */
-    ldr x0, =_kernel_start
-    ldr x1, =_kernel_end
+    ldr x0, =_bss_start
+    ldr x1, =_bss_end
     sub x1, x1, x0
     mov x2, #0
     bl memset

@@ -71,20 +71,35 @@ el1_entry:
     /* Disable UART */
     mov w3, #0
     str w3, [x2, #0x30]         /* UARTCR = 0 */
+    dsb sy
 
-    /* Set baud rate (assuming 3MHz UART clock, 115200 baud) */
+    /* Wait for BUSY to clear */
+1:  ldr w3, [x2, #0x18]        /* UARTFR */
+    tst w3, #(1 << 3)          /* BUSY bit */
+    b.ne 1b
+
+    /* Set baud rate (24MHz UART clock, 115200 baud).
+       Divider = 24MHz / (16 * 115200) = 13.02 -> IBRD=13, FBRD=1 */
+    mov w3, #13
+    str w3, [x2, #0x24]         /* UARTIBRD */
     mov w3, #1
-    str w3, [x2, #0x24]         /* UARTIBRD = 1 */
-    mov w3, #1
-    str w3, [x2, #0x28]         /* UARTFBRD = 1 */
+    str w3, [x2, #0x28]         /* UARTFBRD */
+    dsb sy
 
     /* Set line control: 8 bits, no parity, 1 stop bit, FIFO enabled */
     mov w3, #0x70
     str w3, [x2, #0x2C]         /* UARTLCR_H */
+    dsb sy
+
+    /* Clear any pending interrupts */
+    mov w3, #0x3FF
+    str w3, [x2, #0x44]         /* UARTICR */
+    dsb sy
 
     /* Enable UART, TX, RX */
     mov w3, #0x301
     str w3, [x2, #0x30]         /* UARTCR */
+    dsb sy
 
     /* Print boot message via UART */
     adr x2, msg_boot

@@ -50,7 +50,9 @@ static void serial_putchar(char c) {
 #define UARTFBRD        (PL011_BASE + 0x028)
 #define UARTLCR_H       (PL011_BASE + 0x02C)
 #define UARTCR          (PL011_BASE + 0x030)
+#define UARTIFLS        (PL011_BASE + 0x034)
 #define UARTIMSC        (PL011_BASE + 0x038)
+#define UARTICR         (PL011_BASE + 0x044)
 
 /* UARTFR bit definitions */
 #define TXFF            (1 << 5)
@@ -66,22 +68,44 @@ static inline uint32_t mmio_read32(uintptr_t addr) {
     return *ptr;
 }
 
+static inline void dsb(void) {
+    asm volatile("dsb sy" : : : "memory");
+}
+
 void init_serial() {
     /* Disable UART */
     mmio_write32(UARTCR, 0);
+    dsb();
 
-    /* Set baud rate (3MHz UART clock, 115200 baud) */
-    mmio_write32(UARTIBRD, 1);
+    /* Wait for BUSY to clear */
+    while (mmio_read32(UARTFR) & BUSY) {}
+    dsb();
+
+    /* Set baud rate (24MHz UART clock, 115200 baud).
+       Divider = 24MHz / (16 * 115200) = 13.02 -> IBRD=13, FBRD=1 */
+    mmio_write32(UARTIBRD, 13);
     mmio_write32(UARTFBRD, 1);
+    dsb();
 
     /* 8 bits, no parity, 1 stop bit, FIFO enabled */
     mmio_write32(UARTLCR_H, 0x70);
+    dsb();
+
+    /* Set FIFO threshold: half-full */
+    mmio_write32(UARTIFLS, 0x012);
+    dsb();
 
     /* Mask all interrupts */
     mmio_write32(UARTIMSC, 0);
+    dsb();
+
+    /* Clear any pending interrupts */
+    mmio_write32(UARTICR, 0x3FF);
+    dsb();
 
     /* Enable UART, TX, RX */
     mmio_write32(UARTCR, 0x301);
+    dsb();
 }
 
 static void serial_putchar(char c) {

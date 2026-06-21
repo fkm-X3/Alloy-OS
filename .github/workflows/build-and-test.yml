@@ -124,7 +124,7 @@ jobs:
       run: |
         sudo apt-get update
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sudo apt-get install -y --no-install-recommends qemu-system-arm
+          sudo apt-get install -y --no-install-recommends qemu-system-arm qemu-efi-aarch64
         else
           sudo apt-get install -y --no-install-recommends qemu-system-x86
         fi
@@ -134,9 +134,27 @@ jobs:
         echo "Testing kernel boot (${{ matrix.arch }})..."
         echo "Current directory: $(pwd)"
         echo "Workspace: ${{ github.workspace }}"
+        echo "QEMU version: $(qemu-system-aarch64 --version 2>/dev/null || qemu-system-i386 --version 2>/dev/null || true)"
+
+        # Probe for aarch64 UEFI firmware
+        QEMU_FW=""
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          for fw in /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
+                     /usr/share/AAVMF/AAVMF_CODE.fd \
+                     /usr/share/edk2/aarch64/QEMU_EFI.fd; do
+            if [ -f "$fw" ]; then
+              QEMU_FW="-bios $fw"
+              echo "Found UEFI firmware: $fw"
+              break
+            fi
+          done
+          if [ -z "$QEMU_FW" ]; then
+            echo "WARNING: No UEFI firmware found; booting with -kernel only"
+          fi
+        fi
 
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          # aarch64 boots ELF directly via -kernel
+          # aarch64: boot ELF via -kernel (with UEFI firmware if available)
           ELF_FILE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
           if [ -z "$ELF_FILE" ]; then
             echo "ERROR: alloy.elf not found!"
@@ -144,15 +162,21 @@ jobs:
             exit 1
           fi
           echo "Found ELF: $ELF_FILE"
+          file "$ELF_FILE"
           ls -lh "$ELF_FILE"
+
+          set +e
           timeout 60s qemu-system-aarch64 \
             -machine virt -cpu cortex-a53 \
+            $QEMU_FW \
             -kernel "$ELF_FILE" \
             -serial file:serial.log \
             -display none \
             -no-reboot \
-            -no-shutdown \
-            -D qemu.log || true
+            -D qemu.log 2>qemu_stderr.log
+          QEMU_EXIT=$?
+          set -e
+          echo "QEMU exit code: $QEMU_EXIT"
         else
           # x86 arches boot via ISO
           ISO_FILE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
@@ -162,6 +186,7 @@ jobs:
             exit 1
           fi
           echo "Found ISO: $ISO_FILE"
+          file "$ISO_FILE"
           ls -lh "$ISO_FILE"
 
           if [ "${{ matrix.arch }}" = "x86_64" ]; then
@@ -170,33 +195,56 @@ jobs:
             QEMU_BIN="qemu-system-i386"
           fi
 
+          set +e
           timeout 60s "$QEMU_BIN" \
             -cdrom "$ISO_FILE" \
             -serial file:serial.log \
             -display none \
             -no-reboot \
-            -no-shutdown \
-            -D qemu.log || true
+            -D qemu.log 2>qemu_stderr.log
+          QEMU_EXIT=$?
+          set -e
+          echo "QEMU exit code: $QEMU_EXIT"
         fi
 
-        echo "=== serial.log ==="
-        cat serial.log 2>/dev/null || echo "(file not found or empty)"
+        echo "=== qemu_stderr.log ==="
+        cat qemu_stderr.log 2>/dev/null || echo "(file not found)"
         echo "=== qemu.log ==="
         tail -50 qemu.log 2>/dev/null || echo "(file not found or empty)"
+        echo "=== serial.log ==="
+        cat serial.log 2>/dev/null || echo "(file not found or empty)"
 
     - name: Verify boot success
       if: always()
       run: |
+        echo "=== Boot log (${{ matrix.arch }}) ==="
+        if [ -f "serial.log" ] && [ -s "serial.log" ]; then
+          head -100 serial.log
+          echo "... (truncated) ..."
+          tail -50 serial.log
+        fi
+
         if [ ! -f "serial.log" ] || [ ! -s "serial.log" ]; then
           echo "ERROR: No serial output found!"
+          if [ -f "qemu_stderr.log" ] && [ -s "qemu_stderr.log" ]; then
+            echo "QEMU stderr:"
+            cat qemu_stderr.log
+          fi
+          if [ -f "qemu.log" ] && [ -s "qemu.log" ]; then
+            echo "QEMU debug log:"
+            cat qemu.log
+          fi
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            echo ""
+            echo "Possible fixes:"
+            echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
+            echo "  - Install qemu-efi-aarch64 for UEFI firmware (-bios)"
+            echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
+          fi
           exit 1
         fi
-        echo "=== Boot log (${{ matrix.arch }}) ==="
-        head -100 serial.log
-        echo "... (truncated) ..."
-        tail -50 serial.log
         if ! grep -q "Alloy" serial.log; then
-          echo "ERROR: Kernel name not found"
+          echo "ERROR: Kernel name not found in serial output"
           cat serial.log
           exit 1
         fi

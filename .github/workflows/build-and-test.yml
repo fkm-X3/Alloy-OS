@@ -136,25 +136,8 @@ jobs:
         echo "Workspace: ${{ github.workspace }}"
         echo "QEMU version: $(qemu-system-aarch64 --version 2>/dev/null || qemu-system-i386 --version 2>/dev/null || true)"
 
-        # Probe for aarch64 UEFI firmware
-        QEMU_FW=""
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          for fw in /usr/share/qemu-efi-aarch64/QEMU_EFI.fd \
-                     /usr/share/AAVMF/AAVMF_CODE.fd \
-                     /usr/share/edk2/aarch64/QEMU_EFI.fd; do
-            if [ -f "$fw" ]; then
-              QEMU_FW="-bios $fw"
-              echo "Found UEFI firmware: $fw"
-              break
-            fi
-          done
-          if [ -z "$QEMU_FW" ]; then
-            echo "WARNING: No UEFI firmware found; booting with -kernel only"
-          fi
-        fi
-
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          # aarch64: boot ELF via -kernel (with UEFI firmware if available)
+          # aarch64: boot ELF directly to avoid CI firmware ROM dependency issues
           ELF_FILE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
           if [ -z "$ELF_FILE" ]; then
             echo "ERROR: alloy.elf not found!"
@@ -168,7 +151,6 @@ jobs:
           set +e
           timeout 60s qemu-system-aarch64 \
             -machine virt -cpu cortex-a53 \
-            $QEMU_FW \
             -kernel "$ELF_FILE" \
             -serial file:serial.log \
             -display none \
@@ -238,7 +220,6 @@ jobs:
             echo ""
             echo "Possible fixes:"
             echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
-            echo "  - Install qemu-efi-aarch64 for UEFI firmware (-bios)"
             echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
           fi
           exit 1

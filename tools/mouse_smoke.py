@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -69,16 +70,37 @@ def perform_mouse_smoke(stream, step_delay_seconds: float) -> None:
     time.sleep(step_delay_seconds)
 
 
+def _detect_firmware() -> str | None:
+    """Probe well-known aarch64 UEFI firmware paths."""
+    candidates = [
+        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "/usr/share/AAVMF/AAVMF_CODE.fd",
+        "/usr/share/edk2/aarch64/QEMU_EFI.fd",
+        "/opt/homebrew/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "C:/msys64/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "C:/Program Files/qemu/share/qemu-efi-aarch64/QEMU_EFI.fd",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def run_smoke(args: argparse.Namespace) -> None:
-    iso_path = Path(args.iso).resolve()
+    iso_path = Path(args.iso).resolve() if args.iso else None
+    kernel_path = Path(args.kernel).resolve() if args.kernel else None
     serial_log = Path(args.serial_log).resolve()
     qmp_socket = Path(args.qmp_socket).resolve()
     qemu_log = Path(args.qemu_log).resolve()
     screenshot_png = Path(args.screenshot).resolve() if args.screenshot else None
     screenshot_ppm = screenshot_png.with_suffix(".ppm") if screenshot_png else None
 
-    if not iso_path.exists():
+    if not iso_path and not kernel_path:
+        raise ValueError("Must provide either --iso or --kernel")
+    if iso_path and not iso_path.exists():
         raise FileNotFoundError(f"ISO not found: {iso_path}")
+    if kernel_path and not kernel_path.exists():
+        raise FileNotFoundError(f"Kernel not found: {kernel_path}")
 
     serial_log.parent.mkdir(parents=True, exist_ok=True)
     qemu_log.parent.mkdir(parents=True, exist_ok=True)
@@ -91,8 +113,6 @@ def run_smoke(args: argparse.Namespace) -> None:
 
     qemu_cmd = [
         args.qemu_binary,
-        "-cdrom",
-        str(iso_path),
         "-serial",
         f"file:{serial_log}",
         "-display",
@@ -104,6 +124,23 @@ def run_smoke(args: argparse.Namespace) -> None:
         "-D",
         str(qemu_log),
     ]
+
+    if kernel_path is not None:
+        qemu_cmd.append("-kernel")
+        qemu_cmd.append(str(kernel_path))
+    else:
+        qemu_cmd.append("-cdrom")
+        qemu_cmd.append(str(iso_path))
+
+    # Add UEFI firmware for aarch64 if user didn't explicitly set --bios ""
+    bios = args.bios
+    if bios is None:
+        detected = _detect_firmware()
+        if detected:
+            bios = detected
+    if bios:
+        qemu_cmd.append("-bios")
+        qemu_cmd.append(bios)
 
     print(f"[mouse-smoke] Starting QEMU: {' '.join(qemu_cmd)}")
     proc = subprocess.Popen(
@@ -171,7 +208,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "and optionally capture a screenshot."
         )
     )
-    parser.add_argument("--iso", required=True, help="Path to bootable ISO")
+    parser.add_argument("--iso", help="Path to bootable ISO (mutually exclusive with --kernel)")
+    parser.add_argument("--kernel", help="Path to kernel ELF (mutually exclusive with --iso)")
     parser.add_argument(
         "--serial-log",
         default="build/mouse-smoke-boot.log",
@@ -186,6 +224,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--qemu-log",
         default="build/qemu-mouse-smoke.log",
         help="QEMU debug log path",
+    )
+    parser.add_argument(
+        "--bios",
+        default=None,
+        help="Path to UEFI firmware file. Auto-detected for aarch64 if omitted. "
+             "Set to empty string to disable.",
     )
     parser.add_argument(
         "--screenshot",

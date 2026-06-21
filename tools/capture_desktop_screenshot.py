@@ -22,8 +22,20 @@ def wait_for_serial_marker(
     while time.time() < deadline:
         if process is not None and process.poll() is not None:
             code = process.returncode
+            qemu_log = ""
+            if log_path.exists():
+                lines = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                tail = "\n".join(lines[-20:]) if lines else "(empty)"
+                qemu_log = f"\nSerial log tail ({len(lines)} lines):\n{tail}"
             raise RuntimeError(
-                f"QEMU exited early with code {code} while waiting for marker {marker!r}"
+                f"QEMU exited early with code {code} while waiting for marker {marker!r}."
+                f"{qemu_log}\n"
+                f"  For aarch64, ensure the UEFI firmware package is installed:\n"
+                f"    Debian/Ubuntu: apt install qemu-system-arm\n"
+                f"    Fedora:        dnf install qemu-system-aarch64 edk2-armv8\n"
+                f"    Arch:          pacman -S qemu-system-aarch64 edk2-armv8\n"
+                f"    macOS:         brew install qemu\n"
+                f"  Or use direct kernel boot: make run-elf ARCH=aarch64"
             )
         if log_path.exists():
             text = log_path.read_text(encoding="utf-8", errors="ignore")
@@ -143,16 +155,37 @@ def convert_ppm_to_png(ppm_path: Path, png_path: Path) -> None:
     png_path.write_bytes(png)
 
 
+def _detect_firmware() -> str | None:
+    """Probe well-known aarch64 UEFI firmware paths."""
+    candidates = [
+        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "/usr/share/AAVMF/AAVMF_CODE.fd",
+        "/usr/share/edk2/aarch64/QEMU_EFI.fd",
+        "/opt/homebrew/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "C:/msys64/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        "C:/Program Files/qemu/share/qemu-efi-aarch64/QEMU_EFI.fd",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def run_capture(args: argparse.Namespace) -> None:
-    iso_path = Path(args.iso).resolve()
+    iso_path = Path(args.iso).resolve() if args.iso else None
+    kernel_path = Path(args.kernel).resolve() if args.kernel else None
     output_png = Path(args.output).resolve()
     serial_log = Path(args.serial_log).resolve()
     qmp_socket = Path(args.qmp_socket).resolve()
     qemu_log = Path(args.qemu_log).resolve()
     output_ppm = output_png.with_suffix(".ppm")
 
-    if not iso_path.exists():
+    if not iso_path and not kernel_path:
+        raise ValueError("Must provide either --iso or --kernel")
+    if iso_path and not iso_path.exists():
         raise FileNotFoundError(f"ISO not found: {iso_path}")
+    if kernel_path and not kernel_path.exists():
+        raise FileNotFoundError(f"Kernel not found: {kernel_path}")
 
     output_png.parent.mkdir(parents=True, exist_ok=True)
     serial_log.parent.mkdir(parents=True, exist_ok=True)
@@ -164,8 +197,6 @@ def run_capture(args: argparse.Namespace) -> None:
 
     qemu_cmd = [
         args.qemu_binary,
-        "-cdrom",
-        str(iso_path),
         "-serial",
         f"file:{serial_log}",
         "-display",
@@ -177,6 +208,23 @@ def run_capture(args: argparse.Namespace) -> None:
         "-D",
         str(qemu_log),
     ]
+
+    if kernel_path is not None:
+        qemu_cmd.append("-kernel")
+        qemu_cmd.append(str(kernel_path))
+    else:
+        qemu_cmd.append("-cdrom")
+        qemu_cmd.append(str(iso_path))
+
+    # Add UEFI firmware for aarch64 if user didn't explicitly set --bios ""
+    bios = args.bios
+    if bios is None:
+        detected = _detect_firmware()
+        if detected:
+            bios = detected
+    if bios:
+        qemu_cmd.append("-bios")
+        qemu_cmd.append(bios)
 
     print(f"[screenshot] Starting QEMU: {' '.join(qemu_cmd)}")
     proc = subprocess.Popen(
@@ -234,7 +282,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "then capture screenshot to PNG."
         )
     )
-    parser.add_argument("--iso", required=True, help="Path to bootable ISO")
+    parser.add_argument("--iso", help="Path to bootable ISO (mutually exclusive with --kernel)")
+    parser.add_argument("--kernel", help="Path to kernel ELF (mutually exclusive with --iso)")
     parser.add_argument(
         "--output",
         default="build/desktop-shell-grid.png",
@@ -254,6 +303,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--qemu-log",
         default="build/qemu-screenshot.log",
         help="QEMU debug log path",
+    )
+    parser.add_argument(
+        "--bios",
+        default=None,
+        help="Path to UEFI firmware file. Auto-detected for aarch64 if omitted. "
+             "Set to empty string to disable.",
     )
     parser.add_argument(
         "--marker",

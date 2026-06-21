@@ -9,7 +9,7 @@ section .text
 ; void idt_flush(uint64_t idt_ptr)
 global idt_flush
 idt_flush:
-    lidt [rdi]       ; Load IDT register (x86_64 calling convention: first arg in RDI)
+    lgdt [rdi]       ; x86_64 calling convention: first arg in RDI
     ret
 
 ; Common ISR stub - saves state and calls C handler

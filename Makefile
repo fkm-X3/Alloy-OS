@@ -22,11 +22,11 @@ ifeq ($(ARCH),i686)
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
 else ifeq ($(ARCH),x86_64)
     TARGET = x86_64-alloy
-    CC = clang
-    LD = ld.lld
+    CC = gcc
+    LD = ld
     AS = nasm
     ASFLAGS = -f elf64 -dARCH_X86_64
-    CFLAGS_ARCH = -target x86_64-unknown-none -m64 -DARCH_X86_64 -mgeneral-regs-only
+    CFLAGS_ARCH = -m64 -DARCH_X86_64
     LDFLAGS_ARCH = -m elf_x86_64
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
@@ -63,7 +63,7 @@ else
     $(error Unsupported architecture: $(ARCH). Use i686, x86_64, or aarch64)
 endif
 RUSTC = rustc
-CARGO = cargo
+CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
 CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c

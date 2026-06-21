@@ -185,6 +185,8 @@ void init_idt(void) {
     idt_set_gate(0x80, (uint64_t)syscall_entry, 0x08, 0xEE);
 
     idt_flush((uint64_t)&idtp);
+
+    asm volatile("sti");
 }
 
 static const char* exception_messages[] = {
@@ -240,22 +242,6 @@ void exception_handler(struct interrupt_frame* frame) {
     serial_print(")\n");
     serial_print("Error Code: ");
     serial_print_hex((uint32_t)err_code);
-    serial_print("\n");
-
-    serial_print("RIP: ");
-    serial_print_hex64(frame->rip);
-    serial_print("\n");
-
-    if (int_no == 14) {
-        uint64_t fault_addr;
-        asm volatile("mov %%cr2, %0" : "=r"(fault_addr));
-        serial_print("CR2: ");
-        serial_print_hex64(fault_addr);
-        serial_print("\n");
-    }
-
-    serial_print("CS: ");
-    serial_print_hex((uint32_t)frame->cs);
     serial_print("\n");
 
     serial_print("System halted.\n");

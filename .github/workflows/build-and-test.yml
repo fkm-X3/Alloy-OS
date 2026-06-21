@@ -124,7 +124,7 @@ jobs:
       run: |
         sudo apt-get update
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sudo apt-get install -y --no-install-recommends qemu-system-aarch64 qemu-efi-aarch64
+          sudo apt-get install -y --no-install-recommends qemu-system-aarch64 qemu-efi-aarch64 ipxe-qemu
         else
           sudo apt-get install -y --no-install-recommends qemu-system-x86
         fi
@@ -217,10 +217,11 @@ jobs:
             cat qemu.log
           fi
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            echo ""
-            echo "Possible fixes:"
-            echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
-            echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
+          echo ""
+          echo "Possible fixes:"
+          echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
+          echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
+          echo "  - Install ipxe-qemu (provides efi-virtio.rom for virtio PCI option ROM)"
           fi
           exit 1
         fi

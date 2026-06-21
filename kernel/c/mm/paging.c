@@ -30,7 +30,7 @@ extern uintptr_t _kernel_end;
  *   VA = PD_WIN_IDX << 21 | pt_idx << 12                                 */
 #define PD_WIN_IDX   8
 #define PT_WIN_BASE  ((uint64_t)PD_WIN_IDX << 21)   /* 0x1000000 = 16 MB */
-#define PT_TEMP_IDX  0
+#define PT_TEMP_IDX  1
 #define PT_TEMP_VA   (PT_WIN_BASE + (PT_TEMP_IDX << 12))
 
 /* Second window slot for map_page_in_pd / destroy_directory etc. */
@@ -41,6 +41,7 @@ static uint64_t kernel_pml4_phys = X86_64_PML4_PHYS;
 
 /* Allocated PT page for the PD_WIN window — allocated once in paging_init. */
 static struct page_table* g_win_pt = 0;
+static struct page_table* g_win2_pt = 0;
 
 static inline void invlpg(uint64_t virt) {
     asm volatile("invlpg (%0)" : : "r"(virt) : "memory");
@@ -57,8 +58,9 @@ static void* win_map(uint64_t phys, int pt_idx) {
             void* pt_frame = pmm_alloc_frame();
             if (!pt_frame) return 0;
             g_win_pt = (struct page_table*)((uint64_t)(uintptr_t)pt_frame);
-            /* Zero it */
             __builtin_memset(g_win_pt, 0, 4096);
+            /* Self-map so the window PTEs are always accessible */
+            g_win_pt->entries[0] = ((uint64_t)(uintptr_t)g_win_pt & 0xFFFFFFFFF000ULL) | 0x03;
         }
         uint64_t pt_phys = (uint64_t)(uintptr_t)g_win_pt;
         pd->entries[PD_WIN_IDX] = (pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
@@ -82,8 +84,8 @@ static void win_unmap(int pt_idx) {
 /* Helper: same for PD_WIN2 */
 static void* win2_map(uint64_t phys, int pt_idx) {
     struct page_table* pd = X86_64_PD_VIRT;
-    uint64_t pt_phys = (uint64_t)(uintptr_t)g_win_pt;
-    uint64_t win2_pt_phys = pt_phys + 0x1000; /* one page after win_pt */
+    if (!g_win2_pt) return 0;
+    uint64_t win2_pt_phys = (uint64_t)(uintptr_t)g_win2_pt;
     pd->entries[PD_WIN2_IDX] = (win2_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(PT_WIN2_BASE);
     uint64_t va = PT_WIN2_BASE + (uint64_t)pt_idx * 4096;
@@ -119,13 +121,33 @@ void paging_init() {
         pd->entries[i] = ((uint64_t)i << 21) | 0x83ULL;
     }
 
-    /* Pre-allocate the window page table */
+    /* Pre-allocate the window page tables and set up permanent self-mappings.
+     * g_win_pt[0] and g_win2_pt[0] are NEVER modified after init — they always
+     * point to their own physical pages so the window PTEs are always accessible
+     * via PT_WIN_BASE / PT_WIN2_BASE. PT_TEMP_IDX=1 is used for temp mappings. */
     void* win_frame = pmm_alloc_frame();
-    if (win_frame) {
+    void* win2_frame = pmm_alloc_frame();
+    if (win_frame && win2_frame) {
         g_win_pt = (struct page_table*)(uintptr_t)win_frame;
+        g_win2_pt = (struct page_table*)(uintptr_t)win2_frame;
         __builtin_memset(g_win_pt, 0, 4096);
-        /* Also zero the page after win_pt for win2 */
-        __builtin_memset((void*)((uintptr_t)g_win_pt + 0x1000), 0, 4096);
+        __builtin_memset(g_win2_pt, 0, 4096);
+
+        uint64_t win_pt_phys = (uint64_t)(uintptr_t)g_win_pt;
+        uint64_t win2_pt_phys = (uint64_t)(uintptr_t)g_win2_pt;
+
+        /* Self-map: entry 0 maps the window PT to itself (permanent) */
+        g_win_pt->entries[0] = (win_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        g_win2_pt->entries[0] = (win2_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+
+        /* Pre-set PD entries for both windows */
+        struct page_table* pd = X86_64_PD_VIRT;
+        pd->entries[PD_WIN_IDX] = (win_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        invlpg(PT_WIN_BASE);
+        pd->entries[PD_WIN2_IDX] = (win2_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        invlpg(PT_WIN2_BASE);
+    } else {
+        serial_print("  WARNING: Failed to allocate window PTs\n");
     }
 
     serial_print("  Identity map extended to 16 MB\n");

@@ -62,9 +62,9 @@ start:
     ; Set up page tables for long mode
     call setup_page_tables
 
-    ; Enable PAE (Physical Address Extension)
+    ; Enable PAE, SSE, and SSE exceptions
     mov eax, cr4
-    or eax, 1 << 5
+    or eax, (1 << 5) | (1 << 9) | (1 << 10)  ; PAE | OSFXSR | OSXMMEXCPT
     mov cr4, eax
 
     ; Load PML4 address into CR3
@@ -127,7 +127,7 @@ setup_page_tables:
     mov dword [PDPT_BASE + 0], PD_BASE | 0x03
     mov dword [PDPT_BASE + 4], 0
 
-    ; PD entries 0-1: 2MB pages identity mapping (covers 4MB)
+    ; PD entries 0-7: 2MB pages identity mapping (covers 16MB)
     ; PD entry 0: 0x000000 -> 0x1FFFFF (2MB)
     mov dword [PD_BASE + 0], 0x000000 | 0x83  ; present, writable, huge page
     mov dword [PD_BASE + 4], 0x000000
@@ -135,6 +135,20 @@ setup_page_tables:
     ; PD entry 1: 0x200000 -> 0x3FFFFF (2MB)
     mov dword [PD_BASE + 8], 0x200000 | 0x83
     mov dword [PD_BASE + 12], 0x000000
+
+    ; PD entries 2-7: 4MB -> 16MB
+    mov dword [PD_BASE + 16], 0x400000 | 0x83
+    mov dword [PD_BASE + 20], 0x000000
+    mov dword [PD_BASE + 24], 0x600000 | 0x83
+    mov dword [PD_BASE + 28], 0x000000
+    mov dword [PD_BASE + 32], 0x800000 | 0x83
+    mov dword [PD_BASE + 36], 0x000000
+    mov dword [PD_BASE + 40], 0xA00000 | 0x83
+    mov dword [PD_BASE + 44], 0x000000
+    mov dword [PD_BASE + 48], 0xC00000 | 0x83
+    mov dword [PD_BASE + 52], 0x000000
+    mov dword [PD_BASE + 56], 0xE00000 | 0x83
+    mov dword [PD_BASE + 60], 0x000000
 
     ret
 
@@ -277,6 +291,7 @@ section .bss
 align 16
 mb_magic: resd 1
 mb_info:  resd 1
+align 16
 stack_bottom:
     resb KERNEL_STACK_SIZE
 stack_top:

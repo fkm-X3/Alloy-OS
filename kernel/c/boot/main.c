@@ -49,8 +49,20 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     serial_print("Architecture: unknown\n");
 #endif
 
+    serial_print("Initializing GDT...\n");
+    init_gdt();
+    serial_print("GDT initialized\n");
+
+    serial_print("Initializing IDT...\n");
+    init_idt();
+    serial_print("IDT initialized (disabling interrupts for VGA)\n");
+    asm volatile("cli");
+
 #if defined(ARCH_I686) || defined(ARCH_X86_64)
-    vga_init();
+    serial_print("Initializing VGA text mode...\n");
+    vga_set_color(7, 0);
+    vga_set_cursor(0, 0);
+    vga_clear();
 #endif
 
 #if defined(ARCH_I686) || defined(ARCH_X86_64)
@@ -78,30 +90,6 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #else
     serial_print("ARM64 boot sequence\n");
 #endif
-
-    serial_print("Initializing GDT...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
-    vga_print("[ ] Initializing GDT...");
-#endif
-    init_gdt();
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
-    vga_set_color(10, 0);
-    vga_println(" OK");
-    vga_set_color(7, 0);
-#endif
-    serial_print("GDT initialized\n");
-
-    serial_print("Initializing IDT...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
-    vga_print("[ ] Initializing IDT...");
-#endif
-    init_idt();
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
-    vga_set_color(10, 0);
-    vga_println(" OK");
-    vga_set_color(7, 0);
-#endif
-    serial_print("IDT initialized\n");
 
 #if defined(ARCH_I686) || defined(ARCH_X86_64)
     serial_print("Initializing keyboard...\n");
@@ -236,6 +224,9 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_set_color(7, 0);
     serial_print("Initrd initialized\n");
 #endif
+
+    serial_print("Enabling interrupts for Rust kernel...\n");
+    asm volatile("sti");
 
     serial_print("Transferring control to Rust kernel...\n");
 #if defined(ARCH_I686) || defined(ARCH_X86_64)

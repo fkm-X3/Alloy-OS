@@ -47,6 +47,6 @@ SECTIONS
     /* End of kernel */
     _kernel_end = .;
     
-    /* Stack grows down from here */
-    _stack_top = 0x48000000;
+    /* Stack grows down from here (just below PL110 framebuffer at 0x48000000) */
+    _stack_top = 0x47FFF000;
 }

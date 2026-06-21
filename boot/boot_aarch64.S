@@ -64,10 +64,6 @@ el1_entry:
     mov x0, #0                   /* magic = 0 (no multiboot on ARM) */
     mov x1, #0                   /* info = 0 */
 
-    /* Print boot message via UART (PL011 at 0x09000000) */
-    adr x2, msg_boot
-    bl uart_print
-
     /* Initialize serial port for kernel output */
     /* PL011 UART at 0x09000000 on QEMU virt */
     ldr x2, =0x09000000
@@ -89,6 +85,10 @@ el1_entry:
     /* Enable UART, TX, RX */
     mov w3, #0x301
     str w3, [x2, #0x30]         /* UARTCR */
+
+    /* Print boot message via UART */
+    adr x2, msg_boot
+    bl uart_print
 
     /* Clear BSS */
     ldr x0, =_kernel_start

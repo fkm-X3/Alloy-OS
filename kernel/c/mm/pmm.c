@@ -7,7 +7,7 @@ extern uint32_t _kernel_end;
 
 PhysicalMemoryManager g_pmm;
 
-#define MAX_PHYSICAL_FRAMES (512 * 1024 * 1024 / 4096)  /* 512MB of RAM */
+#define MAX_PHYSICAL_FRAMES (1024 * 1024)
 static uint32_t frame_refcounts[MAX_PHYSICAL_FRAMES];
 
 #define MULTIBOOT_MEMORY_AVAILABLE 1
@@ -16,7 +16,7 @@ static uint32_t frame_refcounts[MAX_PHYSICAL_FRAMES];
 #define MULTIBOOT_MEMORY_NVS 4
 #define MULTIBOOT_MEMORY_BADRAM 5
 
-static uint32_t frame_bitmap[MAX_PHYSICAL_FRAMES / 32];
+static uint32_t frame_bitmap[1024 * 1024 / 32];
 
 static void set_frame(uint32_t frame_number) {
     uint32_t index = frame_number / 32;

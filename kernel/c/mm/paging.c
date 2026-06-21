@@ -358,22 +358,343 @@ uintptr_t paging_get_kernel_directory_phys() {
     return (uintptr_t)kernel_pml4_phys;
 }
 
+/* Helper: deep-copy a single 4KB page table. src/dst PTs must be mapped
+ * through win/win2 respectively before calling.                          */
+static void clone_page_table(struct page_table* src_pt,
+                              struct page_table* dst_pt) {
+    for (int i = 0; i < 512; i++) {
+        uint64_t pte = src_pt->entries[i];
+        if (!(pte & 1)) continue;
+
+        uint64_t src_frame = pte & 0xFFFFFFFFF000ULL;
+        void* new_frame = pmm_alloc_frame();
+        if (!new_frame) {
+            serial_print("Paging: clone - OOM during page copy\n");
+            continue;
+        }
+        __builtin_memcpy(new_frame, (void*)(uintptr_t)src_frame, PAGE_SIZE);
+        dst_pt->entries[i] = ((uint64_t)(uintptr_t)new_frame & 0xFFFFFFFFF000ULL)
+                           | (pte & 0xFFFULL) | 1;
+    }
+}
+
 uintptr_t paging_clone_directory(uintptr_t pd_phys) {
-    (void)pd_phys;
-    serial_print("Paging: paging_clone_directory not yet fully implemented for x86_64\n");
-    return paging_create_directory_phys();
+    serial_print("Paging: Cloning page directory (x86_64)\n");
+
+    void* dst_pml4_frame = pmm_alloc_frame();
+    if (!dst_pml4_frame) return 0;
+    uint64_t dst_pml4_phys = (uint64_t)(uintptr_t)dst_pml4_frame;
+    __builtin_memset(dst_pml4_frame, 0, 4096);
+
+    /* Map source & dest PML4s simultaneously */
+    struct page_directory* src_pml4 = (struct page_directory*)win_map(pd_phys, 0);
+    struct page_directory* dst_pml4 = (struct page_directory*)win2_map(dst_pml4_phys, 0);
+
+    /* Share kernel entries (0-3) — these point into the identity-mapped
+     * PML4→PDPT→PD hierarchy used by all kernel code.                  */
+    for (int i = 0; i < 4; i++)
+        dst_pml4->entries[i] = src_pml4->entries[i];
+
+    for (int pml4_i = 4; pml4_i < 512; pml4_i++) {
+        uint64_t pml4e = src_pml4->entries[pml4_i];
+        if (!(pml4e & 1)) continue;
+
+        uint64_t src_pdpt_phys = pml4e & 0xFFFFFFFFF000ULL;
+        uint64_t pdpt_flags    = pml4e & 0xFFFULL;
+
+        void* dst_pdpt_frame = pmm_alloc_frame();
+        if (!dst_pdpt_frame) goto fail;
+        uint64_t dst_pdpt_phys = (uint64_t)(uintptr_t)dst_pdpt_frame;
+        __builtin_memset(dst_pdpt_frame, 0, 4096);
+        dst_pml4->entries[pml4_i] = (dst_pdpt_phys & 0xFFFFFFFFF000ULL)
+                                  | pdpt_flags | 1;
+
+        /* Switch windows to src/dst PDPT */
+        win2_unmap(0);
+        win_unmap(0);
+        struct page_table* src_pdpt = (struct page_table*)win_map(src_pdpt_phys, 0);
+        struct page_table* dst_pdpt = (struct page_table*)win2_map(dst_pdpt_phys, 0);
+
+        for (int pdpt_i = 0; pdpt_i < 512; pdpt_i++) {
+            uint64_t pdpde = src_pdpt->entries[pdpt_i];
+            if (!(pdpde & 1)) continue;
+
+            uint64_t src_pd_phys = pdpde & 0xFFFFFFFFF000ULL;
+            uint64_t pd_flags    = pdpde & 0xFFFULL;
+
+            void* dst_pd_frame = pmm_alloc_frame();
+            if (!dst_pd_frame) goto fail;
+            uint64_t dst_pd_phys = (uint64_t)(uintptr_t)dst_pd_frame;
+            __builtin_memset(dst_pd_frame, 0, 4096);
+            dst_pdpt->entries[pdpt_i] = (dst_pd_phys & 0xFFFFFFFFF000ULL)
+                                      | pd_flags | 1;
+
+            /* Switch windows to src/dst PD */
+            win2_unmap(0);
+            win_unmap(0);
+            struct page_table* src_pd = (struct page_table*)win_map(src_pd_phys, 0);
+            struct page_table* dst_pd = (struct page_table*)win2_map(dst_pd_phys, 0);
+
+            for (int pd_i = 0; pd_i < 512; pd_i++) {
+                uint64_t pde = src_pd->entries[pd_i];
+                if (!(pde & 1)) continue;
+
+                if (pde & 0x80) {
+                    /* 2MB huge page — break into 512 4KB pages for the clone.
+                     * Source frame_addr is the base of the 2MB region.       */
+                    uint64_t huge_base = pde & 0xFFFFFFFFF000ULL;
+                    uint64_t src_flags = pde & 0xFFFULL;
+
+                    void* dst_pt_frame = pmm_alloc_frame();
+                    if (!dst_pt_frame) goto fail;
+                    uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
+                    __builtin_memset(dst_pt_frame, 0, 4096);
+
+                    dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
+                                          | (src_flags & ~0x80ULL) | 1;
+
+                    win2_unmap(0);
+                    win_unmap(0);
+                    struct page_table* dst_pt = (struct page_table*)win_map(dst_pt_phys, 0);
+
+                    for (int pt_i = 0; pt_i < 512; pt_i++) {
+                        uint64_t phys = huge_base + ((uint64_t)pt_i << 12);
+                        void* new_frame = pmm_alloc_frame();
+                        if (!new_frame) continue;
+                        __builtin_memcpy(new_frame, (void*)(uintptr_t)phys, PAGE_SIZE);
+                        dst_pt->entries[pt_i] =
+                            ((uint64_t)(uintptr_t)new_frame & 0xFFFFFFFFF000ULL)
+                            | (src_flags & (0xFFFULL & ~0x80ULL)) | 1;
+                    }
+
+                    win_unmap(0);
+                    /* Re-map both src and dst PD for next PD iteration */
+                    win_map(src_pd_phys, 0);
+                    win2_map(dst_pd_phys, 0);
+                } else {
+                    /* 4KB page table */
+                    uint64_t src_pt_phys = pde & 0xFFFFFFFFF000ULL;
+                    uint64_t pt_flags    = pde & 0xFFFULL;
+
+                    void* dst_pt_frame = pmm_alloc_frame();
+                    if (!dst_pt_frame) goto fail;
+                    uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
+                    __builtin_memset(dst_pt_frame, 0, 4096);
+
+                    dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
+                                          | pt_flags | 1;
+
+                    win2_unmap(0);
+                    win_unmap(0);
+                    struct page_table* src_pt = (struct page_table*)win_map(src_pt_phys, 0);
+                    struct page_table* dst_pt = (struct page_table*)win2_map(dst_pt_phys, 0);
+
+                    clone_page_table(src_pt, dst_pt);
+
+                    win_unmap(0);
+                    win2_unmap(0);
+                    /* Re-map both src and dst PD for next PD iteration */
+                    win_map(src_pd_phys, 0);
+                    win2_map(dst_pd_phys, 0);
+                }
+            }
+
+            win_unmap(0);
+            win2_unmap(0);
+            /* Re-map both src and dst PDPT for next PDPT iteration */
+            win_map(src_pdpt_phys, 0);
+            win2_map(dst_pdpt_phys, 0);
+        }
+
+        win_unmap(0);
+        win2_unmap(0);
+        /* Re-map both src and dst PML4 for next PML4 iteration */
+        win_map(pd_phys, 0);
+        win2_map(dst_pml4_phys, 0);
+    }
+
+    win_unmap(0);
+    win2_unmap(0);
+    serial_print("Paging: Clone complete\n");
+    return (uintptr_t)dst_pml4_phys;
+
+fail:
+    serial_print("Paging: Clone failed - out of memory\n");
+    /* Best-effort cleanup: free dst_pml4 (user data is leaked but
+     * the kernel can continue).                                      */
+    pmm_free_frame((void*)(uintptr_t)dst_pml4_phys);
+    win_unmap(0);
+    win2_unmap(0);
+    return 0;
+}
+
+static void fork_fork_pt(struct page_table* src_pt,
+                          struct page_table* dst_pt) {
+    for (int i = 0; i < 512; i++) {
+        uint64_t pte = src_pt->entries[i];
+        if (!(pte & 1)) {
+            dst_pt->entries[i] = 0;
+            continue;
+        }
+
+        uint64_t frame_phys = pte & 0xFFFFFFFFF000ULL;
+        uint64_t flags      = pte & 0xFFFULL;
+
+        if (flags & PAGE_WRITE) {
+            /* Writable → make both read-only + COW */
+            flags &= ~PAGE_WRITE;
+            flags |= PAGE_COW;
+            pmm_refcount_inc((void*)(uintptr_t)frame_phys);
+
+            src_pt->entries[i] = frame_phys | flags;
+            dst_pt->entries[i] = frame_phys | flags;
+        } else {
+            /* Already read-only — share with COW (if not already) */
+            flags |= PAGE_COW;
+            pmm_refcount_inc((void*)(uintptr_t)frame_phys);
+
+            src_pt->entries[i] = frame_phys | flags;
+            dst_pt->entries[i] = frame_phys | flags;
+        }
+    }
 }
 
 uintptr_t paging_fork_directory(uintptr_t pd_phys) {
-    (void)pd_phys;
-    serial_print("Paging: paging_fork_directory not yet fully implemented for x86_64\n");
-    return paging_create_directory_phys();
+    serial_print("Paging: Forking page directory (x86_64, COW)\n");
+
+    void* dst_pml4_frame = pmm_alloc_frame();
+    if (!dst_pml4_frame) return 0;
+    uint64_t dst_pml4_phys = (uint64_t)(uintptr_t)dst_pml4_frame;
+    __builtin_memset(dst_pml4_frame, 0, 4096);
+
+    struct page_directory* src_pml4 = (struct page_directory*)win_map(pd_phys, 0);
+    struct page_directory* dst_pml4 = (struct page_directory*)win2_map(dst_pml4_phys, 0);
+
+    for (int i = 0; i < 4; i++)
+        dst_pml4->entries[i] = src_pml4->entries[i];
+
+    for (int pml4_i = 4; pml4_i < 512; pml4_i++) {
+        uint64_t pml4e = src_pml4->entries[pml4_i];
+        if (!(pml4e & 1)) continue;
+
+        uint64_t src_pdpt_phys = pml4e & 0xFFFFFFFFF000ULL;
+        uint64_t pdpt_flags    = pml4e & 0xFFFULL;
+
+        void* dst_pdpt_frame = pmm_alloc_frame();
+        if (!dst_pdpt_frame) goto fork_fail;
+        uint64_t dst_pdpt_phys = (uint64_t)(uintptr_t)dst_pdpt_frame;
+        __builtin_memset(dst_pdpt_frame, 0, 4096);
+        dst_pml4->entries[pml4_i] = (dst_pdpt_phys & 0xFFFFFFFFF000ULL)
+                                  | pdpt_flags | 1;
+
+        win2_unmap(0);
+        win_unmap(0);
+        struct page_table* src_pdpt = (struct page_table*)win_map(src_pdpt_phys, 0);
+        struct page_table* dst_pdpt = (struct page_table*)win2_map(dst_pdpt_phys, 0);
+
+        for (int pdpt_i = 0; pdpt_i < 512; pdpt_i++) {
+            uint64_t pdpde = src_pdpt->entries[pdpt_i];
+            if (!(pdpde & 1)) continue;
+
+            uint64_t src_pd_phys = pdpde & 0xFFFFFFFFF000ULL;
+            uint64_t pd_flags    = pdpde & 0xFFFULL;
+
+            void* dst_pd_frame = pmm_alloc_frame();
+            if (!dst_pd_frame) goto fork_fail;
+            uint64_t dst_pd_phys = (uint64_t)(uintptr_t)dst_pd_frame;
+            __builtin_memset(dst_pd_frame, 0, 4096);
+            dst_pdpt->entries[pdpt_i] = (dst_pd_phys & 0xFFFFFFFFF000ULL)
+                                      | pd_flags | 1;
+
+            win2_unmap(0);
+            win_unmap(0);
+            struct page_table* src_pd = (struct page_table*)win_map(src_pd_phys, 0);
+            struct page_table* dst_pd = (struct page_table*)win2_map(dst_pd_phys, 0);
+
+            for (int pd_i = 0; pd_i < 512; pd_i++) {
+                uint64_t pde = src_pd->entries[pd_i];
+                if (!(pde & 1)) continue;
+
+                if (pde & 0x80) {
+                    /* 2MB huge page — share as-is (kernel identity pages) */
+                    dst_pd->entries[pd_i] = pde;
+                } else {
+                    uint64_t src_pt_phys = pde & 0xFFFFFFFFF000ULL;
+                    uint64_t pt_flags    = pde & 0xFFFULL;
+
+                    void* dst_pt_frame = pmm_alloc_frame();
+                    if (!dst_pt_frame) goto fork_fail;
+                    uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
+                    __builtin_memset(dst_pt_frame, 0, 4096);
+
+                    dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
+                                          | pt_flags | 1;
+
+                    win2_unmap(0);
+                    win_unmap(0);
+                    struct page_table* src_pt = (struct page_table*)win_map(src_pt_phys, 0);
+                    struct page_table* dst_pt = (struct page_table*)win2_map(dst_pt_phys, 0);
+
+                    fork_fork_pt(src_pt, dst_pt);
+
+                    win_unmap(0);
+                    win2_unmap(0);
+                    win_map(src_pd_phys, 0);
+                    win2_map(dst_pd_phys, 0);
+                }
+            }
+
+            win_unmap(0);
+            win2_unmap(0);
+            win_map(src_pdpt_phys, 0);
+            win2_map(dst_pdpt_phys, 0);
+        }
+
+        win_unmap(0);
+        win2_unmap(0);
+        win_map(pd_phys, 0);
+        win2_map(dst_pml4_phys, 0);
+    }
+
+    win_unmap(0);
+    win2_unmap(0);
+    serial_print("Paging: Fork complete (COW)\n");
+    return (uintptr_t)dst_pml4_phys;
+
+fork_fail:
+    serial_print("Paging: Fork failed - out of memory\n");
+    pmm_free_frame((void*)(uintptr_t)dst_pml4_phys);
+    win_unmap(0);
+    win2_unmap(0);
+    return 0;
 }
 
 uint8_t paging_handle_cow_fault(uintptr_t fault_addr) {
-    (void)fault_addr;
-    serial_print("Paging: COW fault handler not yet fully implemented for x86_64\n");
-    return 0;
+    uint64_t* pte = get_page_entry((uint64_t)fault_addr, false);
+    if (!pte || !(*pte & 1)) return 0;
+
+    uint64_t flags = *pte & 0xFFFULL;
+    if (!(flags & PAGE_COW)) return 0;
+
+    uint64_t old_frame = *pte & 0xFFFFFFFFF000ULL;
+
+    void* new_frame = pmm_alloc_frame();
+    if (!new_frame) {
+        serial_print("Paging: COW - out of memory!\n");
+        return 0;
+    }
+
+    __builtin_memcpy(new_frame, (void*)(uintptr_t)old_frame, PAGE_SIZE);
+
+    pmm_refcount_dec((void*)(uintptr_t)old_frame);
+
+    flags &= ~PAGE_COW;
+    flags |= PAGE_WRITE;
+    *pte = ((uint64_t)(uintptr_t)new_frame & 0xFFFFFFFFF000ULL) | flags;
+
+    invalidate_page((uint64_t)fault_addr);
+
+    return 1;
 }
 
 bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,

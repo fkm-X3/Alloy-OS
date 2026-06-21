@@ -76,7 +76,7 @@ void vmm_free_region(void* virt_addr, uintptr_t size) {
         uintptr_t phys = paging_get_physical_address(page_virt);
 
         if (phys != 0) {
-            pmm_free_frame((void*)(phys & 0xFFFFF000));
+            pmm_free_frame((void*)(phys & ~(uintptr_t)(PAGE_SIZE - 1)));
             paging_unmap_page(page_virt);
             g_vmm.allocated_pages--;
         }

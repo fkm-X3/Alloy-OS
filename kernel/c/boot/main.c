@@ -42,7 +42,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #ifdef ARCH_I686
     serial_print("Architecture: i686 (32-bit x86)\n");
 #elif defined(ARCH_X86_64)
-    serial_print("Architecture: x86_64 (64-bit x86) [PLACEHOLDER]\n");
+    serial_print("Architecture: x86_64 (64-bit x86)\n");
 #elif defined(ARCH_AARCH64)
     serial_print("Architecture: aarch64 (64-bit ARM) [MINIMAL]\n");
 #else

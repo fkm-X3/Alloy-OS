@@ -11,7 +11,7 @@ ifeq ($(ARCH),i686)
     LD = ld
     AS = nasm
     ASFLAGS = -f elf32
-    CFLAGS_ARCH = -m32 -DARCH_I686 -mno-sse -mno-sse2 -mno-mmx -mno-80387
+    CFLAGS_ARCH = -m32 -DARCH_I686
     LDFLAGS_ARCH = -m elf_i386
     QEMU = qemu-system-i386
     QEMU_FLAGS = -serial stdio
@@ -26,7 +26,7 @@ else ifeq ($(ARCH),x86_64)
     LD = ld
     AS = nasm
     ASFLAGS = -f elf64 -dARCH_X86_64
-    CFLAGS_ARCH = -m64 -DARCH_X86_64 -mno-sse -mno-sse2 -mno-mmx -mno-80387 -mno-red-zone
+    CFLAGS_ARCH = -m64 -DARCH_X86_64
     LDFLAGS_ARCH = -m elf_x86_64
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio

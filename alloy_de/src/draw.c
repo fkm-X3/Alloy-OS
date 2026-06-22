@@ -139,3 +139,165 @@ void draw_str(unsigned int *fb, int x, int y, const char *s,
         ++s;
     }
 }
+
+static int str_len(const char *s) {
+    int n = 0;
+    while (s[n]) ++n;
+    return n;
+}
+
+void draw_str_centered(unsigned int *fb, int y, const char *s,
+                       unsigned int fg, unsigned int bg) {
+    int w = str_len(s) * 8;
+    int x = (SCREEN_W - w) / 2;
+    draw_str(fb, x, y, s, fg, bg);
+}
+
+void draw_str_right(unsigned int *fb, int x_right, int y, const char *s,
+                    unsigned int fg, unsigned int bg) {
+    int w = str_len(s) * 8;
+    draw_str(fb, x_right - w, y, s, fg, bg);
+}
+
+void draw_str_scaled(unsigned int *fb, int x, int y, const char *s,
+                     unsigned int fg, unsigned int bg, int scale) {
+    int cx = x;
+    while (*s) {
+        unsigned char ch = (unsigned char)*s;
+        if (ch >= 128) { ++s; continue; }
+        for (int row = 0; row < 8; ++row) {
+            unsigned char line = font[ch][row];
+            for (int sy = 0; sy < scale; ++sy) {
+                for (int col = 0; col < 8; ++col) {
+                    unsigned int val = (line & (1 << (7 - col))) ? fg : bg;
+                    for (int sx = 0; sx < scale; ++sx)
+                        put_pixel(fb, cx + col * scale + sx,
+                                  y + row * scale + sy, val);
+                }
+            }
+        }
+        cx += 8 * scale;
+        ++s;
+    }
+}
+
+void draw_str_centered_scaled(unsigned int *fb, int y, const char *s,
+                              unsigned int fg, unsigned int bg, int scale) {
+    int w = str_len(s) * 8 * scale;
+    int x = (SCREEN_W - w) / 2;
+    draw_str_scaled(fb, x, y, s, fg, bg, scale);
+}
+
+void draw_str_right_scaled(unsigned int *fb, int x_right, int y,
+                           const char *s, unsigned int fg,
+                           unsigned int bg, int scale) {
+    int w = str_len(s) * 8 * scale;
+    draw_str_scaled(fb, x_right - w, y, s, fg, bg, scale);
+}
+
+void draw_rounded_rect(unsigned int *fb, int x, int y, int w, int h,
+                       int r, unsigned int c) {
+    if (r < 1) { fill_rect(fb, x, y, w, h, c); return; }
+
+    fill_rect(fb, x + r, y, w - 2 * r, h, c);
+
+    fill_rect(fb, x, y + r, r, h - 2 * r, c);
+    fill_rect(fb, x + w - r, y + r, r, h - 2 * r, c);
+
+    for (int dy = 0; dy < r; ++dy) {
+        for (int dx = 0; dx < r; ++dx) {
+            if (dx * dx + dy * dy <= r * r) {
+                put_pixel(fb, x + r - 1 - dx, y + r - 1 - dy, c);
+                put_pixel(fb, x + w - r + dx, y + r - 1 - dy, c);
+                put_pixel(fb, x + r - 1 - dx, y + h - r + dy, c);
+                put_pixel(fb, x + w - r + dx, y + h - r + dy, c);
+            }
+        }
+    }
+}
+
+void draw_icon(unsigned int *fb, int x, int y, int icon_id,
+               unsigned int color) {
+    static const unsigned char icons[4][64] = {
+        /* ICON_TERMINAL: ">_" screen shape */
+        {
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+            0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0x00,0x00,
+            0x00,0xFF,0x00,0x00,0x00,0xFF,0x00,0x00,
+            0x00,0xFF,0x18,0x38,0x70,0xFF,0x00,0x00,
+            0x00,0xFF,0x70,0x38,0x18,0xFF,0x00,0x00,
+            0x00,0xFF,0x00,0x00,0x00,0xFF,0x00,0x00,
+            0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0x00,0x00,
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        },
+        /* ICON_FILES: folder shape */
+        {
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+            0x00,0x00,0x7F,0xFF,0xFF,0x00,0x00,0x00,
+            0x00,0x7F,0xFF,0xFF,0xFF,0xFF,0x00,0x00,
+            0x00,0xFF,0x00,0x00,0x00,0xFF,0x00,0x00,
+            0x00,0xFF,0x00,0x00,0x00,0xFF,0x00,0x00,
+            0x00,0xFF,0x00,0x00,0x00,0xFF,0x00,0x00,
+            0x00,0x7F,0xFF,0xFF,0xFF,0xFF,0x00,0x00,
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        },
+        /* ICON_SETTINGS: gear shape */
+        {
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+            0x00,0x00,0x00,0x66,0x66,0x00,0x00,0x00,
+            0x00,0x00,0x7E,0x66,0x66,0x7E,0x00,0x00,
+            0x00,0x7E,0xFF,0x66,0x66,0xFF,0x7E,0x00,
+            0x00,0x7E,0xFF,0x66,0x66,0xFF,0x7E,0x00,
+            0x00,0x00,0x7E,0x66,0x66,0x7E,0x00,0x00,
+            0x00,0x00,0x00,0x66,0x66,0x00,0x00,0x00,
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        },
+        /* ICON_BROWSER: globe shape */
+        {
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+            0x00,0x3C,0x66,0xFF,0xFF,0x66,0x3C,0x00,
+            0x00,0x7E,0xDB,0xDB,0xDB,0xDB,0x7E,0x00,
+            0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,
+            0x00,0xFF,0xFF,0x00,0x00,0xFF,0xFF,0x00,
+            0x00,0x7E,0xDB,0xDB,0xDB,0xDB,0x7E,0x00,
+            0x00,0x3C,0x66,0xFF,0xFF,0x66,0x3C,0x00,
+            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        },
+    };
+
+    if (icon_id < 0 || icon_id > 3) return;
+    for (int row = 0; row < 8; ++row) {
+        unsigned char line = icons[icon_id][row * 8 + 0];
+        unsigned char line2 = icons[icon_id][row * 8 + 1];
+        unsigned char line3 = icons[icon_id][row * 8 + 2];
+        unsigned char line4 = icons[icon_id][row * 8 + 3];
+        unsigned char line5 = icons[icon_id][row * 8 + 4];
+        unsigned char line6 = icons[icon_id][row * 8 + 5];
+        unsigned char line7 = icons[icon_id][row * 8 + 6];
+        unsigned char line8 = icons[icon_id][row * 8 + 7];
+        for (int col = 0; col < 32; ++col) {
+            int bit;
+            if (col < 8) bit = (line >> (7 - col)) & 1;
+            else if (col < 16) bit = (line2 >> (15 - col)) & 1;
+            else if (col < 24) bit = (line3 >> (23 - col)) & 1;
+            else bit = (line4 >> (31 - col)) & 1;
+            if (bit) {
+                for (int sy = 0; sy < 4; ++sy)
+                    for (int sx = 0; sx < 4; ++sx)
+                        put_pixel(fb, x + col * 4 + sx, y + row * 4 + sy, color);
+            }
+        }
+        for (int col = 0; col < 32; ++col) {
+            int bit;
+            if (col < 8) bit = (line5 >> (7 - col)) & 1;
+            else if (col < 16) bit = (line6 >> (15 - col)) & 1;
+            else if (col < 24) bit = (line7 >> (23 - col)) & 1;
+            else bit = (line8 >> (31 - col)) & 1;
+            if (bit) {
+                for (int sy = 0; sy < 4; ++sy)
+                    for (int sx = 0; sx < 4; ++sx)
+                        put_pixel(fb, x + col * 4 + sx, y + (row + 8) * 4 + sy, color);
+            }
+        }
+    }
+}

@@ -136,6 +136,8 @@ jobs:
         echo "Workspace: ${{ github.workspace }}"
         echo "QEMU version: $(qemu-system-aarch64 --version 2>/dev/null || qemu-system-i386 --version 2>/dev/null || true)"
 
+        rm -f serial.log qemu.log qemu_stderr.log
+
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
           # aarch64: boot ELF directly to avoid CI firmware ROM dependency issues
           ELF_FILE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
@@ -217,24 +219,38 @@ jobs:
             cat qemu.log
           fi
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          echo ""
-          echo "Possible fixes:"
-          echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
-          echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
-          echo "  - Install ipxe-qemu (provides efi-virtio.rom for virtio PCI option ROM)"
+            echo ""
+            echo "Possible fixes:"
+            echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
+            echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
+            echo "  - Install ipxe-qemu (provides efi-virtio.rom for virtio PCI option ROM)"
           fi
           exit 1
         fi
+
         if ! grep -q "Alloy" serial.log; then
           echo "ERROR: Kernel name not found in serial output"
           cat serial.log
           exit 1
         fi
-        if ! grep -qE "GDT|IDT|PMM|VMM|PL110|Generic Timer" serial.log; then
-          echo "ERROR: Init messages not found"
-          cat serial.log
-          exit 1
-        fi
+
+        case "${{ matrix.arch }}" in
+          aarch64)
+            if ! grep -qE "GDT|IDT|PMM|VMM|PL110|Generic Timer" serial.log; then
+              echo "ERROR: ARM init messages not found"
+              cat serial.log
+              exit 1
+            fi
+            ;;
+          i686|x86_64)
+            if ! grep -qE "GDT|IDT|PMM|VMM" serial.log; then
+              echo "ERROR: x86 init messages not found"
+              cat serial.log
+              exit 1
+            fi
+            ;;
+        esac
+
         echo "Boot verification passed for ${{ matrix.arch }}!"
 
     - name: Upload boot logs

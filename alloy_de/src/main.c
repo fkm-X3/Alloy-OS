@@ -1,4 +1,7 @@
 #include "draw.h"
+#include "desktop.h"
+#include "panel.h"
+#include "launcher.h"
 #include "shm.h"
 #include "wl_client.h"
 #include "stdio.h"
@@ -9,34 +12,9 @@
 
 typedef __SIZE_TYPE__ size_t;
 
-#define MAX_POLL_FDS 8
-
-typedef void (*poll_callback_t)(void *userdata);
-
-struct poll_fd {
-    int fd;
-    poll_callback_t callback;
-    void *userdata;
-    int active;
-};
-
-static struct poll_fd poll_fds[MAX_POLL_FDS];
-static int num_poll_fds = 0;
 static int running = 1;
-
-static void poll_init(void) {
-    num_poll_fds = 0;
-}
-
-static int poll_add_fd(int fd, poll_callback_t cb, void *userdata) {
-    if (num_poll_fds >= MAX_POLL_FDS) return -1;
-    poll_fds[num_poll_fds].fd = fd;
-    poll_fds[num_poll_fds].callback = cb;
-    poll_fds[num_poll_fds].userdata = userdata;
-    poll_fds[num_poll_fds].active = 1;
-    num_poll_fds++;
-    return 0;
-}
+static int launcher_visible = 0;
+static int g_seconds = 0;
 
 struct wl_display *g_display = NULL;
 
@@ -73,12 +51,34 @@ static void handle_global(unsigned int name, const char *iface,
     }
 }
 
+static void full_redraw(void) {
+    desktop_render(fb, SCREEN_W, SCREEN_H, g_seconds);
+    panel_render(fb, SCREEN_W, SCREEN_H, g_seconds);
+    if (launcher_visible)
+        launcher_render(fb, SCREEN_W, SCREEN_H);
+}
+
+static void commit_full(void) {
+    wl_surface_damage(g_display->fd, surface_id, 0, 0, SCREEN_W, SCREEN_H);
+    wl_surface_commit(g_display->fd, surface_id);
+}
+
 static void on_key(int key, int pressed, struct input_state *state) {
     (void)state;
-    if (pressed) {
-        if (key == 1) { /* Escape */
-            puts("alloy_de: escape pressed");
+    if (!pressed) return;
+
+    if (key == 1) {
+        if (launcher_visible) {
+            launcher_visible = 0;
+            full_redraw();
+            commit_full();
+            puts("alloy_de: launcher closed (Escape)");
         }
+    } else if (key == 125 || key == 127) {
+        launcher_visible = !launcher_visible;
+        full_redraw();
+        commit_full();
+        puts(launcher_visible ? "alloy_de: launcher opened" : "alloy_de: launcher closed");
     }
 }
 
@@ -90,11 +90,35 @@ static void on_mouse_move(int x, int y, struct input_state *state) {
 
 static void on_click(int button, int pressed, int x, int y,
                      struct input_state *state) {
-    (void)button;
-    (void)pressed;
-    (void)x;
-    (void)y;
     (void)state;
+    if (!pressed) return;
+
+    if (launcher_visible) {
+        const char *app = launcher_handle_click(x, y, SCREEN_W, SCREEN_H);
+        if (app) {
+            puts(app);
+            launcher_visible = 0;
+            full_redraw();
+            commit_full();
+        } else {
+            launcher_visible = 0;
+            full_redraw();
+            commit_full();
+            puts("alloy_de: launcher closed (click outside)");
+        }
+        return;
+    }
+
+    int action = panel_handle_click(x, y, SCREEN_W, SCREEN_H);
+    if (action == PANEL_ACTION_LAUNCHER) {
+        launcher_visible = !launcher_visible;
+        full_redraw();
+        commit_full();
+        puts(launcher_visible ? "alloy_de: launcher opened" : "alloy_de: launcher closed");
+    } else if (action == PANEL_ACTION_QUIT) {
+        puts("alloy_de: quit requested");
+        running = 0;
+    }
 }
 
 static void dispatch_globals(void) {
@@ -115,25 +139,6 @@ static void dispatch_globals(void) {
         unsigned int off = 8 + ((iface_len + 3) & ~3u);
         version = *(unsigned int *)(p + off);
         handle_global(name, iface, version);
-    }
-}
-
-static void draw_desktop(unsigned int *fb) {
-    fill_rect(fb, 0, 0, SCREEN_W, SCREEN_H, 0xFF0F0F1A);
-    fill_rect(fb, 0, 0, SCREEN_W, 48, 0xFF1A1A2E);
-    draw_str(fb, 12, 16, "Alloy DE", 0xFF888899, 0xFF1A1A2E);
-    draw_str(fb, SCREEN_W / 2 - 40, SCREEN_H / 2 - 8,
-             "Alloy OS", 0xFFFFFFFF, 0xFF0F0F1A);
-    draw_str(fb, SCREEN_W / 2 - 72, SCREEN_H / 2 + 10,
-             "Press Meta to launch apps", 0xFFAAAAAA, 0xFF0F0F1A);
-}
-
-static void on_wl_event(void *userdata) {
-    (void)userdata;
-    int n = wl_display_dispatch_pending(g_display);
-    if (n <= 0) {
-        puts("alloy_de: server disconnected");
-        running = 0;
     }
 }
 
@@ -209,11 +214,10 @@ int main(void) {
     }
     puts("alloy_de: SHM buffer ready");
 
-    draw_desktop(fb);
+    full_redraw();
     puts("alloy_de: desktop drawn");
 
     wl_surface_attach(g_display->fd, surface_id, (unsigned int)shm_fd, 0, 0);
-    wl_surface_damage(g_display->fd, surface_id, 0, 0, SCREEN_W, SCREEN_H);
 
     if (wl_surface_commit(g_display->fd, surface_id) < 0) {
         puts("alloy_de: commit failed");
@@ -225,13 +229,35 @@ int main(void) {
     wl_set_mouse_move_callback(g_display, on_mouse_move);
     wl_set_click_callback(g_display, on_click);
 
-    poll_init();
-    poll_add_fd(wl_display_get_fd(g_display), on_wl_event, NULL);
-
     puts("alloy_de: entering event loop");
+    int tick_count = 0;
+    int last_sec = 0;
     while (running) {
-        on_wl_event(NULL);
-        syscall(SYS_YIELD, 0, 0, 0, 0, 0);
+        int n = wl_display_dispatch_pending(g_display);
+        if (n < 0) {
+            puts("alloy_de: server disconnected");
+            break;
+        }
+
+        tick_count++;
+        g_seconds = tick_count / 20;
+
+        if (g_seconds != last_sec) {
+            last_sec = g_seconds;
+
+            desktop_render_clock(fb, SCREEN_W, SCREEN_H, g_seconds);
+            panel_render_clock(fb, SCREEN_W, SCREEN_H, g_seconds);
+
+            wl_surface_damage(g_display->fd, surface_id,
+                              SCREEN_W - 400, SCREEN_H - PANEL_HEIGHT - 100,
+                              400, 100);
+            wl_surface_damage(g_display->fd, surface_id,
+                              SCREEN_W - 200, SCREEN_H - PANEL_HEIGHT,
+                              200, PANEL_HEIGHT);
+            wl_surface_commit(g_display->fd, surface_id);
+        }
+
+        syscall(SYS_SLEEP, 50, 0, 0, 0, 0);
     }
 
     wl_display_disconnect(g_display);

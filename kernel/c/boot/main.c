@@ -151,7 +151,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_println(" OK");
     vga_set_color(7, 0);
 #endif
-    serial_print("Physical memory manager initialized\n");
+    serial_print("PMM initialized\n");
 
 #if defined(ARCH_I686) || defined(ARCH_X86_64)
     serial_print("Initializing paging...\n");
@@ -169,7 +169,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_set_color(10, 0);
     vga_println(" OK");
     vga_set_color(7, 0);
-    serial_print("Virtual memory manager initialized\n");
+    serial_print("VMM initialized\n");
 
     serial_print("Initializing VESA graphics...\n");
     vga_print("[ ] Initializing VESA...");

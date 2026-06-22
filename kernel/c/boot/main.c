@@ -37,6 +37,7 @@ static void arch_halt() {
 
 void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     init_serial();
+    serial_print("DEBUG: serial_print test\n");
     serial_print("Alloy Kernel Booting...\n");
 
 #ifdef ARCH_I686

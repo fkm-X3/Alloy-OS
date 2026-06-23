@@ -14,26 +14,10 @@ Kernel boot, Fusion display, Wayland support, and desktop runtime in one repo. B
 
 ## Quick start
 
-#docker 
-
 ```sh
 docker compose build
 docker compose run --rm alloy make output
 ```
-
-# local
-
-win:
-```ps1
-./build-toolchain.ps1
-```
-
-linux:
-```sh
-.\build-toolchain.ps1
-```
-
-Its as simple as that
 
 See [docs/build.md](docs/build.md) for all make targets, native builds, and validation commands.
 

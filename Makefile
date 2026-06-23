@@ -4,6 +4,22 @@
 # Supported: i686, x86_64 (placeholder), aarch64 (minimal)
 ARCH ?= i686
 
+# --- Windows (MSYS2) support ---
+# When running from PowerShell/cmd, route commands through MSYS2 bash
+# (installed by build-toolchain.ps1). Also fixes HOME for cargo.
+ifeq ($(OS),Windows_NT)
+  ifeq ($(MSYSTEM),)
+    MSYS2_BASH := $(firstword $(wildcard C:/msys64/usr/bin/bash.exe C:/msys32/usr/bin/bash.exe))
+    ifneq ($(MSYS2_BASH),)
+      SHELL := $(MSYS2_BASH)
+      .SHELLFLAGS := -c
+    endif
+  endif
+  ifeq ($(HOME),)
+    HOME := $(USERPROFILE)
+  endif
+endif
+
 # Architecture-specific configuration
 ifeq ($(ARCH),i686)
     TARGET = i686-alloy

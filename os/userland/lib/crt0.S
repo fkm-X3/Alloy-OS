@@ -13,6 +13,6 @@ _start:
     call main
 
     // main() returned — exit with its return value
-    push %eax
+    push %rax
     call _exit
     // _exit never returns

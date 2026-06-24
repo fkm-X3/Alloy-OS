@@ -8,7 +8,6 @@ name = "alloy_kernel_hal"
 path = "src/lib.rs"
 
 [features]
-default = ["i686"]
-i686 = []
+default = ["x86_64"]
 x86_64 = []
 aarch64 = []

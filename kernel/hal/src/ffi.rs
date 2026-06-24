@@ -84,7 +84,7 @@ extern "C" {
 // x86-specific externs (VGA, keyboard, mouse, VESA, storage, initrd)
 // ============================================================================
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 extern "C" {
     // VGA text mode
     pub fn vga_print(s: *const u8);

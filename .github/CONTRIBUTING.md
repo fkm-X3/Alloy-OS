@@ -58,138 +58,37 @@ cd Alloy-OS
 Select the target architecture with `ARCH=`, then build:
 
 ```bash
-# Build for i686 (32-bit x86, default)
-make ARCH=i686
+# Build for x86_64 (64-bit x86, default)
 
-# Build for x86_64
 make ARCH=x86_64
 
-# Build for aarch64
-make ARCH=aarch64
+...
 
-# Run in QEMU (with GRUB ISO)
-make ARCH=i686 run
+make ARCH=x86_64 run
 
-# Or boot the ELF directly (works for all arches)
-make ARCH=i686 run-elf
+...
 
-# Headless boot (serial output only)
-make ARCH=i686 output
+make ARCH=x86_64 run-elf
 
-# Headless boot + auto-screenshot
-make ARCH=i686 screenshot
-```
+...
 
-If you add or change build commands, please also update the README.
+make ARCH=x86_64 output
 
-## Project Structure
+...
 
-| Directory | Responsibility |
-|---|---|
-| `kernel/c/` | Early boot (C), drivers, paging, VMM |
-| `kernel/rust/` | Rust kernel entry, allocator, VFS, display server, Fusion Wayland |
-| `kernel/hal/` | Hardware abstraction layer |
-| `boot/` | Bootloader ASM (multiboot2) + architecture-specific startup |
-| `alloy_de/` | Built-in desktop environment (C, Wayland client) |
-| `de/` | Host-side Qt6/QML desktop environment for development |
-| `os/userland/` | Userland programs |
-| `tools/` | Screenshot and smoke-test Python helpers |
-| `docs/` | Design notes and documentation |
+make ARCH=x86_64 screenshot
 
-Use existing module boundaries and naming patterns when adding new code.
+...
 
-## Coding Standards
+  Replace `<arch>` with `x86_64` or `aarch64`.
 
-### General
+...
 
-- Keep changes focused and minimal.
-- Prefer small, reviewable PRs.
-- Document non-obvious behavior with comments.
-- Avoid unrelated refactors in bug-fix PRs.
-
-### Rust
-
-- Run formatting and linting before pushing (inside `kernel/rust/`):
-  ```bash
-  cd kernel/rust
-  cargo +nightly fmt --check
-  cargo +nightly clippy --target <arch>-alloy.json -Zbuild-std=core,alloc -D warnings
-  ```
-  Replace `<arch>` with `i686`, `x86_64`, or `aarch64`.
-- Avoid `unwrap()`/`expect()` in kernel-critical paths unless justified.
-- Prefer explicit error handling and clear panic boundaries.
-- Keep `unsafe` blocks as small as possible and explain safety assumptions.
-
-### C
-
-- Follow the existing style (brace placement, naming, header order).
-- Compile with warnings enabled and fix new warnings.
-- Prefer fixed-width integer types where relevant (`uint32_t`, etc.).
-- Be explicit about ownership, lifetimes, and buffer sizes.
-
-### Assembly
-
-- Keep assembly routines minimal and documented.
-- Clearly state calling conventions, register usage, and clobbers.
-- Add comments for control register/mode transitions.
-
-## Testing
-
-Before opening a PR, run:
-
-```bash
-# Rust formatting/linting (inside kernel/rust/)
-cd kernel/rust
-cargo +nightly fmt --check
-cargo +nightly clippy --target <arch>-alloy.json -Zbuild-std=core,alloc -D warnings
-
-# Build (all arches)
-make clean
-make ARCH=i686 all
 make ARCH=x86_64 all
-make ARCH=aarch64 all
-```
 
-> There is no `cargo test` inside the kernel crate (`no_std`, `panic = "abort"`). Use QEMU boot tests instead.
+...
 
-Also test boot/runtime behavior in QEMU (or the project’s standard emulator flow).
-
-When changing low-level code (memory, interrupts, scheduler, boot path), include a short test plan in your PR description.
-
-## Commit & Pull Request Guidelines
-
-### Commits
-
-- Use clear, imperative commit messages:
-  - `kernel: fix page table flag masking`
-  - `x86_64: initialize IDT before enabling interrupts`
-  - `docs: add boot flow diagram`
-- Keep commits logically grouped.
-
-### Pull Requests
-
-Each PR should include:
-
-1. **What** changed
-2. **Why** it changed
-3. **How** it was tested
-4. Any known limitations or follow-up work
-
-Checklist:
-
-- [ ] Code builds successfully
-- [ ] Formatting/linting passes
-- [ ] Tests added/updated where appropriate
-- [ ] Documentation updated if behavior changed
-
-PRs that are easier to review get merged faster.
-
-## Issue Guidelines
-
-When filing a bug, please include:
-
-- Host OS and toolchain versions
-- Target architecture (i686, x86_64, or aarch64)
+- Target architecture (x86_64 or aarch64)
 - Steps to reproduce
 - Expected vs actual behavior
 - Logs/screenshot/serial output (if available)

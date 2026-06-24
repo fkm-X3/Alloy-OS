@@ -789,7 +789,7 @@ void paging_temp_unmap_frame(void) {
 }
 
 // ============================================================================
-// i686 implementation — 2-level paging, 32-bit entries
+// x86_64 implementation — 2-level paging, 32-bit entries
 // ============================================================================
 #else
 

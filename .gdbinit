@@ -12,7 +12,7 @@ target remote localhost:1234
 symbol-file build/alloy.elf
 
 # Set architecture
-set architecture i386
+set architecture i386:x86-64
 
 # Enable TUI mode for better visibility
 layout src

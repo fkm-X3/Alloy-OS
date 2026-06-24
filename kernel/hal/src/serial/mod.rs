@@ -1,6 +1,6 @@
 //! Serial port abstraction
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 use crate::io::{IoPort, X86IoPort};
 
 #[cfg(feature = "aarch64")]
@@ -28,13 +28,13 @@ pub trait SerialPort {
 }
 
 /// 16550 UART serial port (common on x86)
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct Uart16550 {
     pub port: u16,
     pub initialized: bool,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl Uart16550 {
     pub const fn new() -> Self {
         Self {
@@ -54,7 +54,7 @@ impl Uart16550 {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl SerialPort for Uart16550 {
     fn init(&mut self, port: u16, baud: u32) {
         self.port = port;

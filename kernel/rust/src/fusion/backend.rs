@@ -6,13 +6,13 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use crate::graphics::Display;
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
+#[cfg(feature = "x86_64")]
 use crate::graphics::vesa::VesaDisplay;
 #[cfg(feature = "aarch64")]
 use crate::graphics::pl110::Pl110Display;
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 type PlatformDisplay = VesaDisplay;
 #[cfg(feature = "aarch64")]
 type PlatformDisplay = Pl110Display;

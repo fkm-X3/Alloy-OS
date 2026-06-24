@@ -1,26 +1,11 @@
 # Alloy Kernel Makefile
 
-# Architecture selection (default: i686 for testing)
-# Supported: i686, x86_64 (placeholder), aarch64 (minimal)
-ARCH ?= i686
+# Architecture selection (default: x86_64)
+# Supported: x86_64, aarch64
+ARCH ?= x86_64
 
 # Architecture-specific configuration
-ifeq ($(ARCH),i686)
-    TARGET = i686-alloy
-    CC = gcc
-    LD = ld
-    AS = nasm
-    ASFLAGS = -f elf32
-    CFLAGS_ARCH = -m32 -DARCH_I686
-    LDFLAGS_ARCH = -m elf_i386
-    QEMU = qemu-system-i386
-    QEMU_FLAGS = -serial stdio
-    RUST_TARGET = i686-alloy.json
-    RUST_FEATURES = --features i686
-    LINKER = kernel/linker.ld
-    BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot.asm
-    ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
-else ifeq ($(ARCH),x86_64)
+ifeq ($(ARCH),x86_64)
     TARGET = x86_64-alloy
     CC = gcc
     LD = ld
@@ -60,7 +45,7 @@ else ifeq ($(ARCH),aarch64)
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
     ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
 else
-    $(error Unsupported architecture: $(ARCH). Use i686, x86_64, or aarch64)
+    $(error Unsupported architecture: $(ARCH). Use x86_64 or aarch64)
 endif
 RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
@@ -128,6 +113,7 @@ iso: $(KERNEL_ISO)
 # Build userland binaries (embedded into kernel VFS via include_bytes!)
 userland:
 	$(MAKE) -C alloy_de ARCH=$(ARCH)
+	$(MAKE) -C os/userland ARCH=$(ARCH)
 
 # Build the Qt6/QML DE for host development (requires Qt6 SDK)
 de-build:
@@ -329,7 +315,7 @@ docker-run-prod: docker-build
 	docker run --rm -it \
 		-p 22:22 \
 		-v "$(CURDIR):/workspace" \
-		-v "$(HOME)/.local/i686-elf:/root/.local/i686-elf" \
+		-v "$(HOME)/.local/x86_64-elf:/root/.local/x86_64-elf" \
 		-v "$(HOME)/.cargo/registry:/root/.cargo/registry" \
 		-v "$(HOME)/.cargo/git:/root/.cargo/git" \
 		-w /workspace \

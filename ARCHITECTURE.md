@@ -6,21 +6,17 @@ Alloy OS supports multiple CPU architectures through a Hardware Abstraction Laye
 
 | Architecture | Status | Description |
 |---|---|---|
-| **i686** | **Main/Default** | 32-bit x86, fully working, used for testing |
-| **x86_64** | Placeholder | 64-bit x86, stubs only |
+| **x86_64** | **Main/Default** | 64-bit x86, fully working |
 | **aarch64** | Minimal | 64-bit ARM, basic working support |
 
 ## Building for Different Architectures
 
 ```bash
-# Default: i686 (32-bit x86)
+# Default: x86_64
 make
 make run
 
-# x86_64 (placeholder)
-make ARCH=x86_64
-
-# ARM64 (minimal)
+# ARM64
 make ARCH=aarch64
 ```
 
@@ -31,26 +27,22 @@ kernel/
   hal/                          # Rust HAL crate
     src/
       arch/
-        i686/                   # i686 implementation
-        x86_64/                 # x86_64 placeholder
+        x86_64/                 # x86_64 implementation
         aarch64/                # ARM64 minimal
       io/                       # I/O abstraction (port I/O vs MMIO)
       interrupt/                # PIC/APIC/GIC
       memory/                   # Paging structures per arch
       serial/                   # UART16550/PL011
       time/                     # PIT/ARM Generic Timer
-  cpp/
+  c/
     arch/
-      i686/                     # i686 C++ code (GDT, IDT, context switch)
-      x86_64/                   # x86_64 placeholder stubs
+      x86_64/                   # x86_64 C code (GDT, IDT, context switch)
       aarch64/                  # ARM64 minimal stubs
     boot/
-      main.cpp                  # Architecture-aware boot flow
-  linker.ld                     # i686 linker script
+      main.c                    # Architecture-aware boot flow
   linker_x86_64.ld              # x86_64 linker script
   linker_aarch64.ld             # ARM64 linker script
   rust/
-    i686-alloy.json             # i686 Rust target spec
     x86_64-alloy.json           # x86_64 Rust target spec
     aarch64-alloy.json          # ARM64 Rust target spec
 ```
@@ -64,7 +56,7 @@ kernel/
 
 ### Interrupt Controllers
 
-- **i686/x86_64**: PIC 8259 (legacy), APIC (future)
+- **x86_64**: PIC 8259 (legacy), APIC (future)
 - **aarch64**: GICv2 (Generic Interrupt Controller)
 
 ### Timers
@@ -79,34 +71,24 @@ kernel/
 
 ### Memory Management
 
-- **i686**: 2-level paging (PD + PT), 4GB address space
 - **x86_64**: 4-level paging (PML4 + PDPT + PD + PT), 128TB+ address space
 - **aarch64**: 4-level translation tables (L0-L3), 256TB address space
 
 ### CPU Context
 
-- **i686**: EAX-EDI, EBP, ESP, EIP, segment registers, EFLAGS, CR3
 - **x86_64**: RAX-R15, RBP, RSP, RIP, segment registers, RFLAGS, CR3
 - **aarch64**: x19-x30, SP_EL1, ELR_EL1, SPSR_EL1, TTBR0_EL1
 
 ## Architecture-Specific Notes
 
-### i686 (Default)
+### x86_64 (Default)
 
 - Booted via GRUB/Multiboot2
 - VGA text mode available
 - PS/2 keyboard and mouse
 - PIT timer
 - PIC interrupt controller
-- QEMU: `qemu-system-i386`
-
-### x86_64 (Placeholder)
-
-- Requires long mode entry from bootloader
-- VGA text mode still available in compatibility
-- Same drivers as i686 (PIT, PIC, PS/2)
 - QEMU: `qemu-system-x86_64`
-- **Not yet functional**
 
 ### aarch64 (Minimal)
 
@@ -116,7 +98,6 @@ kernel/
 - ARM Generic Timer
 - GICv2 interrupt controller
 - QEMU: `qemu-system-aarch64 -machine virt -cpu cortex-a53`
-- **Basic boot only, no GUI**
 
 ## Adding a New Architecture
 

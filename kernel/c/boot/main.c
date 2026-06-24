@@ -23,9 +23,7 @@ void pl110_init(unsigned int fb_addr, unsigned short width, unsigned short heigh
 int pl110_is_available();
 
 static void arch_halt() {
-#ifdef ARCH_I686
-    asm volatile("cli; hlt");
-#elif defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     asm volatile("cli; hlt");
 #elif defined(ARCH_AARCH64)
     asm volatile("msr daifset, #0b1111");
@@ -40,9 +38,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     serial_print("DEBUG: serial_print test\n");
     serial_print("Alloy Kernel Booting...\n");
 
-#ifdef ARCH_I686
-    serial_print("Architecture: i686 (32-bit x86)\n");
-#elif defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     serial_print("Architecture: x86_64 (64-bit x86)\n");
 #elif defined(ARCH_AARCH64)
     serial_print("Architecture: aarch64 (64-bit ARM) [MINIMAL]\n");
@@ -50,17 +46,15 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     serial_print("Architecture: unknown\n");
 #endif
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#if !defined(ARCH_AARCH64)
     vga_init();
 #endif
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#if !defined(ARCH_AARCH64)
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         serial_print("ERROR: Invalid multiboot magic number\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
         vga_set_color(4, 0);
         vga_println("ERROR: Invalid multiboot magic");
-#endif
         while(1) {
             arch_halt();
         }
@@ -68,7 +62,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 
     serial_print("Multiboot2 detected successfully\n");
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_set_color(11, 0);
     vga_println("===============================");
     vga_println("    Alloy Kernel Bootloader    ");
@@ -81,11 +75,11 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #endif
 
     serial_print("Initializing GDT...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_print("[ ] Initializing GDT...");
 #endif
     init_gdt();
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_set_color(10, 0);
     vga_println(" OK");
     vga_set_color(7, 0);
@@ -93,18 +87,18 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     serial_print("GDT initialized\n");
 
     serial_print("Initializing IDT...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_print("[ ] Initializing IDT...");
 #endif
     init_idt();
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_set_color(10, 0);
     vga_println(" OK");
     vga_set_color(7, 0);
 #endif
     serial_print("IDT initialized\n");
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     serial_print("Initializing keyboard...\n");
     vga_print("[ ] Initializing keyboard...");
     keyboard_init();
@@ -131,11 +125,11 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #endif
 
     serial_print("Initializing timer...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_print("[ ] Initializing timer (100 Hz)...");
 #endif
     timer_init_ffi(100);
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_set_color(10, 0);
     vga_println(" OK");
     vga_set_color(7, 0);
@@ -143,18 +137,18 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     serial_print("Timer initialized\n");
 
     serial_print("Initializing physical memory manager...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_print("[ ] Initializing memory manager...");
 #endif
     pmm_init(multiboot_addr);
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_set_color(10, 0);
     vga_println(" OK");
     vga_set_color(7, 0);
 #endif
     serial_print("PMM initialized\n");
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     serial_print("Initializing paging...\n");
     vga_print("[ ] Initializing paging...");
     paging_init();
@@ -196,7 +190,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     }
 #endif
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_println("");
     vga_set_color(10, 0);
     vga_println("Kernel initialization complete!");
@@ -204,7 +198,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #endif
     serial_print("Kernel initialization complete\n");
 
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     serial_print("Initializing PCI bus...\n");
     vga_print("[ ] Initializing PCI bus...");
     pci_init();
@@ -239,7 +233,7 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
 #endif
 
     serial_print("Transferring control to Rust kernel...\n");
-#if defined(ARCH_I686) || defined(ARCH_X86_64)
+#ifdef ARCH_X86_64
     vga_println("");
     vga_set_color(11, 0);
     vga_println("Transferring control to Rust kernel...");

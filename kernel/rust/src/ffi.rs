@@ -21,7 +21,7 @@ pub fn print_str(s: &str) {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vga_print_str(s: &str) {
     let mut buffer = [0u8; 256];
     let bytes = s.as_bytes();
@@ -31,7 +31,7 @@ pub fn vga_print_str(s: &str) {
     unsafe { vga_print(buffer.as_ptr()) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vga_println_str(s: &str) {
     let mut buffer = [0u8; 256];
     let bytes = s.as_bytes();
@@ -49,41 +49,41 @@ pub unsafe fn serial_print_safe(s: *const u8) {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub unsafe fn vga_print_safe(s: *const u8) {
     if !s.is_null() {
         vga_print(s);
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub unsafe fn vga_println_safe(s: *const u8) {
     if !s.is_null() {
         vga_println(s);
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn set_vga_color(fg: u8, bg: u8) {
     unsafe { vga_set_color(fg, bg) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn put_char(c: char) {
     unsafe { vga_putchar(c as u8) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn keyboard_has_key() -> bool {
     unsafe { keyboard_has_data() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn keyboard_read() -> u8 {
     unsafe { keyboard_get_char() as u8 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn keyboard_read_blocking() -> u8 {
     loop {
         if keyboard_has_key() {
@@ -95,7 +95,7 @@ pub fn keyboard_read_blocking() -> u8 {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MouseEvent {
     pub dx: i8,
@@ -105,22 +105,22 @@ pub struct MouseEvent {
     pub flags: u8,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn mouse_has_event() -> bool {
     unsafe { mouse_has_data() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn mouse_ready() -> bool {
     unsafe { mouse_is_initialized() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn mouse_init_error_code() -> u8 {
     unsafe { mouse_last_init_error() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn mouse_read_blocking() -> MouseEvent {
     loop {
         if let Some(event) = mouse_read() {
@@ -132,7 +132,7 @@ pub fn mouse_read_blocking() -> MouseEvent {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn mouse_read() -> Option<MouseEvent> {
     let mut dx: i8 = 0;
     let mut dy: i8 = 0;
@@ -213,12 +213,12 @@ pub const PAGE_USER: u32 = 0x004;
 // VESA VBE Graphics Safe Wrappers (x86 only)
 // ============================================================================
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_initialize() {
     unsafe { vesa_init() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
     unsafe {
         let result = vesa_set_mode(mode);
@@ -226,7 +226,7 @@ pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_framebuffer_addr() -> Option<u64> {
     unsafe {
         let addr = vesa_get_framebuffer();
@@ -234,7 +234,7 @@ pub fn vesa_framebuffer_addr() -> Option<u64> {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_display_resolution() -> (u16, u16) {
     unsafe {
         let mut width: u16 = 0;
@@ -244,7 +244,7 @@ pub fn vesa_display_resolution() -> (u16, u16) {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_current_mode() -> Option<u16> {
     unsafe {
         let mut mode: u16 = 0;
@@ -253,42 +253,42 @@ pub fn vesa_current_mode() -> Option<u16> {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_available() -> bool {
     unsafe { vesa_is_available() != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_controller_capabilities() -> u8 {
     unsafe { vesa_get_capabilities() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_color_depth() -> u8 {
     unsafe { vesa_get_bits_per_pixel() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_scanline_bytes() -> u16 {
     unsafe { vesa_get_bytes_per_scanline() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_buffer_size() -> u64 {
     unsafe { vesa_get_framebuffer_size() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_available() -> bool {
     unsafe { vesa_cursor_is_available() != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_set_enabled(enabled: bool) {
     unsafe { vesa_cursor_enable(enabled as u8) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_set_position(x: u16, y: u16) {
     unsafe { vesa_cursor_set_position(x, y) }
 }
@@ -297,7 +297,7 @@ pub fn vesa_hardware_cursor_set_position(x: u16, y: u16) {
 // ATA PIO Driver Safe Wrappers (x86 only)
 // ============================================================================
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct AtaDriveInfo {
     pub present: bool,
     pub is_lba48: bool,
@@ -305,7 +305,7 @@ pub struct AtaDriveInfo {
     pub model: [u8; 41],
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl AtaDriveInfo {
     pub fn probe(bus: u8, drive: u8) -> Self {
         let present = unsafe { ata_drive_present(bus, drive) != 0 };
@@ -316,22 +316,22 @@ impl AtaDriveInfo {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ata_initialize() -> bool {
     unsafe { ata_init() != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ata_drive_exists(bus: u8, drive: u8) -> bool {
     unsafe { ata_drive_present(bus, drive) != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ata_read(bus: u8, drive: u8, lba: u64, count: u8, buf: &mut [u8]) -> bool {
     unsafe { ata_read_sectors(bus, drive, lba, count, buf.as_mut_ptr()) != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ata_write(bus: u8, drive: u8, lba: u64, count: u8, buf: &[u8]) -> bool {
     unsafe { ata_write_sectors(bus, drive, lba, count, buf.as_ptr()) != 0 }
 }
@@ -340,7 +340,7 @@ pub fn ata_write(bus: u8, drive: u8, lba: u64, count: u8, buf: &[u8]) -> bool {
 // AHCI Driver Safe Wrappers (x86 only)
 // ============================================================================
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct AhciDriveInfo {
     pub present: bool,
     pub port_num: u8,
@@ -348,7 +348,7 @@ pub struct AhciDriveInfo {
     pub model: [u8; 41],
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl AhciDriveInfo {
     #[allow(unused_variables)]
     pub fn probe(index: i32) -> Self {
@@ -356,22 +356,22 @@ impl AhciDriveInfo {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ahci_initialize() -> bool {
     unsafe { ahci_init() != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ahci_drive_count_ffi() -> i32 {
     unsafe { ahci_drive_count() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ahci_read(drive: i32, lba: u64, count: u8, buf: &mut [u8]) -> bool {
     unsafe { ahci_read_sectors(drive, lba, count, buf.as_mut_ptr()) != 0 }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn ahci_write(drive: i32, lba: u64, count: u8, buf: &[u8]) -> bool {
     unsafe { ahci_write_sectors(drive, lba, count, buf.as_ptr()) != 0 }
 }
@@ -380,39 +380,39 @@ pub fn ahci_write(drive: i32, lba: u64, count: u8, buf: &[u8]) -> bool {
 // Initrd / Ramdisk Safe Wrappers (x86 only)
 // ============================================================================
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_initialize(multiboot_addr: u32) {
     unsafe { initrd_init(multiboot_addr) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_module_count_ffi() -> i32 {
     unsafe { initrd_module_count() }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_module_start(index: i32) -> usize {
     unsafe { initrd_module_start_ffi(index) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_module_end(index: i32) -> usize {
     unsafe { initrd_module_end_ffi(index) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_module_size(index: i32) -> usize {
     unsafe { initrd_module_size_ffi(index) }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_module_cmdline(index: i32) -> [u8; 64] {
     let mut buf = [0u8; 64];
     unsafe { initrd_module_cmdline_ffi(index, buf.as_mut_ptr(), 64); }
     buf
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub fn initrd_has_modules() -> bool {
     unsafe { initrd_has_modules_ffi() != 0 }
 }

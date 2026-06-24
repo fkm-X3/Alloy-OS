@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [i686, x86_64, aarch64]
+        arch: [x86_64, aarch64]
 
     runs-on: ubuntu-latest
     permissions:
@@ -97,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [i686, x86_64, aarch64]
+        arch: [x86_64, aarch64]
 
     runs-on: ubuntu-latest
     permissions:
@@ -173,11 +173,7 @@ jobs:
           file "$ISO_FILE"
           ls -lh "$ISO_FILE"
 
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            QEMU_BIN="qemu-system-x86_64"
-          else
-            QEMU_BIN="qemu-system-i386"
-          fi
+          QEMU_BIN="qemu-system-x86_64"
 
           set +e
           timeout 60s "$QEMU_BIN" \
@@ -242,7 +238,7 @@ jobs:
               exit 1
             fi
             ;;
-          i686|x86_64)
+          x86_64)
             # Accept either detailed init logs (GDT/IDT/PMM/VMM) or early boot markers
             if ! grep -qE "GDT|IDT|PMM|VMM|Entered 64-bit long mode|Multiboot2 magic verified|Alloy Kernel Booting|Architecture: x86_64" serial.log; then
               echo "ERROR: x86 boot/init messages not found"

@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main, develop ]
     paths:
-      - Dockerfile.i686
       - Dockerfile.x86_64
       - Dockerfile.aarch64
       - build-toolchain.sh
@@ -22,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [i686, x86_64, aarch64]
+        arch: [x86_64, aarch64]
 
     runs-on: ubuntu-latest
     permissions:

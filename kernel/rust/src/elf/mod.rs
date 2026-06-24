@@ -1,4 +1,4 @@
-// Minimal ELF loader for i386 (32-bit) - supports ET_EXEC with PT_LOAD segments
+// Minimal ELF loader - supports ET_EXEC with PT_LOAD segments
 //
 // IMPORTANT: This function may be called with a non-kernel page directory active
 // (e.g., during spawn_user_elf). It MUST NOT perform any heap allocations that

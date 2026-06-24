@@ -1,6 +1,6 @@
 //! Interrupt controller abstraction
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 use crate::io::{IoPort, X86IoPort};
 
 #[cfg(feature = "aarch64")]
@@ -31,13 +31,13 @@ pub trait InterruptController {
 }
 
 /// PIC (Programmable Interrupt Controller) for x86
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct Pic8259 {
     pub master_base: u8,
     pub slave_base: u8,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl Pic8259 {
     pub const fn new(master_base: u8, slave_base: u8) -> Self {
         Self {
@@ -47,7 +47,7 @@ impl Pic8259 {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl InterruptController for Pic8259 {
     fn init(&mut self) {
         // PIC initialization (ICW1-ICW4)

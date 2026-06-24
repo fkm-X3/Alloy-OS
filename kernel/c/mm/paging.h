@@ -20,7 +20,7 @@ typedef uint64_t page_dir_entry_t;
 typedef uint64_t page_table_entry_t;
 #define PAGE_TABLE_ENTRIES 512
 #else
-/* i686 2-level paging: 1024 entries/table, 4 bytes/entry */
+/* x86 2-level paging: 1024 entries/table, 4 bytes/entry */
 typedef uint32_t page_dir_entry_t;
 typedef uint32_t page_table_entry_t;
 #define PAGE_TABLE_ENTRIES 1024

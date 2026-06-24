@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [i686, x86_64, aarch64]
+        arch: [x86_64, aarch64]
 
     runs-on: ubuntu-latest
     permissions:
@@ -104,7 +104,7 @@ jobs:
 
             | Arch | Format | Boot command |
             |---|---|---|
-            | **i686** | `alloy-i686.iso` | `qemu-system-i386 -cdrom alloy-i686.iso -serial stdio` |
+
             | **x86_64** | `alloy-x86_64.iso` | `qemu-system-x86_64 -cdrom alloy-x86_64.iso -serial stdio` |
             | **aarch64** | `alloy-aarch64.elf` | `qemu-system-aarch64 -machine virt -cpu cortex-a53 -kernel alloy-aarch64.elf -serial stdio` |
           generate_release_notes: true

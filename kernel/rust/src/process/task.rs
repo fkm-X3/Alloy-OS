@@ -87,13 +87,6 @@ impl Task {
             context.rbp = stack_top as u64;
             context.rip = entry as usize as u64;
         }
-        #[cfg(feature = "i686")]
-        {
-            context.esp = stack_top as u32;
-            context.ebp = stack_top as u32;
-            context.eip = entry as usize as u32;
-        }
-        
         unsafe {
             ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);
             // Print simple message without trying to print the name (causes issues)
@@ -295,7 +288,7 @@ impl Drop for Task {
             ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
         }
 
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         let pd = self.context.cr3 as usize;
         #[cfg(feature = "aarch64")]
         let pd = self.context.ttbr0 as usize;
@@ -312,7 +305,7 @@ impl Drop for Task {
 /// Entry point for the idle task
 extern "C" fn idle_task_entry() {
     loop {
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         unsafe { core::arch::asm!("sti; hlt", options(nomem, nostack)); }
         #[cfg(feature = "aarch64")]
         unsafe { core::arch::asm!("wfi"); }

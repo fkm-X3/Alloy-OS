@@ -10,7 +10,7 @@ pub mod slab;
 pub mod sync;
 pub mod ffi;
 pub mod panic;
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub mod terminal;
 pub mod utils_rs;
 pub use utils_rs as utils;
@@ -30,7 +30,7 @@ use core::panic::PanicInfo;
 
 extern "C" fn display_server_entry() {
     if let Some(display) = graphics::PlatformDisplay::new() {
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         unsafe {
             ffi::serial_print(c"[Spawn] VESA ready, booting display server task\n".as_ptr() as *const u8);
         }
@@ -49,11 +49,11 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
         let code = err.code();
         ffi::serial_print(c" (code: ".as_ptr() as *const u8);
         for &byte in code.as_bytes() {
-            #[cfg(any(feature = "i686", feature = "x86_64"))]
+            #[cfg(feature = "x86_64")]
             ffi::vga_putchar(byte);
         }
         ffi::serial_print(c")\n".as_ptr() as *const u8);
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         ffi::vga_print(err.vga_message().as_ptr() as *const u8);
     }
 }
@@ -65,7 +65,7 @@ pub extern "C" fn rust_main() {
 
     unsafe {
         ffi::serial_print(c"[Rust] Kernel entry - initializing subsystems\n".as_ptr() as *const u8);
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         ffi::vga_clear();
     }
 
@@ -73,7 +73,7 @@ pub extern "C" fn rust_main() {
     unsafe { ffi::serial_print(c"[VFS] initialized\n".as_ptr() as *const u8); }
 
     // Auto-mount FAT32 on any block devices
-    #[cfg(any(feature = "i686", feature = "x86_64"))]
+    #[cfg(feature = "x86_64")]
     {
         let dev_count = fs::vfs_block_device_count();
         for dev_id in 0..dev_count {
@@ -109,7 +109,7 @@ pub extern "C" fn rust_main() {
     process::Scheduler::add_task(display_task);
 
     // Spawn the primary DE (alloy_de) as a userspace process
-    #[cfg(any(feature = "i686", feature = "x86_64"))]
+    #[cfg(feature = "x86_64")]
     {
         if let Ok(de_vnode) = fs::vfs_open("/bin/alloy_de", 0, 0) {
             if let Some(image) = fs::vfs_read_all(de_vnode) {

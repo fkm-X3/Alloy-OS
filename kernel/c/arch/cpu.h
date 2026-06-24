@@ -6,56 +6,42 @@
 // Architecture-specific CPU feature flags
 
 #ifdef ARCH_I686
-// i686 CPUID feature flags (from EDX of CPUID leaf 1)
-#define CPU_FEATURE_FPU     (1 << 0)   // Floating Point Unit
-#define CPU_FEATURE_VME     (1 << 1)   // Virtual Mode Extensions
-#define CPU_FEATURE_DE      (1 << 2)   // Debugging Extensions
-#define CPU_FEATURE_PSE     (1 << 3)   // Page Size Extension
-#define CPU_FEATURE_TSC     (1 << 4)   // Time Stamp Counter
-#define CPU_FEATURE_MSR     (1 << 5)   // Model Specific Registers
-#define CPU_FEATURE_PAE     (1 << 6)   // Physical Address Extension
-#define CPU_FEATURE_MCE     (1 << 7)   // Machine Check Exception
-#define CPU_FEATURE_CX8     (1 << 8)   // CMPXCHG8 instruction
-#define CPU_FEATURE_APIC    (1 << 9)   // On-chip APIC
-#define CPU_FEATURE_SEP     (1 << 11)  // SYSENTER/SYSEXIT
-#define CPU_FEATURE_MTRR    (1 << 12)  // Memory Type Range Registers
-#define CPU_FEATURE_PGE     (1 << 13)  // Page Global Enable
-#define CPU_FEATURE_MCA     (1 << 14)  // Machine Check Architecture
-#define CPU_FEATURE_CMOV    (1 << 15)  // Conditional Move
-#define CPU_FEATURE_PAT     (1 << 16)  // Page Attribute Table
-#define CPU_FEATURE_PSE36   (1 << 17)  // 36-bit Page Size Extension
-#define CPU_FEATURE_PSN     (1 << 18)  // Processor Serial Number
-#define CPU_FEATURE_CLFLUSH (1 << 19)  // CLFLUSH instruction
-#define CPU_FEATURE_MMX     (1 << 23)  // MMX instructions
-#define CPU_FEATURE_FXSR    (1 << 24)  // FXSAVE/FXRSTOR
-#define CPU_FEATURE_SSE     (1 << 25)  // SSE instructions
-#define CPU_FEATURE_SSE2    (1 << 26)  // SSE2 instructions
+// x86_64 CPUID feature flags
+#define CPUID_FEATURE_FPU         (1 << 0)
+#define CPUID_FEATURE_VME         (1 << 1)
+#define CPUID_FEATURE_DE          (1 << 2)
+#define CPUID_FEATURE_PSE         (1 << 3)
+#define CPUID_FEATURE_TSC         (1 << 4)
+#define CPUID_FEATURE_MSR         (1 << 5)
+#define CPUID_FEATURE_PAE         (1 << 6)
+#define CPUID_FEATURE_MCE         (1 << 7)
+#define CPUID_FEATURE_CX8         (1 << 8)
+#define CPUID_FEATURE_APIC        (1 << 9)
+#define CPUID_FEATURE_SEP         (1 << 11)
+#define CPUID_FEATURE_MTRR        (1 << 12)
+#define CPUID_FEATURE_PGE         (1 << 13)
+#define CPUID_FEATURE_MCA         (1 << 14)
+#define CPUID_FEATURE_CMOV        (1 << 15)
+#define CPUID_FEATURE_PAT         (1 << 16)
+#define CPUID_FEATURE_PSE36       (1 << 17)
+#define CPUID_FEATURE_PSN         (1 << 18)
+#define CPUID_FEATURE_CLFSH       (1 << 19)
+#define CPUID_FEATURE_DS          (1 << 21)
+#define CPUID_FEATURE_ACPI        (1 << 22)
+#define CPUID_FEATURE_MMX         (1 << 23)
+#define CPUID_FEATURE_FXSR        (1 << 24)
+#define CPUID_FEATURE_SSE         (1 << 25)
+#define CPUID_FEATURE_SSE2        (1 << 26)
+#define CPUID_FEATURE_SS          (1 << 27)
+#define CPUID_FEATURE_HTT         (1 << 28)
+#define CPUID_FEATURE_TM          (1 << 29)
+#define CPUID_FEATURE_IA64        (1 << 30)
+#define CPUID_FEATURE_PBE         (1 << 31)
 
-#elif defined(ARCH_X86_64)
-// x86_64 CPUID feature flags (same as i686, plus additional)
-#define CPU_FEATURE_FPU     (1 << 0)
-#define CPU_FEATURE_SSE     (1 << 25)
-#define CPU_FEATURE_SSE2    (1 << 26)
-#define CPU_FEATURE_SSE3    (1 << 0)   // ECX bit 0
-#define CPU_FEATURE_SSSE3   (1 << 9)   // ECX bit 9
-#define CPU_FEATURE_SSE41   (1 << 19)  // ECX bit 19
-#define CPU_FEATURE_SSE42   (1 << 20)  // ECX bit 20
-#define CPU_FEATURE_AVX     (1 << 28)  // ECX bit 28
-#define CPU_FEATURE_AES     (1 << 25)  // ECX bit 25
-
-#elif defined(ARCH_AARCH64)
-// ARM64 feature flags (from ID_AA64ISAR0_EL1, etc.)
-#define CPU_FEATURE_AES     (1 << 0)
-#define CPU_FEATURE_SHA1    (1 << 1)
-#define CPU_FEATURE_SHA2    (1 << 2)
-#define CPU_FEATURE_CRC32   (1 << 3)
-#define CPU_FEATURE_ATOMICS (1 << 4)
-#define CPU_FEATURE_RDM     (1 << 5)
-#define CPU_FEATURE_SHA512  (1 << 6)
-#define CPU_FEATURE_DP      (1 << 7)
-
-#else
-// Default to i686 for backward compatibility
+// x86_64 additional CPUID feature flags
+#define CPUID_X86_64_FEATURE_SYSCALL (1 << 11)
+#define CPUID_X86_64_FEATURE_NX      (1 << 20)
+#define CPUID_X86_64_FEATURE_LONG    (1 << 29)
 #define CPU_FEATURE_FPU     (1 << 0)
 #define CPU_FEATURE_TSC     (1 << 4)
 #define CPU_FEATURE_MSR     (1 << 5)

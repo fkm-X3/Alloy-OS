@@ -202,31 +202,6 @@ impl Scheduler {
         let mut ctx = Box::new(crate::process::task::CpuContext::new());
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
 
-        #[cfg(feature = "i686")]
-        {
-            ctx.eip = entry;
-            ctx.esp = stack;
-            ctx.ebp = stack;
-            ctx.eax = arg;
-            ctx.cs = 0x1B;
-            ctx.ds = 0x23;
-            ctx.es = 0x23;
-            ctx.fs = 0x23;
-            ctx.gs = 0x23;
-            ctx.ss = 0x23;
-
-            let current_cr3 = sched.current_task.as_ref()
-                .map(|t| t.context().cr3)
-                .unwrap_or(kernel_pd);
-            ctx.cr3 = if current_cr3 != kernel_pd {
-                let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
-                if new_pd == 0 { return u32::MAX; }
-                new_pd
-            } else {
-                kernel_pd
-            };
-        }
-
         #[cfg(feature = "x86_64")]
         {
             ctx.rip = entry as u64;
@@ -285,19 +260,6 @@ impl Scheduler {
 
         // Clone the CPU context for the child
         let mut child_ctx = Box::new(*parent_ctx);
-
-        #[cfg(feature = "i686")]
-        {
-            // Child fork returns 0
-            child_ctx.eax = 0;
-
-            // Use COW-based address space cloning
-            if parent_ctx.cr3 != kernel_pd {
-                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3) };
-                if child_pd == 0 { return u32::MAX; }
-                child_ctx.cr3 = child_pd;
-            }
-        }
 
         #[cfg(feature = "x86_64")]
         {
@@ -487,7 +449,7 @@ impl Scheduler {
     pub fn start() -> ! {
         unsafe {
             ffi::serial_print(c"[Scheduler] Starting scheduler\n".as_ptr() as *const u8);
-            #[cfg(any(feature = "i686", feature = "x86_64"))]
+            #[cfg(feature = "x86_64")]
             ffi::vga_println(c"\nStarting multitasking...\n".as_ptr() as *const u8);
         }
 
@@ -523,7 +485,7 @@ impl Scheduler {
             ffi::serial_print(c"[Scheduler] ERROR: Scheduler returned!\n".as_ptr() as *const u8);
         }
         loop {
-            #[cfg(any(feature = "i686", feature = "x86_64"))]
+            #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("hlt"); }
             #[cfg(feature = "aarch64")]
             unsafe { core::arch::asm!("wfi"); }

@@ -3,9 +3,9 @@ description: Build or pull an arch-specific Alloy OS Docker image and run a comm
 
 inputs:
   arch:
-    description: Target architecture (i686, x86_64, aarch64)
+    description: Target architecture (x86_64, aarch64)
     required: false
-    default: i686
+    default: x86_64
   command:
     description: Command to run inside the container
     required: true

@@ -30,10 +30,10 @@ make clean     # remove all build outputs
 ```sh
 # Kernel Rust (requires nightly + custom target)
 cd kernel/rust && cargo +nightly fmt --check
-cd kernel/rust && cargo +nightly clippy --target i686-alloy.json -Zbuild-std=core,alloc
+cd kernel/rust && cargo +nightly clippy --target x86_64-alloy.json -Zbuild-std=core,alloc
 
-# Assembly syntax check
-nasm -f elf32 -o /dev/null <file.asm>
+# Assembly syntax check (x86_64)
+nasm -f elf64 -o /dev/null <file.asm>
 ```
 
 Kernel Rust is `no_std` with `panic = "abort"`. No `cargo test` runs inside the kernel crate. The display crate (`Fusion`) is inlined under `kernel/rust/src/fusion/`.

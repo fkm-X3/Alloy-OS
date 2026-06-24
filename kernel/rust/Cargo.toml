@@ -7,8 +7,7 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [features]
-default = ["i686"]
-i686 = ["alloy-kernel-hal/i686"]
+default = ["x86_64"]
 x86_64 = ["alloy-kernel-hal/x86_64"]
 aarch64 = ["alloy-kernel-hal/aarch64"]
 debug-alloc = []

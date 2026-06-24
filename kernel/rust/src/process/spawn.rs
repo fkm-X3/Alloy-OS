@@ -152,16 +152,6 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         rflags: 0x202,
         cr3: pd_phys as u64,
     });
-    #[cfg(feature = "i686")]
-    let ctx = Box::new(CpuContext {
-        eax: 0, ebx: 0, ecx: 0, edx: 0,
-        esi: 0, edi: 0, ebp: STACK_BASE + STACK_SIZE,
-        esp: STACK_BASE + STACK_SIZE,
-        eip: entry,
-        cs: 0x1B, ds: 0x23, es: 0x23, fs: 0x23, gs: 0x23, ss: 0x23,
-        eflags: 0x202,
-        cr3: pd_phys,
-    });
     #[cfg(feature = "aarch64")]
     let ctx = Box::new(CpuContext {
         x19: 0, x20: 0, x21: 0, x22: 0,

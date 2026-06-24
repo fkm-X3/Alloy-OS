@@ -181,7 +181,7 @@ void init_idt(void) {
     idt_set_gate(46, (uint64_t)irq14, 0x08, 0x8E);
     idt_set_gate(47, (uint64_t)irq15, 0x08, 0x8E);
 
-    // syscall via INT 0x80 (for backward compatibility with i686 userland)
+    // syscall via INT 0x80 (for backward compatibility)
     idt_set_gate(0x80, (uint64_t)syscall_entry, 0x08, 0xEE);
 
     idt_flush((uint64_t)&idtp);

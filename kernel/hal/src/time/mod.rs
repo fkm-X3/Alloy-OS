@@ -1,6 +1,6 @@
 //! Timer abstraction
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 use crate::io::{IoPort, X86IoPort};
 
 /// Timer trait
@@ -22,13 +22,13 @@ pub trait Timer {
 }
 
 /// PIT (Programmable Interval Timer) for x86
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct Pit {
     pub frequency: u32,
     pub ticks: u64,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl Pit {
     pub const fn new() -> Self {
         Self {
@@ -42,7 +42,7 @@ impl Pit {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl Timer for Pit {
     fn init(&mut self, frequency: u32) {
         self.frequency = frequency;
@@ -80,7 +80,7 @@ impl Timer for Pit {
         let target_ticks = (ms * self.frequency as u64) / 1000;
         let start_ticks = self.ticks;
         while self.ticks - start_ticks < target_ticks {
-            #[cfg(any(feature = "i686", feature = "x86_64"))]
+            #[cfg(feature = "x86_64")]
             unsafe {
                 core::arch::asm!("hlt");
             }

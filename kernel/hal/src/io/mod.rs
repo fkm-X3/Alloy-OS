@@ -3,7 +3,7 @@
 //! Provides unified interface for port I/O (x86) and MMIO (ARM).
 
 /// Port I/O trait for architectures that support it (x86)
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub trait IoPort {
     unsafe fn outb(port: u16, value: u8);
     unsafe fn outw(port: u16, value: u16);
@@ -14,10 +14,10 @@ pub trait IoPort {
 }
 
 /// x86 port I/O implementation
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct X86IoPort;
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl IoPort for X86IoPort {
     #[inline]
     unsafe fn outb(port: u16, value: u8) {

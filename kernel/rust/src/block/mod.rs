@@ -11,14 +11,14 @@ pub trait BlockDevice: Send {
     fn write_sectors(&mut self, lba: u64, count: u64, buf: &[u8]) -> Result<(), ()>;
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct AtaDevice {
     bus: u8,
     drive: u8,
     num_sectors: u64,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl AtaDevice {
     pub fn new(bus: u8, drive: u8) -> Option<Self> {
         if !crate::ffi::ata_drive_exists(bus, drive) {
@@ -32,7 +32,7 @@ impl AtaDevice {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl BlockDevice for AtaDevice {
     fn num_sectors(&self) -> u64 {
         self.num_sectors
@@ -85,13 +85,13 @@ impl BlockDevice for AtaDevice {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub struct AhciDevice {
     index: i32,
     num_sectors: u64,
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl AhciDevice {
     pub fn new(index: i32) -> Option<Self> {
         Some(AhciDevice { index, num_sectors: 0 })
@@ -102,7 +102,7 @@ impl AhciDevice {
     }
 }
 
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 impl BlockDevice for AhciDevice {
     fn num_sectors(&self) -> u64 {
         self.num_sectors
@@ -156,7 +156,7 @@ impl BlockDevice for AhciDevice {
 }
 
 pub fn init_block_devices() -> Vec<Box<dyn BlockDevice>> {
-    #[cfg(any(feature = "i686", feature = "x86_64"))]
+    #[cfg(feature = "x86_64")]
     {
         let mut devices: Vec<Box<dyn BlockDevice>> = Vec::new();
 

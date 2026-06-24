@@ -2,8 +2,8 @@ services:
   alloy:
     build:
       context: .
-      dockerfile: Dockerfile.${ALLOY_ARCH:-i686}
-    image: alloy-os-dev-${ALLOY_ARCH:-i686}
+      dockerfile: Dockerfile.${ALLOY_ARCH:-x86_64}
+    image: alloy-os-dev-${ALLOY_ARCH:-x86_64}
     working_dir: /workspace
     environment:
       HOME: /root
@@ -11,7 +11,7 @@ services:
       RUSTUP_HOME: /root/.rustup
     volumes:
       - .:/workspace
-      - i686-elf-cache:/root/.local/i686-elf
+      - x86_64-elf-cache:/root/.local/x86_64-elf
       - cargo-registry:/root/.cargo/registry
       - cargo-git:/root/.cargo/git
     stdin_open: true
@@ -20,6 +20,6 @@ services:
     command: bash
 
 volumes:
-  i686-elf-cache:
+  x86_64-elf-cache:
   cargo-registry:
   cargo-git:

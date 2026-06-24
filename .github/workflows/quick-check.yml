@@ -27,16 +27,12 @@ jobs:
     - name: Check NASM assembly files
       uses: ./.github/actions/docker-ci
       with:
-        arch: i686
+        arch: x86_64
         command: |
           echo "=== Checking NASM (.asm) files ==="
           for asm_file in $(find . -name "*.asm"); do
             echo "Checking $asm_file"
-            if [[ "$asm_file" == *"/arch/x86_64/"* || "$asm_file" == *"x86_64"* ]]; then
-              nasm -f elf64 -o /dev/null "$asm_file"
-            else
-              nasm -f elf32 -o /dev/null "$asm_file"
-            fi
+            nasm -f elf64 -o /dev/null "$asm_file"
           done
           echo "All NASM files are valid!"
 
@@ -66,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [i686, x86_64, aarch64]
+        arch: [x86_64, aarch64]
 
     runs-on: ubuntu-latest
 

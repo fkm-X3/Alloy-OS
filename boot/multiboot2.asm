@@ -6,8 +6,7 @@ header_start:
     ; Multiboot2 magic number
     dd 0xe85250d6
     
-    ; Architecture: 0 (i386/32-bit x86)
-    ; x86_64 also uses 0 — GRUB always boots in 32-bit protected mode
+    ; Architecture: 0 (x86 — GRUB always boots in 32-bit protected mode)
     dd 0
     
     ; Header length

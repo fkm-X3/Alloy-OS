@@ -73,7 +73,7 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
         }
 
         // 5. Check for keyboard exit
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         if ffi::keyboard_has_key() {
             if ffi::keyboard_read() == b'`' {
                 serial_log(b"[DisplayServer] Exit\n\0");
@@ -82,7 +82,7 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
         }
 
         // 6. Yield CPU
-        #[cfg(any(feature = "i686", feature = "x86_64"))]
+        #[cfg(feature = "x86_64")]
         unsafe { core::arch::asm!("hlt"); }
         #[cfg(feature = "aarch64")]
         unsafe { core::arch::asm!("wfi"); }

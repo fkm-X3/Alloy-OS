@@ -2,7 +2,7 @@
 
 ## Boot flow
 
-1. **ASM** (`boot/boot.asm`, `boot/multiboot2.asm`) — Multiboot2 entry
+1. **ASM** (`boot/boot_x86_64.asm`, `boot/multiboot2.asm`) — Multiboot2 entry
 2. **C** (`kernel/c/boot/main.c`) — initializes serial, VGA, GDT/IDT, keyboard, mouse, timer, paging, VMM, VESA, then calls `rust_main()`
 3. **Rust** (`kernel/rust/src/lib.rs::rust_main()`) — initializes VFS, runs display server
 4. **Display server** (`kernel/rust/src/display_server.rs`) — wires protocol, Fusion backend, window manager, shell
@@ -36,8 +36,7 @@ All CI runs inside Docker via `.github/actions/docker-ci`.
 ## Gotchas
 
 - Mouse input is relative PS/2. Click inside QEMU to grab pointer. `make output` is headless and cannot capture live mouse.
-- The repo targets `i686-alloy` (32-bit x86), not `x86_64`, despite `ARCH ?= x86_64` in the Makefile.
-- Rust nightly is required with `-Zbuild-std=core,alloc` and the custom target spec `i686-alloy.json`.
+- Rust nightly is required with `-Zbuild-std=core,alloc` and the custom target spec.
 - Not a Cargo workspace — single crate root: `kernel/rust`.
 
 ## Terminal mode

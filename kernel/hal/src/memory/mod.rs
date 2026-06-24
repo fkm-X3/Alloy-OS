@@ -250,35 +250,6 @@ impl MemoryManager for Pmm {
     }
 }
 
-/// i686 page table structures
-#[cfg(feature = "i686")]
-pub mod i686 {
-    /// Page directory entry for i686 (32-bit)
-    #[repr(C)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct PageDirectoryEntry {
-        pub entries: [u32; 1024],
-    }
-
-    /// Page table entry for i686 (32-bit)
-    #[repr(C)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct PageTableEntry {
-        pub entries: [u32; 1024],
-    }
-
-    /// PTE flags for i686
-    pub const PTE_PRESENT: u32 = 1 << 0;
-    pub const PTE_WRITABLE: u32 = 1 << 1;
-    pub const PTE_USER: u32 = 1 << 2;
-    pub const PTE_WRITE_THROUGH: u32 = 1 << 3;
-    pub const PTE_CACHE_DISABLE: u32 = 1 << 4;
-    pub const PTE_ACCESSED: u32 = 1 << 5;
-    pub const PTE_DIRTY: u32 = 1 << 6;
-    pub const PTE_PS: u32 = 1 << 7;
-    pub const PTE_GLOBAL: u32 = 1 << 8;
-}
-
 /// x86_64 page table structures
 #[cfg(feature = "x86_64")]
 pub mod x86_64 {

@@ -110,39 +110,23 @@ impl<T> SpinlockIRQ<T> {
     }
     
     /// Disable interrupts and return previous state
-    #[cfg(any(feature = "i686", feature = "x86_64"))]
+    #[cfg(feature = "x86_64")]
     #[inline]
     fn disable_interrupts(&self) -> u32 {
-        #[cfg(feature = "x86_64")]
-        {
-            let rflags: u64;
-            unsafe {
-                core::arch::asm!(
-                    "pushfq",
-                    "pop {0:r}",
-                    out(reg) rflags
-                );
-                core::arch::asm!("cli");
-            }
-            rflags as u32
+        let rflags: u64;
+        unsafe {
+            core::arch::asm!(
+                "pushfq",
+                "pop {0:r}",
+                out(reg) rflags
+            );
+            core::arch::asm!("cli");
         }
-        #[cfg(feature = "i686")]
-        {
-            let flags: u32;
-            unsafe {
-                core::arch::asm!(
-                    "pushfd",
-                    "pop {0:e}",
-                    out(reg) flags
-                );
-                core::arch::asm!("cli");
-            }
-            flags
-        }
+        rflags as u32
     }
     
     /// Restore interrupt state (x86)
-    #[cfg(any(feature = "i686", feature = "x86_64"))]
+    #[cfg(feature = "x86_64")]
     #[inline]
     fn restore_interrupts(&self, flags: u32) {
         unsafe {

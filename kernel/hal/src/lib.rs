@@ -3,7 +3,7 @@
 //! Hardware Abstraction Layer for Alloy OS
 //!
 //! This crate provides a unified interface to architecture-specific hardware operations,
-//! enabling the kernel to support multiple CPU architectures (i686, x86_64, aarch64).
+//! enabling the kernel to support multiple CPU architectures (x86_64, aarch64).
 
 pub mod arch;
 pub mod ffi;
@@ -16,7 +16,7 @@ pub mod time;
 
 pub use arch::{Arch, CpuContext, CpuInfo};
 pub use interrupt::{InterruptController, IrqHandler};
-#[cfg(any(feature = "i686", feature = "x86_64"))]
+#[cfg(feature = "x86_64")]
 pub use io::IoPort;
 pub use io::Mmio;
 pub use memory::{MemoryManager, PageFlags};

@@ -260,7 +260,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--qemu-binary",
-        default="qemu-system-i386",
+        default="qemu-system-x86_64",
         help="QEMU executable name/path",
     )
     parser.add_argument(

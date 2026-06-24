@@ -16,12 +16,13 @@ else
 endif
 
 LIB_DIR = lib
+CRT0_SRC = $(LIB_DIR)/crt0_$(ARCH).S
 TEST_DIR = tests
 BUILD_DIR = build
 
 LIB_OBJS = $(BUILD_DIR)/crt0.o $(BUILD_DIR)/stdlib.o $(BUILD_DIR)/stdio.o $(BUILD_DIR)/wayland_client.o
 
-$(BUILD_DIR)/crt0.o: $(LIB_DIR)/crt0.S
+$(BUILD_DIR)/crt0.o: $(CRT0_SRC)
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 

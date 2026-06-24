@@ -10,8 +10,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
     && add-apt-repository universe \
     && apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        gcc-i686-linux-gnu \
-        binutils-i686-linux-gnu \
+        libc6-dev-i386
         gcc-multilib \
         g++-multilib \
         nasm \

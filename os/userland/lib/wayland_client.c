@@ -3,6 +3,9 @@
 #ifdef __x86_64__
 #include "alloy_syscall_x86_64.h"
 #define SYSCALL_FN syscall_x86_64
+#elif defined(__aarch64__)
+#include "alloy_syscall_aarch64.h"
+#define SYSCALL_FN syscall_aarch64
 #else
 #define SYSCALL_FN syscall
 #endif

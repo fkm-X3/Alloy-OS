@@ -30,11 +30,12 @@
 #define SYS_ALLOC_SHM   25
 #define SYS_SHM_USER_VADDR 26
 
-// INT 0x80 calling convention:
+// INT 0x80 calling convention (x86 only):
 //   eax = syscall number
 //   ebx = arg0, ecx = arg1, edx = arg2, esi = arg3, edi = arg4
 //   return in eax
 
+#if !defined(__aarch64__)
 static inline int syscall(int num, int arg0, int arg1, int arg2, int arg3, int arg4) {
     int ret;
     asm volatile (
@@ -45,5 +46,6 @@ static inline int syscall(int num, int arg0, int arg1, int arg2, int arg3, int a
     );
     return ret;
 }
+#endif
 
 #endif

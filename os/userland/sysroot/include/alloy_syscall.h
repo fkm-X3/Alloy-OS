@@ -3,6 +3,8 @@
 
 #ifdef __x86_64__
 #include "alloy_syscall_x86_64.h"
+#elif defined(__aarch64__)
+#include "alloy_syscall_aarch64.h"
 #else
 #error "Unsupported architecture for alloy_syscall.h"
 #endif

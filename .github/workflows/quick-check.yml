@@ -92,8 +92,8 @@ jobs:
         command: |
           echo "Building userland binaries (needed by Rust include_bytes!)..."
           make -C os/userland
-          cp os/userland/build/hello hello 2>/dev/null || true
-          cp os/userland/build/compositor compositor 2>/dev/null || true
+          cp os/userland/build/${{ matrix.arch }}/hello hello 2>/dev/null || true
+          cp os/userland/build/${{ matrix.arch }}/compositor compositor 2>/dev/null || true
 
           cd kernel/rust
           cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"

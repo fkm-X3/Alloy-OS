@@ -38,8 +38,6 @@ WORKDIR /workspace
 
 COPY . /workspace
 
-# Should fix the nightly issue 
-COPY hello /workspace/hello
-COPY compositor /workspace/compositor
+# hello and compositor are built by make userland during CI
 
 CMD ["bash"]

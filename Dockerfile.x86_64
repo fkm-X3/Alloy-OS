@@ -34,7 +34,6 @@ WORKDIR /workspace
 
 COPY . /workspace
 
-COPY hello /workspace/hello
-COPY compositor /workspace/compositor
+# hello and compositor are built by make userland during CI
 
 CMD ["bash"]

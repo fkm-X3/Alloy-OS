@@ -114,6 +114,9 @@ iso: $(KERNEL_ISO)
 userland:
 	$(MAKE) -C alloy_de ARCH=$(ARCH)
 	$(MAKE) -C os/userland ARCH=$(ARCH)
+ifneq ($(ARCH),aarch64)
+	cp -f os/userland/build/hello_cpp hello_cpp 2>/dev/null || true
+endif
 
 # Build the Qt6/QML DE for host development (requires Qt6 SDK)
 de-build:

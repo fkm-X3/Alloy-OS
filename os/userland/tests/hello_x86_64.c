@@ -10,11 +10,7 @@
 
 #include "alloy_syscall_x86_64.h"
 
-// Override _exit from stdlib -- use MSR syscall instead of int 0x80
-void _exit(int status) {
-    syscall_x86_64(SYS_EXIT, status, 0, 0, 0, 0);
-    __builtin_unreachable();
-}
+// Note: _exit is now provided by stdlib.c (uses x86_64 syscall ABI when __x86_64__ is defined)
 
 int main(void) {
     char msg[] = "Hello from x86_64 syscall!\n";

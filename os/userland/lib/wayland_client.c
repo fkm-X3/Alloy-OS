@@ -1,5 +1,11 @@
 #include "wayland_client.h"
 #include "alloy_syscall.h"
+#ifdef __x86_64__
+#include "alloy_syscall_x86_64.h"
+#define SYSCALL_FN syscall_x86_64
+#else
+#define SYSCALL_FN syscall
+#endif
 
 #define NULL ((void*)0)
 
@@ -25,7 +31,7 @@ static size_t mystrlen(const char *s) {
 /* ───── Socket helpers via syscalls ───── */
 
 static int create_socket(void) {
-    return syscall(SYS_SOCKET, 1, 1, 0, 0, 0);
+    return SYSCALL_FN(SYS_SOCKET, 1, 1, 0, 0, 0);
 }
 
 static int do_connect(int fd, const char *path) {
@@ -35,15 +41,15 @@ static int do_connect(int fd, const char *path) {
     size_t len = mystrlen(path);
     if (len > 107) return -1;
     mymemcpy(addr + 2, path, len);
-    return syscall(SYS_CONNECT, fd, (int)(size_t)addr, (int)(len + 2), 0, 0);
+    return SYSCALL_FN(SYS_CONNECT, fd, (long)(size_t)addr, (long)(len + 2), 0, 0);
 }
 
 static int sock_read(int fd, void *buf, unsigned int len) {
-    return syscall(SYS_SOCKET_READ, fd, (int)(size_t)buf, (int)len, 0, 0);
+    return SYSCALL_FN(SYS_SOCKET_READ, fd, (long)(size_t)buf, (long)len, 0, 0);
 }
 
 static int sock_write(int fd, const void *buf, unsigned int len) {
-    return syscall(SYS_SOCKET_WRITE, fd, (int)(size_t)buf, (int)len, 0, 0);
+    return SYSCALL_FN(SYS_SOCKET_WRITE, fd, (long)(size_t)buf, (long)len, 0, 0);
 }
 
 /* ───── Public API ───── */
@@ -53,7 +59,7 @@ struct wl_display *wl_display_connect(const char *socket_path) {
     if (fd < 0) return 0;
 
     if (do_connect(fd, socket_path) < 0) {
-        syscall(SYS_CLOSE_SOCKET, fd, 0, 0, 0, 0);
+        SYSCALL_FN(SYS_CLOSE_SOCKET, fd, 0, 0, 0, 0);
         return 0;
     }
 
@@ -65,7 +71,7 @@ struct wl_display *wl_display_connect(const char *socket_path) {
 
 void wl_display_disconnect(struct wl_display *d) {
     if (!d) return;
-    syscall(SYS_CLOSE_SOCKET, d->fd, 0, 0, 0, 0);
+    SYSCALL_FN(SYS_CLOSE_SOCKET, d->fd, 0, 0, 0, 0);
 }
 
 int wl_message_send(int fd, unsigned int object_id, unsigned short opcode,

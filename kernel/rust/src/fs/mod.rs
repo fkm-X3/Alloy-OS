@@ -148,7 +148,22 @@ pub fn vfs_init() {
         }
     }
 
-
+    let hello_cpp_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../hello_cpp"));
+    if !hello_cpp_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/hello_cpp", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, hello_cpp_bytes.to_vec());
+                unsafe { crate::ffi::serial_print(c"[VFS] /hello_cpp embedded into VFS\n".as_ptr() as *const u8); }
+            }
+        }
+        if let Ok(id2) = vfs_open("/bin/hello_cpp", 0, 0) {
+            let mut g2 = VFS_STATE.lock();
+            if let Some(state2) = g2.as_mut() {
+                state2.data.insert(id2, hello_cpp_bytes.to_vec());
+            }
+        }
+    }
 
     unsafe { crate::ffi::serial_print(c"[VFS] Initializing block devices...\n".as_ptr() as *const u8); }
 

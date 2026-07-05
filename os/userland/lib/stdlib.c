@@ -1,12 +1,18 @@
 #include "alloy_syscall.h"
+#ifdef __x86_64__
+#include "alloy_syscall_x86_64.h"
+#define SYSCALL_FN syscall_x86_64
+#else
+#define SYSCALL_FN syscall
+#endif
 
 void _exit(int status) {
-    syscall(SYS_EXIT, status, 0, 0, 0, 0);
+    SYSCALL_FN(SYS_EXIT, status, 0, 0, 0, 0);
     __builtin_unreachable();
 }
 
 void *brk(void *addr) {
-    return (void *)syscall(SYS_BRK, (int)addr, 0, 0, 0, 0);
+    return (void *)SYSCALL_FN(SYS_BRK, (long)addr, 0, 0, 0, 0);
 }
 
 void *sbrk(int incr) {

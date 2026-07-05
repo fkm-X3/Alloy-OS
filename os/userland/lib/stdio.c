@@ -1,7 +1,13 @@
 #include "alloy_syscall.h"
+#ifdef __x86_64__
+#include "alloy_syscall_x86_64.h"
+#define SYSCALL_FN syscall_x86_64
+#else
+#define SYSCALL_FN syscall
+#endif
 
 int write(int fd, const void *buf, int len) {
-    return syscall(SYS_WRITE, fd, (int)buf, len, 0, 0);
+    return (int)SYSCALL_FN(SYS_WRITE, fd, (long)buf, len, 0, 0);
 }
 
 int puts(const char *s) {

@@ -2,17 +2,23 @@
 .global _start
 
 _start:
-    // Kernel sets up stack and jumps to _start.
     // Clear frame pointer for backtrace termination.
-    xor  %ebp, %ebp
+    xor  %rbp, %rbp
 
-    // Push argc, argv, envp (kernel passes them on stack)
+    // Call C++ static initializers
+    call __alloy_init_cpp
+
+    // Push argc, argv (kernel passes them on stack)
     // Currently no real arguments — just call main(0, 0)
-    push $0      // argv
-    push $0      // argc
+    xor  %rdi, %rdi   // argc = 0
+    xor  %rsi, %rsi   // argv = NULL
     call main
 
-    // main() returned — exit with its return value
-    push %rax
+    // main() returned — call finalizers and exit
+    mov  %rax, %rbx   // save return value
+
+    call __alloy_fini_cpp
+
+    mov  %rbx, %rdi   // status = main's return value
     call _exit
     // _exit never returns

@@ -86,7 +86,7 @@ make ARCH=x86_64 screenshot
 
 make ARCH=x86_64 all
 
-...
+```
 
 - Target architecture (x86_64 or aarch64)
 - Steps to reproduce

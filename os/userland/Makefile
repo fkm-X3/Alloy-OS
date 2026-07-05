@@ -21,7 +21,7 @@ endif
 
 LIB_DIR = lib
 TEST_DIR = tests
-BUILD_DIR = build
+BUILD_DIR = build/$(ARCH)
 
 # Library objects (order: crt0, crt_cpp, then the rest)
 CRT0_OBJ = $(BUILD_DIR)/crt0.o

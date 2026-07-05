@@ -16,6 +16,7 @@
 
 void init_gdt();
 void init_idt();
+void syscall_init();
 void rust_main();
 
 // PL110 framebuffer (aarch64)
@@ -97,6 +98,18 @@ void kernel_main(uint32_t magic, uint32_t multiboot_addr) {
     vga_set_color(7, 0);
 #endif
     serial_print("IDT initialized\n");
+
+    serial_print("Initializing syscalls...\n");
+#ifdef ARCH_X86_64
+    vga_print("[ ] Initializing syscalls...");
+#endif
+    syscall_init();
+#ifdef ARCH_X86_64
+    vga_set_color(10, 0);
+    vga_println(" OK");
+    vga_set_color(7, 0);
+#endif
+    serial_print("Syscalls initialized\n");
 
 #ifdef ARCH_X86_64
     serial_print("Initializing keyboard...\n");

@@ -1,12 +1,18 @@
 ; x86_64 system call entry using MSR-based syscall/sysret
-; Sets up MSR registers STAR, LSTAR, SF_MASK for syscall instruction
 ;
-; syscall entry convention:
-;   RCX = return address (set by CPU)
-;   R11 = saved RFLAGS (set by CPU)
-;   EAX = syscall number
-;   RDI, RSI, RDX, R10, R8, R9 = arguments
-; Return value in RAX
+; syscall instruction convention:
+;   RAX = syscall number
+;   RCX = user-space return RIP (set by CPU, preserved for sysret)
+;   R11 = user-space RFLAGS (set by CPU, preserved for sysret)
+;   RDI = arg0, RSI = arg1, RDX = arg2, R10 = arg3, R8 = arg4, R9 = arg5
+;
+; Return value in RAX. Returns via o64 sysret (pops RIP from RCX, RFLAGS from R11).
+;
+; C dispatcher signature:
+;   uint32_t syscall_dispatcher(uint32_t syscall_no,
+;                               uint32_t arg0, uint32_t arg1, uint32_t arg2,
+;                               uint32_t arg3, uint32_t arg4,
+;                               uint32_t* frame_ptr);
 
 [BITS 64]
 
@@ -14,26 +20,19 @@ global syscall_entry
 extern syscall_dispatcher
 
 section .text
-
 syscall_entry:
-    ; Swap to kernel GS base (points to per-CPU area)
-    swapgs
+    swapgs                          ; GS.base ↔ KernelGS.base
 
-    ; Save user stack pointer in temporary location
+    ; Save user RSP to per-CPU scratch
     mov gs:0, rsp
 
-    ; Load kernel stack
-    ; For simplicity, we use a fixed kernel stack
-    ; In a real kernel this would be per-CPU/per-task
+    ; Switch to kernel stack
     mov rsp, [kernel_stack_top]
 
-    ; Create space for saved registers
-    sub rsp, 8    ; alignment
-
-    ; Push user RSP and return address
-    push qword [gs:0]     ; user RSP
-    push rcx              ; user return RIP (RCX on syscall)
-    push r11              ; user RFLAGS (R11 on syscall)
+    ; Build saved context: user RSP, RIP (RCX), RFLAGS (R11)
+    push qword [gs:0]               ; user RSP
+    push rcx                        ; return RIP
+    push r11                        ; saved RFLAGS
 
     ; Save callee-saved registers
     push r15
@@ -43,42 +42,27 @@ syscall_entry:
     push rbp
     push rbx
 
-    ; Push syscall arguments for C dispatcher
-    ; syscall_dispatcher(syscall_no, arg0, arg1, arg2, arg3, arg4, frame_ptr)
-    push r9       ; arg4
-    push r8       ; arg3
-    push r10      ; arg2 (3rd arg in syscall convention)
-    push rdx      ; arg1 (2nd arg)
-    push rsi      ; arg0 (1st arg)
-    push rdi      ; 0th arg (not used as syscall number here)
-    push rax      ; syscall number
+    ; Arrange C calling convention for syscall_dispatcher:
+    ;   RDI = syscall_no (RAX)
+    ;   RSI = arg0 (original RDI)
+    ;   RDX = arg1 (original RSI)
+    ;   RCX = arg2 (original RDX)
+    ;   R8  = arg3 (original R10)
+    ;   R9  = arg4 (original R8)
+    ;   [stack] = frame pointer (RSP after callee saves)
+    mov r9, r8                      ; arg4
+    mov r8, r10                     ; arg3
+    mov rcx, rdx                    ; arg2
+    mov rdx, rsi                    ; arg1
+    mov rsi, rdi                    ; arg0
+    mov rdi, rax                    ; syscall_no
 
-    mov rdi, rax                    ; arg1 = syscall number
-    mov rsi, rdi                    ; arg2 = arg0 (from original RDI? No, we need to save original args)
-    ; Actually, re-read the arguments properly
-    ; RDI, RSI, RDX, R10, R8, R9 are the original user-space args
-    ; But we already pushed them on the stack
-    ; Let's use the dispatcher which receives args on stack
-
-    ; Pass pointer to saved register frame
-    lea rax, [rsp]
-    push rax                        ; arg5 = frame pointer
+    lea rax, [rsp]                  ; frame pointer = current RSP
+    push rax                        ; 7th argument on stack
 
     call syscall_dispatcher
 
-    add rsp, 8                      ; clean frame pointer
-
-    ; RAX has return value
-    mov [rsp + 56], rax             ; store in syscall number slot on stack
-
-    pop rax                         ; clean syscall number
-    pop rdi                         ; clean arg0
-    pop rsi                         ; clean arg1
-    pop rdx                         ; clean arg2
-    pop r10                         ; clean arg3
-    pop r8                          ; clean arg4
-    pop r9                          ; clean arg4
-    add rsp, 8                      ; clean extra push
+    add rsp, 8                      ; pop frame pointer
 
     ; Restore callee-saved registers
     pop rbx
@@ -88,15 +72,12 @@ syscall_entry:
     pop r14
     pop r15
 
-    ; Restore user RFLAGS, RIP, RSP
-    pop r11      ; user RFLAGS
-    pop rcx      ; user RIP
-    pop rsp      ; user RSP
+    ; Restore user context
+    pop r11                         ; RFLAGS
+    pop rcx                         ; RIP
+    pop rsp                         ; user RSP
 
-    ; Switch back to user GS base
     swapgs
-
-    ; Return to userspace
     o64 sysret
 
 section .data

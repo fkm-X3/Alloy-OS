@@ -135,9 +135,18 @@ void syscall_init() {
 #elif defined(ARCH_X86_64)
 
 extern void syscall_entry();
+extern uint64_t kernel_stack_bottom;
+extern uint64_t kernel_stack_top_alias;
+extern uint64_t kernel_stack_top;
 
 void syscall_init() {
     serial_print("[Syscall] Initializing x86_64 syscall interface\n");
+
+    // Initialize kernel stack for syscall entry
+    kernel_stack_top = (uint64_t)&kernel_stack_top_alias;
+    serial_print("[Syscall] Kernel stack top: 0x");
+    serial_print_hex64(kernel_stack_top);
+    serial_print("\n");
 
     // Set up MSRs for the 'syscall' instruction
     // STAR (0xC0000081): selects CS and SS for kernel and user

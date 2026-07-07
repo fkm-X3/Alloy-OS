@@ -138,34 +138,18 @@ pub extern "C" fn rust_main() {
         }
     }
 
-    // Spawn the primary DE (alloy_de) as a userspace process
+    // Spawn the Wayland compositor as a userspace process
     #[cfg(feature = "x86_64")]
     {
-        if let Ok(de_vnode) = fs::vfs_open("/bin/alloy_de", 0, 0) {
-            if let Some(image) = fs::vfs_read_all(de_vnode) {
+        if let Ok(comp_vnode) = fs::vfs_open("/bin/compositor", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(comp_vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading alloy_de DE\n".as_ptr() as *const u8);
+                        ffi::serial_print(c"[Spawn] Loading compositor\n".as_ptr() as *const u8);
                     }
                     if process::spawn_user_elf(&image) {
                         unsafe {
-                            ffi::serial_print(c"[Spawn] alloy_de DE task created\n".as_ptr() as *const u8);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Fall back to the compositor if alloy_de isn't available
-            if let Ok(comp_vnode) = fs::vfs_open("/bin/compositor", 0, 0) {
-                if let Some(image) = fs::vfs_read_all(comp_vnode) {
-                    if !image.is_empty() {
-                        unsafe {
-                            ffi::serial_print(c"[Spawn] Loading userspace compositor (fallback)\n".as_ptr() as *const u8);
-                        }
-                        if process::spawn_user_elf(&image) {
-                            unsafe {
-                                ffi::serial_print(c"[Spawn] Compositor task created\n".as_ptr() as *const u8);
-                            }
+                            ffi::serial_print(c"[Spawn] Compositor task created\n".as_ptr() as *const u8);
                         }
                     }
                 }

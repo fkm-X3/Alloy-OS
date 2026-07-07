@@ -112,7 +112,6 @@ iso: $(KERNEL_ISO)
 
 # Build userland binaries (embedded into kernel VFS via include_bytes!)
 userland:
-	$(MAKE) -C alloy_de ARCH=$(ARCH)
 	$(MAKE) -C os/userland ARCH=$(ARCH)
 	cp -f os/userland/build/$(ARCH)/hello hello 2>/dev/null || true
 	cp -f os/userland/build/$(ARCH)/compositor compositor 2>/dev/null || true
@@ -260,7 +259,6 @@ clean:
 	rm -rf $(BUILD_DIR)
 	cd $(KERNEL_RUST_DIR) && $(CARGO) clean
 	rm -rf de/build
-	rm -rf alloy_de/build
 	rm -f hello compositor
 
 # Create a FAT32 disk image (requires mkfs.fat in PATH)

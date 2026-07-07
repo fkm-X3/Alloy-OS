@@ -108,6 +108,21 @@ pub extern "C" fn rust_main() {
     let display_task = Box::new(process::task::Task::new(display_server_entry, "display-server"));
     process::Scheduler::add_task(display_task);
 
+    // Spawn test_wl_client (Wayland client protocol test)
+    #[cfg(feature = "x86_64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/test_wl_client", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    unsafe {
+                        ffi::serial_print(c"[Spawn] Loading test_wl_client (Wayland client test)\n".as_ptr() as *const u8);
+                    }
+                    process::spawn_user_elf(&image);
+                }
+            }
+        }
+    }
+
     // Spawn hello_cpp test (C++ static init + main test)
     #[cfg(feature = "x86_64")]
     {

@@ -36,7 +36,7 @@ jobs:
           done
           echo "All NASM files are valid!"
 
-  gas-check:
+  gas-check-x86_64:
     runs-on: ubuntu-latest
 
     steps:
@@ -46,17 +46,39 @@ jobs:
         submodules: recursive
         fetch-depth: 1
 
-    - name: Check GAS assembly files
+    - name: Check x86_64 GAS assembly files
+      uses: ./.github/actions/docker-ci
+      with:
+        arch: x86_64
+        command: |
+          echo "=== Checking x86_64 GAS (.S) files ==="
+          for s_file in $(find . -name "*x86_64*.S"); do
+            echo "Checking $s_file"
+            gcc -c -m64 -o /dev/null "$s_file"
+          done
+          echo "All x86_64 GAS files are valid!"
+
+  gas-check-aarch64:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+        fetch-depth: 1
+
+    - name: Check aarch64 GAS assembly files
       uses: ./.github/actions/docker-ci
       with:
         arch: aarch64
         command: |
-          echo "=== Checking GAS (.S) files ==="
-          for s_file in $(find . -name "*.S"); do
+          echo "=== Checking aarch64 GAS (.S) files ==="
+          for s_file in $(find . -name "*.S" ! -name "*x86_64*"); do
             echo "Checking $s_file"
             aarch64-linux-gnu-gcc -c -march=armv8-a -o /dev/null "$s_file"
           done
-          echo "All GAS files are valid!"
+          echo "All aarch64 GAS files are valid!"
 
   clippy:
     strategy:

@@ -65,6 +65,8 @@ pub struct CompositorHandler {
     object_id_map: BTreeMap<u32, SurfaceId>,
     /// Mapping from client_id to their surface IDs for cleanup
     client_surfaces: BTreeMap<ClientId, BTreeMap<SurfaceId, ()>>,
+    /// Reverse mapping: SurfaceId -> ClientId for event routing
+    surface_to_client: BTreeMap<SurfaceId, ClientId>,
     /// Next surface ID to assign
     next_surface_id: u32,
 }
@@ -76,6 +78,7 @@ impl CompositorHandler {
             surfaces: BTreeMap::new(),
             object_id_map: BTreeMap::new(),
             client_surfaces: BTreeMap::new(),
+            surface_to_client: BTreeMap::new(),
             next_surface_id: 1,
         }
     }
@@ -143,6 +146,7 @@ impl CompositorHandler {
             .entry(client_id)
             .or_default()
             .insert(surface_id, ());
+        self.surface_to_client.insert(surface_id, client_id);
 
         unsafe {
             crate::ffi::serial_print(c"[Wayland Compositor] Created surface\n".as_ptr() as *const u8);
@@ -239,6 +243,7 @@ impl CompositorHandler {
             self.object_id_map.remove(&oid);
         }
         self.surfaces.remove(&surface_id);
+        self.surface_to_client.remove(&surface_id);
 
         // Remove from client surface tracking
         for (_client_id, surfaces) in self.client_surfaces.iter_mut() {
@@ -255,8 +260,14 @@ impl CompositorHandler {
                 if let Some(surface) = self.surfaces.remove(surface_id) {
                     self.object_id_map.remove(&surface.object_id);
                 }
+                self.surface_to_client.remove(surface_id);
             }
         }
+    }
+
+    /// Find the client that owns a surface
+    pub fn find_client_for_surface(&self, surface_id: SurfaceId) -> Option<ClientId> {
+        self.surface_to_client.get(&surface_id).copied()
     }
 
     /// Get a surface by ID

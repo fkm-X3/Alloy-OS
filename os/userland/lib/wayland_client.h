@@ -72,6 +72,8 @@ struct input_state {
     int mod_shift;
     int mod_ctrl;
     int mod_alt;
+    int keyboard_focus_surface;
+    int pointer_focus_surface;
 };
 
 struct wl_display {
@@ -82,11 +84,19 @@ struct wl_display {
     unsigned int seat_id;
     unsigned int keyboard_id;
     unsigned int pointer_id;
+    unsigned int seat_registry_name;
+    unsigned int seat_registry_version;
+    unsigned int compositor_registry_name;
     struct input_state input;
     void (*on_key)(int key, int pressed, struct input_state *state);
+    void (*on_keyboard_enter)(int surface_id, struct input_state *state);
+    void (*on_keyboard_leave)(int surface_id, struct input_state *state);
     void (*on_mouse_move)(int x, int y, struct input_state *state);
+    void (*on_mouse_enter)(int surface_id, int x, int y, struct input_state *state);
+    void (*on_mouse_leave)(int surface_id, struct input_state *state);
     void (*on_click)(int button, int pressed, int x, int y,
                      struct input_state *state);
+    void (*on_axis)(int axis, int value, struct input_state *state);
 };
 
 struct wl_registry {
@@ -137,13 +147,28 @@ void wl_seat_get_pointer(struct wl_display *d, unsigned int seat_id);
 void wl_set_key_callback(struct wl_display *d,
                           void (*cb)(int key, int pressed,
                                      struct input_state *state));
+void wl_set_keyboard_enter_callback(struct wl_display *d,
+                                     void (*cb)(int surface_id,
+                                                struct input_state *state));
+void wl_set_keyboard_leave_callback(struct wl_display *d,
+                                     void (*cb)(int surface_id,
+                                                struct input_state *state));
 void wl_set_mouse_move_callback(struct wl_display *d,
                                  void (*cb)(int x, int y,
                                             struct input_state *state));
+void wl_set_mouse_enter_callback(struct wl_display *d,
+                                  void (*cb)(int surface_id, int x, int y,
+                                             struct input_state *state));
+void wl_set_mouse_leave_callback(struct wl_display *d,
+                                  void (*cb)(int surface_id,
+                                             struct input_state *state));
 void wl_set_click_callback(struct wl_display *d,
                             void (*cb)(int button, int pressed,
                                        int x, int y,
                                        struct input_state *state));
+void wl_set_axis_callback(struct wl_display *d,
+                           void (*cb)(int axis, int value,
+                                      struct input_state *state));
 
 int wl_message_send(int fd, unsigned int object_id, unsigned short opcode,
                     const void *payload, unsigned short payload_len);

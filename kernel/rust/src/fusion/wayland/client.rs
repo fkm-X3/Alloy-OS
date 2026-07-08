@@ -52,6 +52,8 @@ pub enum ObjectType {
     Callback,
     /// wl_output - display output/monitor
     Output,
+    /// wl_seat - input device seat
+    Seat,
     /// xdg_wm_base - xdg windowing shell
     XdgWmBase,
     /// xdg_surface - xdg surface

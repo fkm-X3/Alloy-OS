@@ -31,6 +31,11 @@ static size_t mystrlen(const char *s) {
     return n;
 }
 
+static int mystrcmp(const char *a, const char *b) {
+    while (*a && *a == *b) { ++a; ++b; }
+    return (unsigned char)*a - (unsigned char)*b;
+}
+
 static int create_socket(void) {
     return SYSCALL_FN(SYS_SOCKET, 1, 1, 0, 0, 0);
 }
@@ -69,10 +74,20 @@ struct wl_display *wl_display_connect(const char *socket_path) {
     d.seat_id = 0;
     d.keyboard_id = 0;
     d.pointer_id = 0;
+    d.seat_registry_name = 0;
+    d.seat_registry_version = 0;
+    d.compositor_registry_name = 0;
     d.on_key = NULL;
+    d.on_keyboard_enter = NULL;
+    d.on_keyboard_leave = NULL;
     d.on_mouse_move = NULL;
+    d.on_mouse_enter = NULL;
+    d.on_mouse_leave = NULL;
     d.on_click = NULL;
+    d.on_axis = NULL;
     mymemset(&d.input, 0, sizeof(d.input));
+    d.input.keyboard_focus_surface = -1;
+    d.input.pointer_focus_surface = -1;
     return &d;
 }
 
@@ -296,6 +311,36 @@ void wl_set_click_callback(struct wl_display *d,
     d->on_click = cb;
 }
 
+void wl_set_keyboard_enter_callback(struct wl_display *d,
+                                     void (*cb)(int surface_id,
+                                                struct input_state *state)) {
+    d->on_keyboard_enter = cb;
+}
+
+void wl_set_keyboard_leave_callback(struct wl_display *d,
+                                     void (*cb)(int surface_id,
+                                                struct input_state *state)) {
+    d->on_keyboard_leave = cb;
+}
+
+void wl_set_mouse_enter_callback(struct wl_display *d,
+                                  void (*cb)(int surface_id, int x, int y,
+                                             struct input_state *state)) {
+    d->on_mouse_enter = cb;
+}
+
+void wl_set_mouse_leave_callback(struct wl_display *d,
+                                  void (*cb)(int surface_id,
+                                             struct input_state *state)) {
+    d->on_mouse_leave = cb;
+}
+
+void wl_set_axis_callback(struct wl_display *d,
+                           void (*cb)(int axis, int value,
+                                      struct input_state *state)) {
+    d->on_axis = cb;
+}
+
 static void handle_keyboard_key(struct wl_display *d,
                                  const unsigned char *payload) {
     unsigned int key, state;
@@ -360,8 +405,82 @@ static void handle_pointer_button(struct wl_display *d,
 
 static void handle_pointer_axis(struct wl_display *d,
                                  const unsigned char *payload) {
-    (void)d;
-    (void)payload;
+    unsigned int axis, value_fixed;
+    mymemcpy(&axis, payload, 4);
+    mymemcpy(&value_fixed, payload + 4, 4);
+    int value = (int)(value_fixed >> 8);
+    if (d->on_axis)
+        d->on_axis((int)axis, value, &d->input);
+}
+
+static void handle_registry_global(struct wl_display *d,
+                                    const unsigned char *payload) {
+    unsigned int name;
+    mymemcpy(&name, payload, 4);
+
+    const unsigned char *iface_ptr = payload + 4;
+    unsigned int iface_ofs = 0;
+    while (iface_ptr[iface_ofs] != 0)
+        ++iface_ofs;
+
+    unsigned int version;
+    mymemcpy(&version, iface_ptr + iface_ofs + 1, 4);
+
+    unsigned char iface_buf[64];
+    unsigned int copy_len = iface_ofs;
+    if (copy_len > sizeof(iface_buf) - 1)
+        copy_len = sizeof(iface_buf) - 1;
+    mymemcpy(iface_buf, iface_ptr, copy_len);
+    iface_buf[copy_len] = 0;
+
+    if (mystrcmp((const char *)iface_buf, "wl_seat") == 0) {
+        d->seat_registry_name = name;
+        d->seat_registry_version = version;
+    } else if (mystrcmp((const char *)iface_buf, "wl_compositor") == 0) {
+        d->compositor_registry_name = name;
+    }
+}
+
+static void handle_keyboard_enter(struct wl_display *d,
+                                   const unsigned char *payload) {
+    unsigned int surface;
+    mymemcpy(&surface, payload + 4, 4);
+    d->input.keyboard_focus_surface = (int)surface;
+    if (d->on_keyboard_enter)
+        d->on_keyboard_enter((int)surface, &d->input);
+}
+
+static void handle_keyboard_leave(struct wl_display *d,
+                                   const unsigned char *payload) {
+    unsigned int surface;
+    mymemcpy(&surface, payload + 4, 4);
+    if (d->input.keyboard_focus_surface == (int)surface)
+        d->input.keyboard_focus_surface = -1;
+    if (d->on_keyboard_leave)
+        d->on_keyboard_leave((int)surface, &d->input);
+}
+
+static void handle_pointer_enter(struct wl_display *d,
+                                  const unsigned char *payload) {
+    unsigned int surface, x_fixed, y_fixed;
+    mymemcpy(&surface, payload + 4, 4);
+    mymemcpy(&x_fixed, payload + 8, 4);
+    mymemcpy(&y_fixed, payload + 12, 4);
+    d->input.pointer_focus_surface = (int)surface;
+    d->input.cursor_x = (int)(x_fixed >> 8);
+    d->input.cursor_y = (int)(y_fixed >> 8);
+    if (d->on_mouse_enter)
+        d->on_mouse_enter((int)surface, d->input.cursor_x, d->input.cursor_y, &d->input);
+}
+
+static void handle_pointer_leave(struct wl_display *d,
+                                  const unsigned char *payload) {
+    unsigned int surface;
+    mymemcpy(&surface, payload + 4, 4);
+    if (d->input.pointer_focus_surface == (int)surface)
+        d->input.pointer_focus_surface = -1;
+    if (d->on_mouse_leave)
+        d->on_mouse_leave((int)surface, &d->input);
 }
 
 void wl_dispatch_raw(struct wl_display *d, const unsigned char *buf, int len) {
@@ -378,16 +497,29 @@ void wl_dispatch_raw(struct wl_display *d, const unsigned char *buf, int len) {
         return;
     }
 
+    if (oid == WL_REGISTRY_ID && op == WL_REGISTRY_GLOBAL) {
+        handle_registry_global(d, p);
+        return;
+    }
+
     if (oid == d->keyboard_id && d->keyboard_id) {
         if (op == WL_KEYBOARD_KEY)
             handle_keyboard_key(d, p);
         else if (op == WL_KEYBOARD_MODIFIERS)
             handle_keyboard_modifiers(d, p);
+        else if (op == WL_KEYBOARD_ENTER)
+            handle_keyboard_enter(d, p);
+        else if (op == WL_KEYBOARD_LEAVE)
+            handle_keyboard_leave(d, p);
         return;
     }
 
     if (oid == d->pointer_id && d->pointer_id) {
-        if (op == WL_POINTER_MOTION)
+        if (op == WL_POINTER_ENTER)
+            handle_pointer_enter(d, p);
+        else if (op == WL_POINTER_LEAVE)
+            handle_pointer_leave(d, p);
+        else if (op == WL_POINTER_MOTION)
             handle_pointer_motion(d, p);
         else if (op == WL_POINTER_BUTTON)
             handle_pointer_button(d, p);

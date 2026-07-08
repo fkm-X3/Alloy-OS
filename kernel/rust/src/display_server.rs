@@ -66,7 +66,10 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
         // 3. Process frame callbacks (sync done events)
         wayland.process_frame_callbacks();
 
-        // 4. Composite every 10 iterations (~frame rate throttle)
+        // 4. Flush pending input events to clients
+        wayland.flush_input_events();
+
+        // 5. Composite every 10 iterations (~frame rate throttle)
         frame_counter += 1;
         if frame_counter % 10 == 0 {
             wayland.composite_frame();

@@ -10,6 +10,13 @@ QAlloyWindow::QAlloyWindow(QWindow *window, unsigned int surfaceId)
     setGeometry(QRect(0, 0, 800, 600));
 }
 
+QAlloyWindow::~QAlloyWindow()
+{
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration)
+        integration->unregisterSurface(m_surfaceId);
+}
+
 void QAlloyWindow::setGeometry(const QRect &rect)
 {
     QPlatformWindow::setGeometry(rect);

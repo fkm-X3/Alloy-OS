@@ -9,6 +9,7 @@ class QAlloyWindow : public QPlatformWindow
 {
 public:
     QAlloyWindow(QWindow *window, unsigned int surfaceId);
+    ~QAlloyWindow();
 
     void setGeometry(const QRect &rect) override;
     void setVisible(bool visible) override;

@@ -34,10 +34,10 @@ use self::display_handler::DisplayHandler;
 use self::registry_handler::RegistryHandler;
 use self::compositor_handler::CompositorHandler;
 use self::buffer_handler::ShmBufferHandler;
-use self::surface::SurfaceState;
+use self::surface::{SurfaceId, SurfaceState};
 use self::seat::SeatManager;
 use self::output::OutputManager;
-use self::input_routing::InputRouter;
+use self::input_routing::{InputRouter, PendingInputEvent};
 use self::xdg_shell::XdgShellHandler;
 use self::layer_shell::LayerShellHandler;
 use self::xdg_output::XdgOutputManagerHandler;
@@ -153,6 +153,38 @@ impl ClientConnection {
     }
 }
 
+/// Wayland event opcodes for keyboard
+pub mod keyboard_opcodes {
+    pub const KEYMAP: u16 = 0;
+    pub const ENTER: u16 = 1;
+    pub const LEAVE: u16 = 2;
+    pub const KEY: u16 = 3;
+    pub const MODIFIERS: u16 = 4;
+    pub const REPEAT_INFO: u16 = 5;
+}
+
+/// Wayland wl_seat opcodes for client requests
+pub mod seat_opcodes {
+    pub const GET_POINTER: u16 = 0;
+    pub const GET_KEYBOARD: u16 = 1;
+}
+
+/// Wayland event opcodes for pointer
+pub mod pointer_opcodes {
+    pub const ENTER: u16 = 0;
+    pub const LEAVE: u16 = 1;
+    pub const MOTION: u16 = 2;
+    pub const BUTTON: u16 = 4;
+    pub const AXIS: u16 = 5;
+    pub const FRAME: u16 = 6;
+}
+
+/// Per-client protocol object IDs for input
+struct ClientInputIds {
+    keyboard_id: u32,
+    pointer_id: u32,
+}
+
 /// Main Wayland server structure
 pub struct WaylandServer {
     /// Unix domain socket listener
@@ -161,6 +193,8 @@ pub struct WaylandServer {
     clients: BTreeMap<ClientId, ClientConnection>,
     /// Next client ID to assign
     next_client_id: u32,
+    /// Event serial number counter
+    next_serial: u32,
     /// Protocol message handler (routes to all sub-handlers)
     protocol_handler: ProtocolHandler,
     /// Display protocol handler (sync, get_registry)
@@ -185,6 +219,8 @@ pub struct WaylandServer {
     xdg_output_handler: XdgOutputManagerHandler,
     /// Framebuffer reference for compositor integration
     framebuffer: Option<FusionDisplayBackend>,
+    /// Per-client keyboard/pointer object IDs
+    client_input_ids: BTreeMap<ClientId, ClientInputIds>,
 }
 
 impl WaylandServer {
@@ -194,6 +230,7 @@ impl WaylandServer {
             socket: None,
             clients: BTreeMap::new(),
             next_client_id: 1,
+            next_serial: 1,
             protocol_handler: ProtocolHandler::new(),
             display_handler: DisplayHandler::new(),
             registry_handler: RegistryHandler::new(),
@@ -206,6 +243,7 @@ impl WaylandServer {
             layer_shell_handler: LayerShellHandler::new(),
             xdg_output_handler: XdgOutputManagerHandler::new(),
             framebuffer: None,
+            client_input_ids: BTreeMap::new(),
         }
     }
 
@@ -399,7 +437,7 @@ impl WaylandServer {
                             crate::fusion::wayland::globals::InterfaceName::Output =>
                                 crate::fusion::wayland::client::ObjectType::Output,
                             crate::fusion::wayland::globals::InterfaceName::Seat =>
-                                crate::fusion::wayland::client::ObjectType::Custom,
+                                crate::fusion::wayland::client::ObjectType::Seat,
                             crate::fusion::wayland::globals::InterfaceName::Shm =>
                                 crate::fusion::wayland::client::ObjectType::Custom,
                             crate::fusion::wayland::globals::InterfaceName::Subcompositor =>
@@ -467,6 +505,33 @@ impl WaylandServer {
                     client_id, message.object_id.0, message.opcode, &message.payload
                 )?;
             }
+            crate::fusion::wayland::client::ObjectType::Seat => {
+                // Handle wl_seat requests (get_pointer, get_keyboard)
+                let payload = &message.payload;
+                match message.opcode {
+                    seat_opcodes::GET_POINTER => {
+                        if payload.len() >= 4 {
+                            let new_id_bytes = [payload[0], payload[1], payload[2], payload[3]];
+                            let pointer_id = u32::from_le_bytes(new_id_bytes);
+                            self.client_input_ids.entry(client_id).or_insert(ClientInputIds {
+                                keyboard_id: 0,
+                                pointer_id,
+                            }).pointer_id = pointer_id;
+                        }
+                    }
+                    seat_opcodes::GET_KEYBOARD => {
+                        if payload.len() >= 4 {
+                            let new_id_bytes = [payload[0], payload[1], payload[2], payload[3]];
+                            let keyboard_id = u32::from_le_bytes(new_id_bytes);
+                            self.client_input_ids.entry(client_id).or_insert(ClientInputIds {
+                                keyboard_id,
+                                pointer_id: 0,
+                            }).keyboard_id = keyboard_id;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             _ => {
                 let _ = self.protocol_handler.handle_message(
                     client_id,
@@ -524,6 +589,7 @@ impl WaylandServer {
     /// Remove a client connection
     pub fn disconnect_client(&mut self, client_id: ClientId) -> WaylandResult<()> {
         if let Some(_connection) = self.clients.remove(&client_id) {
+            self.client_input_ids.remove(&client_id);
 self.registry_handler.remove_client(client_id);
              self.seat_manager.remove_client(client_id.0);
              self.output_manager.remove_client(client_id.0);
@@ -654,6 +720,232 @@ self.registry_handler.remove_client(client_id);
     /// Get mutable reference to xdg output handler
     pub fn xdg_output_handler_mut(&mut self) -> &mut XdgOutputManagerHandler {
         &mut self.xdg_output_handler
+    }
+
+    /// Get the keyboard object ID for a client
+    fn get_keyboard_id_for_client(&self, client_id: ClientId) -> Option<u32> {
+        self.client_input_ids.get(&client_id).map(|ids| ids.keyboard_id)
+    }
+
+    /// Get the pointer object ID for a client
+    fn get_pointer_id_for_client(&self, client_id: ClientId) -> Option<u32> {
+        self.client_input_ids.get(&client_id).map(|ids| ids.pointer_id)
+    }
+
+    fn pointer_obj_for_client(&self, client_id: ClientId) -> crate::fusion::wayland::protocol::ObjectId {
+        match self.get_pointer_id_for_client(client_id) {
+            Some(id) => crate::fusion::wayland::protocol::ObjectId(id),
+            None => crate::fusion::wayland::protocol::ObjectId(6),
+        }
+    }
+
+    fn keyboard_obj_for_client(&self, client_id: ClientId) -> crate::fusion::wayland::protocol::ObjectId {
+        match self.get_keyboard_id_for_client(client_id) {
+            Some(id) => crate::fusion::wayland::protocol::ObjectId(id),
+            None => crate::fusion::wayland::protocol::ObjectId(5),
+        }
+    }
+
+    /// Build a wl_pointer.enter event
+    fn build_pointer_enter(&mut self, client_id: ClientId, surface_id: SurfaceId, local_x: i32, local_y: i32) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&surface_id.0.to_le_bytes());
+        payload.extend_from_slice(&((local_x as i32) << 8).to_le_bytes());
+        payload.extend_from_slice(&((local_y as i32) << 8).to_le_bytes());
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::ENTER,
+            payload,
+        }
+    }
+
+    /// Build a wl_pointer.leave event
+    fn build_pointer_leave(&mut self, client_id: ClientId, surface_id: SurfaceId) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&surface_id.0.to_le_bytes());
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::LEAVE,
+            payload,
+        }
+    }
+
+    /// Build a wl_pointer.motion event
+    fn build_pointer_motion(&mut self, client_id: ClientId, local_x: i32, local_y: i32) -> WaylandMessage {
+        let mut payload = Vec::new();
+        let time: u32 = 0;
+        payload.extend_from_slice(&time.to_le_bytes());
+        payload.extend_from_slice(&((local_x as i32) << 8).to_le_bytes());
+        payload.extend_from_slice(&((local_y as i32) << 8).to_le_bytes());
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::MOTION,
+            payload,
+        }
+    }
+
+    /// Build a wl_pointer.button event
+    fn build_pointer_button(&mut self, client_id: ClientId, button: u32, state: u32, _local_x: i32, _local_y: i32) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        let time: u32 = 0;
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&time.to_le_bytes());
+        payload.extend_from_slice(&button.to_le_bytes());
+        payload.extend_from_slice(&state.to_le_bytes());
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::BUTTON,
+            payload,
+        }
+    }
+
+    /// Build a wl_pointer.axis event
+    fn build_pointer_axis(&mut self, client_id: ClientId, axis: u32, value: i32) -> WaylandMessage {
+        let mut payload = Vec::new();
+        let time: u32 = 0;
+        payload.extend_from_slice(&time.to_le_bytes());
+        payload.extend_from_slice(&axis.to_le_bytes());
+        payload.extend_from_slice(&((value as i32) << 8).to_le_bytes());
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::AXIS,
+            payload,
+        }
+    }
+
+    /// Build a wl_pointer.frame event
+    fn build_pointer_frame(&self, client_id: ClientId) -> WaylandMessage {
+        WaylandMessage {
+            object_id: self.pointer_obj_for_client(client_id),
+            opcode: pointer_opcodes::FRAME,
+            payload: Vec::new(),
+        }
+    }
+
+    /// Build a wl_keyboard.enter event
+    fn build_keyboard_enter(&mut self, client_id: ClientId, surface_id: SurfaceId) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&surface_id.0.to_le_bytes());
+        let array_len: u32 = 0;
+        payload.extend_from_slice(&array_len.to_le_bytes());
+        WaylandMessage {
+            object_id: self.keyboard_obj_for_client(client_id),
+            opcode: keyboard_opcodes::ENTER,
+            payload,
+        }
+    }
+
+    /// Build a wl_keyboard.leave event
+    fn build_keyboard_leave(&mut self, client_id: ClientId, surface_id: SurfaceId) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&surface_id.0.to_le_bytes());
+        WaylandMessage {
+            object_id: self.keyboard_obj_for_client(client_id),
+            opcode: keyboard_opcodes::LEAVE,
+            payload,
+        }
+    }
+
+    /// Build a wl_keyboard.key event
+    fn build_keyboard_key(&mut self, client_id: ClientId, key: u32, state: u32) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        let time: u32 = 0;
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&time.to_le_bytes());
+        payload.extend_from_slice(&key.to_le_bytes());
+        payload.extend_from_slice(&state.to_le_bytes());
+        WaylandMessage {
+            object_id: self.keyboard_obj_for_client(client_id),
+            opcode: keyboard_opcodes::KEY,
+            payload,
+        }
+    }
+
+    /// Build a wl_keyboard.modifiers event
+    fn build_keyboard_modifiers(&mut self, client_id: ClientId, depressed: u32, latched: u32, locked: u32, group: u32) -> WaylandMessage {
+        let serial = self.next_serial;
+        self.next_serial += 1;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&serial.to_le_bytes());
+        payload.extend_from_slice(&depressed.to_le_bytes());
+        payload.extend_from_slice(&latched.to_le_bytes());
+        payload.extend_from_slice(&locked.to_le_bytes());
+        payload.extend_from_slice(&group.to_le_bytes());
+        WaylandMessage {
+            object_id: self.keyboard_obj_for_client(client_id),
+            opcode: keyboard_opcodes::MODIFIERS,
+            payload,
+        }
+    }
+
+    /// Flush pending input events to connected clients
+    pub fn flush_input_events(&mut self) {
+        let events = self.input_router.pending_events().to_vec();
+        self.input_router.clear_pending_events();
+
+        for event in &events {
+            match *event {
+                PendingInputEvent::PointerMotion(surface_id, local_x, local_y) => {
+                    if let Some(client_id) = self.compositor_handler.find_client_for_surface(surface_id) {
+                        let msg = self.build_pointer_motion(client_id, local_x, local_y);
+                        let _ = self.write_message_to_client(client_id, msg);
+                        let frame = self.build_pointer_frame(client_id);
+                        let _ = self.write_message_to_client(client_id, frame);
+                    }
+                }
+                PendingInputEvent::PointerButton(surface_id, button, state, local_x, local_y) => {
+                    if let Some(client_id) = self.compositor_handler.find_client_for_surface(surface_id) {
+                        let s = match state {
+                            crate::fusion::wayland::seat::ButtonState::Pressed => 1u32,
+                            crate::fusion::wayland::seat::ButtonState::Released => 0u32,
+                        };
+                        let msg = self.build_pointer_button(client_id, button, s, local_x, local_y);
+                        let _ = self.write_message_to_client(client_id, msg);
+                        let frame = self.build_pointer_frame(client_id);
+                        let _ = self.write_message_to_client(client_id, frame);
+                    }
+                }
+                PendingInputEvent::PointerAxis(surface_id, vertical, amount) => {
+                    if let Some(client_id) = self.compositor_handler.find_client_for_surface(surface_id) {
+                        let axis = if vertical { 0u32 } else { 1u32 };
+                        let msg = self.build_pointer_axis(client_id, axis, amount);
+                        let _ = self.write_message_to_client(client_id, msg);
+                        let frame = self.build_pointer_frame(client_id);
+                        let _ = self.write_message_to_client(client_id, frame);
+                    }
+                }
+                PendingInputEvent::KeyboardKey(surface_id, key, pressed) => {
+                    if let Some(client_id) = self.compositor_handler.find_client_for_surface(surface_id) {
+                        let state = if pressed { 1u32 } else { 0u32 };
+                        let msg = self.build_keyboard_key(client_id, key, state);
+                        let _ = self.write_message_to_client(client_id, msg);
+                    }
+                }
+                PendingInputEvent::KeyboardModifiers(surface_id, mods) => {
+                    if let Some(client_id) = self.compositor_handler.find_client_for_surface(surface_id) {
+                        let depressed = mods.to_depressed();
+                        let msg = self.build_keyboard_modifiers(client_id, depressed, 0, 0, 0);
+                        let _ = self.write_message_to_client(client_id, msg);
+                    }
+                }
+            }
+        }
     }
 }
 

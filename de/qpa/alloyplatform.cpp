@@ -3,11 +3,15 @@
 #include "alloywindow.h"
 #include "alloybackingstore.h"
 #include "alloycursor.h"
+#include "alloykeyboard.h"
+#include "alloymouse.h"
 
 #include <QtGui/qpa/qwindowsysteminterface.h>
 #include <QtGui/qpa/qplatformfontdatabase.h>
 #include <QtGui/private/qguiapplication_p.h>
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#include <QSocketNotifier>
+#include <QEventLoopLocker>
 #include <QtPlugin>
 
 #include <cstdint>
@@ -34,6 +38,10 @@ QAlloyIntegration::QAlloyIntegration()
     , m_display(nullptr)
     , m_registry(nullptr)
     , m_compositorId(0)
+    , m_keyboard(nullptr)
+    , m_mouse(nullptr)
+    , m_socketNotifier(nullptr)
+    , m_eventLoopLocker(nullptr)
 {
     s_instance = this;
 
@@ -43,6 +51,10 @@ QAlloyIntegration::QAlloyIntegration()
 
 QAlloyIntegration::~QAlloyIntegration()
 {
+    delete m_socketNotifier;
+    delete m_eventLoopLocker;
+    delete m_keyboard;
+    delete m_mouse;
     if (m_display)
         wl_display_disconnect(static_cast<struct wl_display *>(m_display));
     s_instance = nullptr;
@@ -75,6 +87,7 @@ QPlatformWindow *QAlloyIntegration::createPlatformWindow(QWindow *window) const
 {
     unsigned int surfaceId = createSurfaceId();
     QAlloyWindow *w = new QAlloyWindow(window, surfaceId);
+    const_cast<QAlloyIntegration *>(this)->registerSurface(surfaceId, w);
     return w;
 }
 
@@ -102,10 +115,119 @@ QPlatformCursor *QAlloyIntegration::createPlatformCursor() const
     return m_cursor;
 }
 
+// --- C callback shims ---
+
+extern "C" {
+
+static void onKeyCb(int key, int pressed, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->keyboard())
+        integration->keyboard()->handleKey(key, pressed);
+}
+
+static void onKeyboardEnterCb(int surfaceId, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->keyboard())
+        integration->keyboard()->handleEnter(surfaceId);
+}
+
+static void onKeyboardLeaveCb(int surfaceId, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->keyboard())
+        integration->keyboard()->handleLeave(surfaceId);
+}
+
+static void onMouseMoveCb(int x, int y, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->mouse())
+        integration->mouse()->handleMotion(x, y);
+}
+
+static void onMouseEnterCb(int surfaceId, int x, int y, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->mouse())
+        integration->mouse()->handleEnter(surfaceId, x, y);
+}
+
+static void onMouseLeaveCb(int surfaceId, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->mouse())
+        integration->mouse()->handleLeave(surfaceId);
+}
+
+static void onClickCb(int button, int pressed, int x, int y,
+                      struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->mouse())
+        integration->mouse()->handleButton(button, pressed, x, y);
+}
+
+static void onAxisCb(int axis, int value, struct input_state *state)
+{
+    Q_UNUSED(state);
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration && integration->mouse())
+        integration->mouse()->handleAxis(axis, value);
+}
+
+} // extern "C"
+
 int QAlloyIntegration::displayFd() const
 {
     struct wl_display *d = static_cast<struct wl_display *>(m_display);
     return d ? d->fd : -1;
+}
+
+static void processWaylandEvents()
+{
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (!integration)
+        return;
+    struct wl_display *d = static_cast<struct wl_display *>(integration->display());
+    if (d)
+        wl_display_dispatch_pending(d);
+}
+
+void QAlloyIntegration::setupWaylandInput()
+{
+    struct wl_display *d = static_cast<struct wl_display *>(m_display);
+    if (!d || !d->seat_registry_name)
+        return;
+
+    wl_set_key_callback(d, onKeyCb);
+    wl_set_keyboard_enter_callback(d, onKeyboardEnterCb);
+    wl_set_keyboard_leave_callback(d, onKeyboardLeaveCb);
+    wl_set_mouse_move_callback(d, onMouseMoveCb);
+    wl_set_mouse_enter_callback(d, onMouseEnterCb);
+    wl_set_mouse_leave_callback(d, onMouseLeaveCb);
+    wl_set_click_callback(d, onClickCb);
+    wl_set_axis_callback(d, onAxisCb);
+
+    unsigned int seatId = wl_seat_bind(
+        static_cast<struct wl_registry *>(m_registry),
+        d->seat_registry_name, d->seat_registry_version);
+    if (!seatId)
+        return;
+
+    wl_seat_get_keyboard(d, seatId);
+    wl_seat_get_pointer(d, seatId);
+
+    m_keyboard = new QAlloyKeyboard(this);
+    m_mouse = new QAlloyMouse(this);
 }
 
 void QAlloyIntegration::initialize()
@@ -123,6 +245,15 @@ void QAlloyIntegration::initialize()
     wl_display_dispatch_pending(d);
 
     m_compositorId = 3;
+
+    setupWaylandInput();
+
+    m_socketNotifier = new QSocketNotifier(d->fd, QSocketNotifier::Read, this);
+    QObject::connect(m_socketNotifier, &QSocketNotifier::activated, [this](int) {
+        processWaylandEvents();
+    });
+
+    m_eventLoopLocker = new QEventLoopLocker();
 }
 
 unsigned int QAlloyIntegration::createSurfaceId() const
@@ -135,6 +266,22 @@ unsigned int QAlloyIntegration::createSurfaceId() const
                     WL_COMPOSITOR_CREATE_SURFACE,
                     &surfaceId, sizeof(surfaceId));
     return surfaceId;
+}
+
+void QAlloyIntegration::registerSurface(unsigned int surfaceId, QAlloyWindow *window)
+{
+    m_surfaceMap.insert(surfaceId, window);
+}
+
+void QAlloyIntegration::unregisterSurface(unsigned int surfaceId)
+{
+    m_surfaceMap.remove(surfaceId);
+}
+
+QWindow *QAlloyIntegration::windowForSurface(unsigned int surfaceId) const
+{
+    QAlloyWindow *w = m_surfaceMap.value(surfaceId, nullptr);
+    return w ? w->window() : nullptr;
 }
 
 QAlloyIntegration *QAlloyIntegration::instance()

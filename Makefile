@@ -67,8 +67,7 @@ MM_DIR = $(KERNEL_C_DIR)/mm
 # Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
-C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
-            $(KERNEL_C_DIR)/arch/cpu.c \
+C_SOURCES = $(KERNEL_C_DIR)/arch/cpu.c \
             $(KERNEL_C_DIR)/arch/syscall.c \
             $(ARCH_DIR)/gdt.c \
             $(ARCH_DIR)/idt.c \
@@ -80,17 +79,19 @@ C_SOURCES = $(KERNEL_C_DIR)/boot/main.c \
 # Architecture-specific C sources
 ifeq ($(ARCH),aarch64)
 C_SOURCES += $(DRIVERS_DIR)/pl110.c \
-             $(MM_DIR)/paging_aarch64.c
+             $(MM_DIR)/paging_aarch64.c \
+             $(KERNEL_C_DIR)/boot/main_aarch64.c
 else
-C_SOURCES += $(MM_DIR)/paging.c \
-            $(DRIVERS_DIR)/vga.c \
-            $(DRIVERS_DIR)/vesa.c \
-            $(DRIVERS_DIR)/keyboard.c \
-            $(DRIVERS_DIR)/mouse.c \
-            $(DRIVERS_DIR)/ata.c \
-            $(DRIVERS_DIR)/pci.c \
-            $(DRIVERS_DIR)/ahci.c \
-            $(DRIVERS_DIR)/initrd.c
+C_SOURCES += $(KERNEL_C_DIR)/boot/main.c \
+             $(MM_DIR)/paging.c \
+             $(DRIVERS_DIR)/vga.c \
+             $(DRIVERS_DIR)/vesa.c \
+             $(DRIVERS_DIR)/keyboard.c \
+             $(DRIVERS_DIR)/mouse.c \
+             $(DRIVERS_DIR)/ata.c \
+             $(DRIVERS_DIR)/pci.c \
+             $(DRIVERS_DIR)/ahci.c \
+             $(DRIVERS_DIR)/initrd.c
 endif
 
 # Object files

@@ -11,7 +11,7 @@ ifeq ($(ARCH),x86_64)
     LD = ld
     AS = nasm
     ASFLAGS = -f elf64 -dARCH_X86_64
-    CFLAGS_ARCH = -m64 -DARCH_X86_64
+    CFLAGS_ARCH = -m64 -DARCH_X86_64 -mno-sse -mno-sse2 -mno-mmx -mno-avx -mno-80387 -mno-fp-ret-in-387
     LDFLAGS_ARCH = -m elf_x86_64
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
@@ -51,7 +51,7 @@ RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -mno-sse -mno-sse2 -mno-mmx -mno-avx -mno-80387 -mno-fp-ret-in-387 -Ikernel/c
+CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories

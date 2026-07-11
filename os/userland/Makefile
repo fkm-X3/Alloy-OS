@@ -105,8 +105,10 @@ QT6_LIBS = /opt/alloy/qt6/lib/libQt6Gui.a \
            /opt/alloy/qt6/lib/libQt6BundledZLIB.a
 QT6_HOSTLIBS = -lgcc
 
-# Qt6 test binary (only for x86_64)
+# Qt6 test binary (only for x86_64 with Qt6 libraries available)
+QT6_AVAILABLE := $(wildcard /opt/alloy/qt6/lib/libQt6Core.a)
 ifeq ($(ARCH),x86_64)
+ifneq ($(QT6_AVAILABLE),)
 QT6_BUILD_DIR = $(BUILD_DIR)/qt6_test
 QT6_TEST_BIN = $(BUILD_DIR)/test_window
 
@@ -197,7 +199,8 @@ $(QT6_BUILD_DIR):
 qt6-test: $(QT6_TEST_BIN)
 
 all: $(QT6_TEST_BIN)
-endif
+endif # QT6_AVAILABLE
+endif # ARCH == x86_64
 
 clean:
 	rm -rf $(BUILD_DIR)

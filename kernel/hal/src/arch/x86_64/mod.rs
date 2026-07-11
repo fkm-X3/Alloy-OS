@@ -212,7 +212,10 @@ impl super::CpuContext {
     /// Set the initial entry point, stack pointer, and argument for a task.
     pub fn set_entry(&mut self, entry: u64, stack_top: u64, arg: u64) {
         self.rip = entry;
-        self.rsp = stack_top;
+        // context_switch does: mov rsp,[ctx.rsp]; push RIP; ret
+        // which leaves RSP = ctx.rsp at function entry.  x86_64 ABI
+        // requires RSP % 16 == 8 at entry (call pushes 8-byte RA).
+        self.rsp = stack_top - 8;
         self.rbp = stack_top;
         self.rdi = arg;
     }

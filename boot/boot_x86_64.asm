@@ -180,6 +180,7 @@ long_mode_entry:
 
     ; Set up stack
     mov rsp, stack_top
+    and rsp, -16        ; Ensure 16-byte stack alignment for x86_64 ABI
     mov rbp, rsp
 
     mov esi, msg_long_mode

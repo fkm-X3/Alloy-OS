@@ -162,9 +162,12 @@ static uint64_t* get_page_entry(uint64_t virt_addr, bool create) {
         /* Allocate new PDPT for this PML4 entry */
         void* new_pdpt = pmm_alloc_frame();
         if (!new_pdpt) return 0;
-        uint64_t pdpt_phys = (uint64_t)(uintptr_t)new_pdpt;
-        __builtin_memset(new_pdpt, 0, 4096);
-        pml4->entries[pml4_idx] = (pdpt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pdpt_phys = (uint64_t)(uintptr_t)new_pdpt;
+        /* Map through window before zeroing — frame may not be identity-mapped */
+        void* zero_va = win_map(new_pdpt_phys, PT_TEMP_IDX);
+        if (!zero_va) { pmm_free_frame(new_pdpt); return 0; }
+        __builtin_memset(zero_va, 0, 4096);
+        pml4->entries[pml4_idx] = (new_pdpt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
     uint64_t pdpt_entry = pml4->entries[pml4_idx];
@@ -188,9 +191,21 @@ static uint64_t* get_page_entry(uint64_t virt_addr, bool create) {
             if (pdpt_phys != X86_64_PDPT_PHYS) win_unmap(PT_TEMP_IDX);
             return 0;
         }
-        uint64_t pd_phys = (uint64_t)(uintptr_t)new_pd;
-        __builtin_memset(new_pd, 0, 4096);
-        pdpt->entries[pdpt_idx] = (pd_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pd_phys = (uint64_t)(uintptr_t)new_pd;
+        /* Map through an available window before zeroing — frame may not be identity-mapped */
+        void* zero_va;
+        if (pdpt_phys == X86_64_PDPT_PHYS) {
+            zero_va = win_map(new_pd_phys, PT_TEMP_IDX);
+        } else {
+            zero_va = win2_map(new_pd_phys, PT_TEMP_IDX);
+        }
+        if (!zero_va) {
+            pmm_free_frame(new_pd);
+            if (pdpt_phys != X86_64_PDPT_PHYS) win_unmap(PT_TEMP_IDX);
+            return 0;
+        }
+        __builtin_memset(zero_va, 0, 4096);
+        pdpt->entries[pdpt_idx] = (new_pd_phys & 0xFFFFFFFFF000ULL) | 0x03;
         pdpde = pdpt->entries[pdpt_idx];
     }
 
@@ -217,9 +232,17 @@ static uint64_t* get_page_entry(uint64_t virt_addr, bool create) {
             if (pdpt_phys != X86_64_PDPT_PHYS) win_unmap(PT_TEMP_IDX);
             return 0;
         }
-        uint64_t pt_phys = (uint64_t)(uintptr_t)new_pt;
-        __builtin_memset(new_pt, 0, 4096);
-        pd_tbl->entries[pd_idx] = (pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pt_phys = (uint64_t)(uintptr_t)new_pt;
+        /* Map through window before zeroing — frame may not be identity-mapped */
+        void* zero_va = win_map(new_pt_phys, PT_TEMP_IDX);
+        if (!zero_va) {
+            pmm_free_frame(new_pt);
+            if (pd_phys != X86_64_PD_PHYS) win2_unmap(PT_TEMP_IDX);
+            if (pdpt_phys != X86_64_PDPT_PHYS) win_unmap(PT_TEMP_IDX);
+            return 0;
+        }
+        __builtin_memset(zero_va, 0, 4096);
+        pd_tbl->entries[pd_idx] = (new_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
         pde = pd_tbl->entries[pd_idx];
     }
 
@@ -379,8 +402,16 @@ static void clone_page_table(struct page_table* src_pt,
             serial_print("Paging: clone - OOM during page copy\n");
             continue;
         }
-        __builtin_memcpy(new_frame, (void*)(uintptr_t)src_frame, PAGE_SIZE);
-        dst_pt->entries[i] = ((uint64_t)(uintptr_t)new_frame & 0xFFFFFFFFF000ULL)
+        uint64_t new_frame_phys = (uint64_t)(uintptr_t)new_frame;
+        /* Map src and dst frames through unused window slots for copying */
+        void* src_va = win2_map(src_frame, 1);
+        void* dst_va = win_map(new_frame_phys, 1);
+        if (src_va && dst_va) {
+            __builtin_memcpy(dst_va, src_va, PAGE_SIZE);
+        }
+        win_unmap(1);
+        win2_unmap(1);
+        dst_pt->entries[i] = (new_frame_phys & 0xFFFFFFFFF000ULL)
                            | (pte & 0xFFFULL) | 1;
     }
 }
@@ -391,7 +422,10 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
     void* dst_pml4_frame = pmm_alloc_frame();
     if (!dst_pml4_frame) return 0;
     uint64_t dst_pml4_phys = (uint64_t)(uintptr_t)dst_pml4_frame;
-    __builtin_memset(dst_pml4_frame, 0, 4096);
+    void* zero_va = win_map(dst_pml4_phys, PT_TEMP_IDX);
+    if (!zero_va) { pmm_free_frame(dst_pml4_frame); return 0; }
+    __builtin_memset(zero_va, 0, 4096);
+    win_unmap(PT_TEMP_IDX);
 
     /* Map source & dest PML4s simultaneously */
     struct page_directory* src_pml4 = (struct page_directory*)win_map(pd_phys, 0);
@@ -412,9 +446,12 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
         void* dst_pdpt_frame = pmm_alloc_frame();
         if (!dst_pdpt_frame) goto fail;
         uint64_t dst_pdpt_phys = (uint64_t)(uintptr_t)dst_pdpt_frame;
-        __builtin_memset(dst_pdpt_frame, 0, 4096);
+        void* zero_va2 = win2_map(dst_pdpt_phys, 1);
+        if (!zero_va2) goto fail;
+        __builtin_memset(zero_va2, 0, 4096);
+        win2_unmap(1);
         dst_pml4->entries[pml4_i] = (dst_pdpt_phys & 0xFFFFFFFFF000ULL)
-                                  | pdpt_flags | 1;
+                                   | pdpt_flags | 1;
 
         /* Switch windows to src/dst PDPT */
         win2_unmap(0);
@@ -432,9 +469,12 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
             void* dst_pd_frame = pmm_alloc_frame();
             if (!dst_pd_frame) goto fail;
             uint64_t dst_pd_phys = (uint64_t)(uintptr_t)dst_pd_frame;
-            __builtin_memset(dst_pd_frame, 0, 4096);
+            void* zero_va3 = win2_map(dst_pd_phys, 1);
+            if (!zero_va3) goto fail;
+            __builtin_memset(zero_va3, 0, 4096);
+            win2_unmap(1);
             dst_pdpt->entries[pdpt_i] = (dst_pd_phys & 0xFFFFFFFFF000ULL)
-                                      | pd_flags | 1;
+                                       | pd_flags | 1;
 
             /* Switch windows to src/dst PD */
             win2_unmap(0);
@@ -455,7 +495,10 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
                     void* dst_pt_frame = pmm_alloc_frame();
                     if (!dst_pt_frame) goto fail;
                     uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
-                    __builtin_memset(dst_pt_frame, 0, 4096);
+                    void* zero_va_pt = win2_map(dst_pt_phys, 1);
+                    if (!zero_va_pt) goto fail;
+                    __builtin_memset(zero_va_pt, 0, 4096);
+                    win2_unmap(1);
 
                     dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
                                           | (src_flags & ~0x80ULL) | 1;
@@ -468,9 +511,15 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
                         uint64_t phys = huge_base + ((uint64_t)pt_i << 12);
                         void* new_frame = pmm_alloc_frame();
                         if (!new_frame) continue;
-                        __builtin_memcpy(new_frame, (void*)(uintptr_t)phys, PAGE_SIZE);
+                        uint64_t new_frame_phys = (uint64_t)(uintptr_t)new_frame;
+                        void* src_va = win_map(phys, 1);
+                        void* dst_va = win2_map(new_frame_phys, 1);
+                        if (src_va && dst_va)
+                            __builtin_memcpy(dst_va, src_va, PAGE_SIZE);
+                        win_unmap(1);
+                        win2_unmap(1);
                         dst_pt->entries[pt_i] =
-                            ((uint64_t)(uintptr_t)new_frame & 0xFFFFFFFFF000ULL)
+                            (new_frame_phys & 0xFFFFFFFFF000ULL)
                             | (src_flags & (0xFFFULL & ~0x80ULL)) | 1;
                     }
 
@@ -486,7 +535,10 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys) {
                     void* dst_pt_frame = pmm_alloc_frame();
                     if (!dst_pt_frame) goto fail;
                     uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
-                    __builtin_memset(dst_pt_frame, 0, 4096);
+                    void* zero_va_pt2 = win2_map(dst_pt_phys, 1);
+                    if (!zero_va_pt2) goto fail;
+                    __builtin_memset(zero_va_pt2, 0, 4096);
+                    win2_unmap(1);
 
                     dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
                                           | pt_flags | 1;
@@ -572,7 +624,10 @@ uintptr_t paging_fork_directory(uintptr_t pd_phys) {
     void* dst_pml4_frame = pmm_alloc_frame();
     if (!dst_pml4_frame) return 0;
     uint64_t dst_pml4_phys = (uint64_t)(uintptr_t)dst_pml4_frame;
-    __builtin_memset(dst_pml4_frame, 0, 4096);
+    void* zero_va = win_map(dst_pml4_phys, PT_TEMP_IDX);
+    if (!zero_va) { pmm_free_frame(dst_pml4_frame); return 0; }
+    __builtin_memset(zero_va, 0, 4096);
+    win_unmap(PT_TEMP_IDX);
 
     struct page_directory* src_pml4 = (struct page_directory*)win_map(pd_phys, 0);
     struct page_directory* dst_pml4 = (struct page_directory*)win2_map(dst_pml4_phys, 0);
@@ -590,9 +645,12 @@ uintptr_t paging_fork_directory(uintptr_t pd_phys) {
         void* dst_pdpt_frame = pmm_alloc_frame();
         if (!dst_pdpt_frame) goto fork_fail;
         uint64_t dst_pdpt_phys = (uint64_t)(uintptr_t)dst_pdpt_frame;
-        __builtin_memset(dst_pdpt_frame, 0, 4096);
+        void* zero_va2 = win2_map(dst_pdpt_phys, 1);
+        if (!zero_va2) goto fork_fail;
+        __builtin_memset(zero_va2, 0, 4096);
+        win2_unmap(1);
         dst_pml4->entries[pml4_i] = (dst_pdpt_phys & 0xFFFFFFFFF000ULL)
-                                  | pdpt_flags | 1;
+                                   | pdpt_flags | 1;
 
         win2_unmap(0);
         win_unmap(0);
@@ -609,9 +667,12 @@ uintptr_t paging_fork_directory(uintptr_t pd_phys) {
             void* dst_pd_frame = pmm_alloc_frame();
             if (!dst_pd_frame) goto fork_fail;
             uint64_t dst_pd_phys = (uint64_t)(uintptr_t)dst_pd_frame;
-            __builtin_memset(dst_pd_frame, 0, 4096);
+            void* zero_va3 = win2_map(dst_pd_phys, 1);
+            if (!zero_va3) goto fork_fail;
+            __builtin_memset(zero_va3, 0, 4096);
+            win2_unmap(1);
             dst_pdpt->entries[pdpt_i] = (dst_pd_phys & 0xFFFFFFFFF000ULL)
-                                      | pd_flags | 1;
+                                       | pd_flags | 1;
 
             win2_unmap(0);
             win_unmap(0);
@@ -632,7 +693,10 @@ uintptr_t paging_fork_directory(uintptr_t pd_phys) {
                     void* dst_pt_frame = pmm_alloc_frame();
                     if (!dst_pt_frame) goto fork_fail;
                     uint64_t dst_pt_phys = (uint64_t)(uintptr_t)dst_pt_frame;
-                    __builtin_memset(dst_pt_frame, 0, 4096);
+                    void* zero_va_pt = win2_map(dst_pt_phys, 1);
+                    if (!zero_va_pt) goto fork_fail;
+                    __builtin_memset(zero_va_pt, 0, 4096);
+                    win2_unmap(1);
 
                     dst_pd->entries[pd_i] = (dst_pt_phys & 0xFFFFFFFFF000ULL)
                                           | pt_flags | 1;
@@ -690,8 +754,13 @@ uint8_t paging_handle_cow_fault(uintptr_t fault_addr) {
         serial_print("Paging: COW - out of memory!\n");
         return 0;
     }
-
-    __builtin_memcpy(new_frame, (void*)(uintptr_t)old_frame, PAGE_SIZE);
+    uint64_t new_frame_phys = (uint64_t)(uintptr_t)new_frame;
+    void* cow_src = win_map(old_frame, 1);
+    void* cow_dst = win2_map(new_frame_phys, 1);
+    if (cow_src && cow_dst)
+        __builtin_memcpy(cow_dst, cow_src, PAGE_SIZE);
+    win_unmap(1);
+    win2_unmap(1);
 
     pmm_refcount_dec((void*)(uintptr_t)old_frame);
 
@@ -722,12 +791,13 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
         /* For the identity-mapped PD entries, need a proper 4KB PT window.
          * Since PD entries 0-7 are 2MB huge pages, we can't do 4KB mapping there.
          * Use the dedicated window PT instead. */
-        win_unmap(PT_TEMP_IDX);
-        /* Share kernel page tables by cloning entries into the target PML4 */
+        /* Share kernel page tables by cloning entries into the target PML4.
+         * pml4 is still mapped at the window VA — write before unmapping. */
         pml4->entries[0] = X86_64_PML4_VIRT->entries[0];
-        /* Map through window page table at PD_WIN_IDX */
-        struct page_table* win_pt = (struct page_table*)(uintptr_t)PT_WIN_BASE;
-        win_pt->entries[pt_idx] = ((uint64_t)phys_addr & 0xFFFFFFFFF000ULL) | (flags & 0xFFFULL) | 1;
+        /* Unmap pd_phys from the window slot, then install the user mapping
+         * through g_win_pt (identity-mapped) so the self-map is not needed. */
+        win_unmap(PT_TEMP_IDX);
+        g_win_pt->entries[pt_idx] = ((uint64_t)phys_addr & 0xFFFFFFFFF000ULL) | (flags & 0xFFFULL) | 1;
         invlpg(virt_addr);
         return true;
     }
@@ -737,8 +807,17 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     if (!(pml4->entries[pml4_idx] & 1)) {
         void* new_pdpt = pmm_alloc_frame();
         if (!new_pdpt) { win_unmap(PT_TEMP_IDX); return false; }
-        __builtin_memset(new_pdpt, 0, 4096);
-        pml4->entries[pml4_idx] = ((uint64_t)(uintptr_t)new_pdpt & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pdpt_phys = (uint64_t)(uintptr_t)new_pdpt;
+        /* Map through window before zeroing — frame may not be identity-mapped */
+        win_unmap(PT_TEMP_IDX);
+        void* zero_va = win_map(new_pdpt_phys, PT_TEMP_IDX);
+        if (!zero_va) { pmm_free_frame(new_pdpt); return false; }
+        __builtin_memset(zero_va, 0, 4096);
+        /* Remap source PML4 and install entry */
+        win_unmap(PT_TEMP_IDX);
+        pml4 = (struct page_directory*)win_map((uint64_t)pd_phys, PT_TEMP_IDX);
+        if (!pml4) { pmm_free_frame(new_pdpt); return false; }
+        pml4->entries[pml4_idx] = (new_pdpt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
     /* --- PDPT entry --- */
@@ -751,8 +830,17 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     if (!(pdpt->entries[pdpt_idx] & 1)) {
         void* new_pd = pmm_alloc_frame();
         if (!new_pd) { win_unmap(PT_TEMP_IDX); return false; }
-        __builtin_memset(new_pd, 0, 4096);
-        pdpt->entries[pdpt_idx] = ((uint64_t)(uintptr_t)new_pd & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pd_phys = (uint64_t)(uintptr_t)new_pd;
+        /* Map through window before zeroing — frame may not be identity-mapped */
+        win_unmap(PT_TEMP_IDX);
+        void* zero_va = win_map(new_pd_phys, PT_TEMP_IDX);
+        if (!zero_va) { pmm_free_frame(new_pd); return false; }
+        __builtin_memset(zero_va, 0, 4096);
+        /* Remap PDPT and install entry */
+        win_unmap(PT_TEMP_IDX);
+        pdpt = (struct page_table*)win_map(pdpt_phys, PT_TEMP_IDX);
+        if (!pdpt) { pmm_free_frame(new_pd); return false; }
+        pdpt->entries[pdpt_idx] = (new_pd_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
     /* --- PD entry --- */
@@ -765,8 +853,17 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     if (!(pd_tbl->entries[pd_idx] & 1)) {
         void* new_pt = pmm_alloc_frame();
         if (!new_pt) { win_unmap(PT_TEMP_IDX); return false; }
-        __builtin_memset(new_pt, 0, 4096);
-        pd_tbl->entries[pd_idx] = ((uint64_t)(uintptr_t)new_pt & 0xFFFFFFFFF000ULL) | 0x03;
+        uint64_t new_pt_phys = (uint64_t)(uintptr_t)new_pt;
+        /* Map through window before zeroing — frame may not be identity-mapped */
+        win_unmap(PT_TEMP_IDX);
+        void* zero_va = win_map(new_pt_phys, PT_TEMP_IDX);
+        if (!zero_va) { pmm_free_frame(new_pt); return false; }
+        __builtin_memset(zero_va, 0, 4096);
+        /* Remap PD and install entry */
+        win_unmap(PT_TEMP_IDX);
+        pd_tbl = (struct page_table*)win_map(pd_phys_tbl, PT_TEMP_IDX);
+        if (!pd_tbl) { pmm_free_frame(new_pt); return false; }
+        pd_tbl->entries[pd_idx] = (new_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
     /* --- PT entry --- */
@@ -783,16 +880,15 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
 }
 
 void* paging_temp_map_frame(uintptr_t phys_addr) {
-    struct page_table* win_pt = (struct page_table*)(uintptr_t)(PT_WIN_BASE);
-    win_pt->entries[PT_TEMP_IDX] = ((uint64_t)phys_addr & 0xFFFFFFFFF000ULL) | 0x03;
-    invlpg(PT_TEMP_VA);
-    return (void*)(uintptr_t)PT_TEMP_VA;
+    /* Use a dedicated window slot (511) via win_map so we don't
+     * conflict with the self-map at index 0 or with other win_map
+     * callers that use index 0.  win_map accesses g_win_pt through
+     * identity-mapped memory, so the self-map is not needed.       */
+    return win_map(phys_addr, 511);
 }
 
 void paging_temp_unmap_frame(void) {
-    struct page_table* win_pt = (struct page_table*)(uintptr_t)(PT_WIN_BASE);
-    win_pt->entries[PT_TEMP_IDX] = 0;
-    invlpg(PT_TEMP_VA);
+    win_unmap(511);
 }
 
 // ============================================================================

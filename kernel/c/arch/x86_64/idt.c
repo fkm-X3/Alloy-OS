@@ -243,6 +243,10 @@ void exception_handler(struct interrupt_frame* frame) {
     serial_print("Error Code: ");
     serial_print_hex((uint32_t)err_code);
     serial_print("\n");
+    serial_print("RIP: 0x"); serial_print_hex64(frame->rip); serial_print("\n");
+    serial_print("CS:  0x"); serial_print_hex64(frame->cs);  serial_print("\n");
+    serial_print("RSP: 0x"); serial_print_hex64(frame->rsp); serial_print("\n");
+    serial_print("SS:  0x"); serial_print_hex64(frame->ss);  serial_print("\n");
 
     serial_print("System halted.\n");
     while (1) {

@@ -83,7 +83,10 @@ impl Task {
         let stack_top = stack.as_mut_ptr() as usize + 16384;
         #[cfg(feature = "x86_64")]
         {
-            context.rsp = stack_top as u64;
+            // context_switch does: mov rsp,[ctx.rsp]; push RIP; ret
+            // which leaves RSP = ctx.rsp at function entry.  x86_64 ABI
+            // requires RSP % 16 == 8 at entry (call pushes 8-byte RA).
+            context.rsp = (stack_top - 8) as u64;
             context.rbp = stack_top as u64;
             context.rip = entry as usize as u64;
         }

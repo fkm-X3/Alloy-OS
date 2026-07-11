@@ -104,7 +104,7 @@ static const int KeyTbl[256] = {
     Qt::Key_Slash,        // 98 KEY_KPSLASH (numpad)
     Qt::Key_SysReq,       // 99 KEY_SYSRQ
     Qt::Key_Alt,          // 100 KEY_RIGHTALT
-    Qt::Key_LineFeed,     // 101 KEY_LINEFEED
+    0,                    // 101 KEY_LINEFEED (removed in Qt6)
     Qt::Key_Home,         // 102 KEY_HOME
     Qt::Key_Up,           // 103 KEY_UP
     Qt::Key_PageUp,       // 104 KEY_PAGEUP
@@ -240,9 +240,9 @@ void QAlloyKeyboard::updateModifiers(int evdevKey, bool pressed)
     default: return;
     }
     if (pressed)
-        m_modifiers |= bit;
+        m_modifiers |= static_cast<Qt::KeyboardModifier>(bit);
     else
-        m_modifiers &= ~bit;
+        m_modifiers &= ~static_cast<Qt::KeyboardModifier>(bit);
 }
 
 QT_END_NAMESPACE

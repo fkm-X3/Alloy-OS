@@ -46,18 +46,21 @@ static inline void invlpg(uint64_t virt) {
     asm volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
-/* Map a physical 4KB frame at the PD_WIN window (returns virtual address). */
+/* Map a physical 4KB frame at the PD_WIN window (returns virtual address).
+ *
+ * Access the window page-table DIRECTLY via g_win_pt (which is identity-mapped
+ * within the first 16 MB) so that writing a PTE never corrupts the self-map at
+ * g_win_pt[0]. The returned VA is PT_WIN_BASE + pt_idx * 4096.
+ */
 static void* win_map(uint64_t phys, int pt_idx) {
     struct page_table* pd = X86_64_PD_VIRT;
     uint64_t old = pd->entries[PD_WIN_IDX];
     if ((old & 1) == 0 || (old & 0x80) != 0) {
         /* PD_WIN_IDX entry not yet a 4KB PT pointer — set it up once. */
         if (!g_win_pt) {
-            /* Allocate on first call */
             void* pt_frame = pmm_alloc_frame();
             if (!pt_frame) return 0;
             g_win_pt = (struct page_table*)((uint64_t)(uintptr_t)pt_frame);
-            /* Zero it */
             __builtin_memset(g_win_pt, 0, 4096);
         }
         uint64_t pt_phys = (uint64_t)(uintptr_t)g_win_pt;
@@ -65,17 +68,17 @@ static void* win_map(uint64_t phys, int pt_idx) {
         invlpg(PT_WIN_BASE);
     }
     uint64_t va = PT_WIN_BASE + (uint64_t)pt_idx * 4096;
-    /* Write the PTE in the window PT */
-    struct page_table* win_pt = (struct page_table*)(uintptr_t)(PT_WIN_BASE);
-    win_pt->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
+    /* Write PTE directly through identity-mapped g_win_pt.
+     * g_win_pt lives in the first 16 MB (identity-mapped), so virtual address
+     * equals physical address — safe to dereference directly. */
+    g_win_pt->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(va);
     return (void*)(uintptr_t)va;
 }
 
 static void win_unmap(int pt_idx) {
     uint64_t va = PT_WIN_BASE + (uint64_t)pt_idx * 4096;
-    struct page_table* win_pt = (struct page_table*)(uintptr_t)(PT_WIN_BASE);
-    win_pt->entries[pt_idx] = 0;
+    g_win_pt->entries[pt_idx] = 0;
     invlpg(va);
 }
 
@@ -87,7 +90,7 @@ static void* win2_map(uint64_t phys, int pt_idx) {
     pd->entries[PD_WIN2_IDX] = (win2_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(PT_WIN2_BASE);
     uint64_t va = PT_WIN2_BASE + (uint64_t)pt_idx * 4096;
-    struct page_table* win2_pt = (struct page_table*)(uintptr_t)(PT_WIN2_BASE);
+    struct page_table* win2_pt = (struct page_table*)((uint64_t)(uintptr_t)g_win_pt + 0x1000);
     win2_pt->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(va);
     return (void*)(uintptr_t)va;
@@ -95,7 +98,7 @@ static void* win2_map(uint64_t phys, int pt_idx) {
 
 static void win2_unmap(int pt_idx) {
     uint64_t va = PT_WIN2_BASE + (uint64_t)pt_idx * 4096;
-    struct page_table* win2_pt = (struct page_table*)(uintptr_t)(PT_WIN2_BASE);
+    struct page_table* win2_pt = (struct page_table*)((uint64_t)(uintptr_t)g_win_pt + 0x1000);
     win2_pt->entries[pt_idx] = 0;
     invlpg(va);
 }
@@ -126,6 +129,10 @@ void paging_init() {
         __builtin_memset(g_win_pt, 0, 4096);
         /* Also zero the page after win_pt for win2 */
         __builtin_memset((void*)((uintptr_t)g_win_pt + 0x1000), 0, 4096);
+
+        /* Self-map: PT[0] → g_win_pt so win_map can access 0x1000000 */
+        ((uint64_t*)(uintptr_t)g_win_pt)[0] =
+            ((uint64_t)(uintptr_t)g_win_pt & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
     serial_print("  Identity map extended to 16 MB\n");

@@ -51,7 +51,7 @@ RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
+CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -mno-sse -mno-sse2 -mno-mmx -mno-avx -mno-80387 -mno-fp-ret-in-387 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories
@@ -118,6 +118,7 @@ userland:
 	cp -f os/userland/build/$(ARCH)/test_wl_client test_wl_client 2>/dev/null || true
 ifneq ($(ARCH),aarch64)
 	cp -f os/userland/build/$(ARCH)/hello_cpp hello_cpp 2>/dev/null || true
+	cp -f os/userland/build/$(ARCH)/test_window test_window 2>/dev/null || true
 endif
 
 # Build the Qt6/QML DE for host development (requires Qt6 SDK)

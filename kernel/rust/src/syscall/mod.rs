@@ -351,11 +351,11 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
 
             let mut aux = [0u32; 12];
             let mut ai = 0;
-            aux[ai] = AT_PHDR; ai += 1; aux[ai] = phdr_vaddr; ai += 1;
+            aux[ai] = AT_PHDR; ai += 1; aux[ai] = phdr_vaddr as u32; ai += 1;
             aux[ai] = AT_PHENT; ai += 1; aux[ai] = phentsize as u32; ai += 1;
             aux[ai] = AT_PHNUM; ai += 1; aux[ai] = phnum as u32; ai += 1;
             aux[ai] = AT_PAGESZ; ai += 1; aux[ai] = 4096u32; ai += 1;
-            aux[ai] = AT_ENTRY; ai += 1; aux[ai] = entry_val; ai += 1;
+            aux[ai] = AT_ENTRY; ai += 1; aux[ai] = entry_val as u32; ai += 1;
             aux[ai] = AT_NULL; ai += 1; aux[ai] = 0u32; ai += 1;
 
             let auxv_bytes = unsafe { core::slice::from_raw_parts(aux.as_ptr() as *const u8, ai * 4) };

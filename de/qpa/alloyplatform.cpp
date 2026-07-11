@@ -226,13 +226,13 @@ void QAlloyIntegration::setupWaylandInput()
     wl_seat_get_keyboard(d, seatId);
     wl_seat_get_pointer(d, seatId);
 
-    m_keyboard = new QAlloyKeyboard(this);
-    m_mouse = new QAlloyMouse(this);
+    m_keyboard = new QAlloyKeyboard(nullptr);
+    m_mouse = new QAlloyMouse(nullptr);
 }
 
 void QAlloyIntegration::initialize()
 {
-    struct wl_display *d = wl_display_connect("/tmp/wayland.sock");
+    struct wl_display *d = wl_display_connect("/tmp/wayland-0");
     m_display = d;
     if (!d)
         return;
@@ -248,7 +248,7 @@ void QAlloyIntegration::initialize()
 
     setupWaylandInput();
 
-    m_socketNotifier = new QSocketNotifier(d->fd, QSocketNotifier::Read, this);
+    m_socketNotifier = new QSocketNotifier(d->fd, QSocketNotifier::Read, nullptr);
     QObject::connect(m_socketNotifier, &QSocketNotifier::activated, [this](int) {
         processWaylandEvents();
     });

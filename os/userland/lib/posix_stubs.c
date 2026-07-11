@@ -15,6 +15,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 // Type definitions used by the stubs (not provided by freestanding headers)
 typedef long time_t;
@@ -86,6 +87,10 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 }
 int pthread_cond_signal(pthread_cond_t *cond) { (void)cond; return 0; }
 int pthread_cond_broadcast(pthread_cond_t *cond) { (void)cond; return 0; }
+int pthread_cond_clockwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
+                           clockid_t clock_id, const struct timespec *abstime) {
+    (void)cond; (void)mutex; (void)clock_id; (void)abstime; return 0;
+}
 int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                    void *(*start)(void*), void *arg) {
     (void)thread; (void)attr; (void)start; (void)arg; return -1;
@@ -245,6 +250,16 @@ double modf(double x, double *iptr) { *iptr=(long long)x; return x-*iptr; }
 double frexp(double x, int *exp) { *exp=0; return x; }
 double ldexp(double x, int exp) { (void)exp; return x; }
 
+// ── Additional math stubs ─────────────────────────────────────────────────────
+
+float powf(float x, float y) { (void)y; return x; }
+float sinf(float x) { (void)x; return 0; }
+float acosf(float x) { (void)x; return 0; }
+float lroundf(float x) { return (float)(long long)(x + 0.5f); }
+double round(double x) { return (double)(long long)(x + 0.5); }
+void sincos(double x, double *sinx, double *cosx) { (void)x; *sinx = 0; *cosx = 1; }
+void tzset(void) {}
+
 // ── Integer math ─────────────────────────────────────────────────────────────
 
 int abs(int x) { return x < 0 ? -x : x; }
@@ -322,6 +337,24 @@ long sysconf(int name) { (void)name; return -1; }
 
 // ── Socket stubs ─────────────────────────────────────────────────────────────
 
+#define POLLIN  1
+#define POLLOUT 2
+#define POLLERR 8
+#define POLLHUP 16
+#define POLLNVAL 32
+
+int poll(struct pollfd *fds, nfds_t nfds, int timeout) {
+    (void)timeout;
+    int ready = 0;
+    for (nfds_t i = 0; i < nfds; i++) {
+        fds[i].revents = 0;
+        if (fds[i].fd < 0) { fds[i].revents = POLLNVAL; ready++; continue; }
+        fds[i].revents = fds[i].events & (POLLIN | POLLOUT);
+        if (fds[i].revents) ready++;
+    }
+    return ready;
+}
+
 int socket(int domain, int type, int protocol) {
     (void)domain; (void)type; (void)protocol; return -1;
 }
@@ -372,8 +405,21 @@ long pathconf(const char *path, int name) { (void)path; (void)name; return -1; }
 int open(const char *path, int flags, ...) { (void)path; (void)flags; return -1; }
 int close(int fd) { return (int)SYSCALL_FN(SYS_CLOSE, fd, 0, 0, 0, 0); }
 ssize_t read(int fd, void *buf, size_t count) {
-    (void)fd; (void)buf; (void)count; return -1;
+    if (!buf || count == 0) return -1;
+    // Use SYS_SOCKET_READ for socket fds (Wayland connection)
+    // For regular file reads, this may fail; callers should handle -1.
+    return SYSCALL_FN(SYS_SOCKET_READ, fd, (long)(size_t)buf, (long)count, 0, 0);
 }
+ssize_t write(int fd, const void *buf, size_t count) {
+    if (!buf) return -1;
+    // Use SYS_SOCKET_WRITE for socket fds, SYS_WRITE for console fds
+    // For simplicity, try socket write first; for fd=1 (stdout) this may
+    // fail, so we special-case it.
+    if (fd == 1 || fd == 2)
+        return SYSCALL_FN(SYS_WRITE, fd, (long)(size_t)buf, (long)count, 0, 0);
+    return SYSCALL_FN(SYS_SOCKET_WRITE, fd, (long)(size_t)buf, (long)count, 0, 0);
+}
+
 off_t lseek(int fd, off_t offset, int whence) {
     (void)fd; (void)offset; (void)whence; return -1;
 }
@@ -395,6 +441,47 @@ int rmdir(const char *path) { (void)path; return -1; }
 DIR *opendir(const char *path) { (void)path; return 0; }
 struct dirent *readdir(DIR *dirp) { (void)dirp; return 0; }
 int closedir(DIR *dirp) { (void)dirp; return 0; }
+
+// ── Memory functions ──────────────────────────────────────────────────────────
+
+void *memset(void *s, int c, size_t n) {
+    unsigned char *p = (unsigned char *)s;
+    for (size_t i = 0; i < n; i++) p[i] = (unsigned char)c;
+    return s;
+}
+
+void *memcpy(void *dest, const void *src, size_t n) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    for (size_t i = 0; i < n; i++) d[i] = s[i];
+    return dest;
+}
+
+void *memmove(void *dest, const void *src, size_t n) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    if (d < s) { for (size_t i = 0; i < n; i++) d[i] = s[i]; }
+    else { size_t i = n; while (i > 0) { i--; d[i] = s[i]; } }
+    return dest;
+}
+
+int memcmp(const void *s1, const void *s2, size_t n) {
+    const unsigned char *a = (const unsigned char *)s1;
+    const unsigned char *b = (const unsigned char *)s2;
+    for (size_t i = 0; i < n; i++) { if (a[i] != b[i]) return (int)a[i] - (int)b[i]; }
+    return 0;
+}
+
+unsigned long __stack_chk_guard = 0;
+void __stack_chk_fail(void) { __builtin_trap(); }
+void *__memcpy_chk(void *dest, const void *src, size_t n, size_t destlen) {
+    if (n > destlen) __builtin_trap();
+    return memcpy(dest, src, n);
+}
+void *__memset_chk(void *s, int c, size_t n, size_t destlen) {
+    if (n > destlen) __builtin_trap();
+    return memset(s, c, n);
+}
 
 // ── String functions ─────────────────────────────────────────────────────────
 
@@ -504,4 +591,184 @@ int snprintf(char *str, size_t size, const char *format, ...) {
     (void)str; (void)size; (void)format; return 0;
 }
 int printf(const char *format, ...) { (void)format; return 0; }
-int fprintf(void *stream, const char *format, ...) { (void)stream; (void)format; return 0; }
+
+// ── FILE I/O stubs ──────────────────────────────────────────────────────────
+struct _IO_FILE { int fd; };
+struct _IO_FILE *stdin = 0;
+struct _IO_FILE *stdout = 0;
+struct _IO_FILE *stderr = 0;
+
+int fprintf(struct _IO_FILE *stream, const char *format, ...) { (void)stream; (void)format; return 0; }
+struct _IO_FILE *fopen(const char *path, const char *mode) { (void)path; (void)mode; return 0; }
+int fclose(struct _IO_FILE *stream) { (void)stream; return 0; }
+size_t fread(void *ptr, size_t size, size_t nmemb, struct _IO_FILE *stream) {
+    (void)ptr; (void)size; (void)nmemb; (void)stream; return 0;
+}
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, struct _IO_FILE *stream) {
+    (void)ptr; (void)size; (void)nmemb; (void)stream; return 0;
+}
+int fseek(struct _IO_FILE *stream, long offset, int whence) {
+    (void)stream; (void)offset; (void)whence; return 0;
+}
+long ftell(struct _IO_FILE *stream) { (void)stream; return 0; }
+int fflush(struct _IO_FILE *stream) { (void)stream; return 0; }
+int feof(struct _IO_FILE *stream) { (void)stream; return 1; }
+int fputs(const char *s, struct _IO_FILE *stream) { (void)s; (void)stream; return 0; }
+int fputc(int c, struct _IO_FILE *stream) { (void)c; (void)stream; return 0; }
+char *fgets(char *s, int size, struct _IO_FILE *stream) {
+    (void)s; (void)size; (void)stream; return 0;
+}
+int vfprintf(struct _IO_FILE *stream, const char *format, va_list ap) {
+    (void)stream; (void)format; (void)ap; return 0;
+}
+int vprintf(const char *format, va_list ap) { (void)format; (void)ap; return 0; }
+int puts(const char *s) { (void)s; return 0; }
+
+// ── stdarg helper ───────────────────────────────────────────────────────────
+int vasprintf(char **strp, const char *fmt, va_list ap) {
+    (void)strp; (void)fmt; (void)ap; return 0;
+}
+int asprintf(char **strp, const char *fmt, ...) {
+    (void)strp; (void)fmt; return 0;
+}
+
+// ── Open/read/write (64-bit variants) ─────────────────────────────────────────
+int open64(const char *path, int flags, ...) { (void)path; (void)flags; return -1; }
+off_t lseek64(int fd, off_t offset, int whence) { (void)fd; (void)offset; (void)whence; return -1; }
+int stat64(const char *path, struct stat *buf) { (void)path; (void)buf; return -1; }
+int fstat64(int fd, struct stat *buf) { (void)fd; (void)buf; return -1; }
+
+// ── Memory mapping ─────────────────────────────────────────────────────────
+void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+    (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset; return (void*)-1;
+}
+void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
+    (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset; return (void*)-1;
+}
+int munmap(void *addr, size_t length) { (void)addr; (void)length; return -1; }
+
+// ── System info ────────────────────────────────────────────────────────────
+struct utsname { char sysname[65]; char nodename[65]; char release[65]; char version[65]; char machine[65]; };
+int uname(struct utsname *buf) {
+    if (buf) {
+        __builtin_strcpy(buf->sysname, "AlloyOS");
+        __builtin_strcpy(buf->nodename, "alloy");
+        __builtin_strcpy(buf->release, "1.0");
+        __builtin_strcpy(buf->version, "1.0");
+        __builtin_strcpy(buf->machine, "x86_64");
+    }
+    return 0;
+}
+
+// ── TLS stubs ──────────────────────────────────────────────────────────────
+void *__tls_get_addr(void *arr) { (void)arr; return 0; }
+
+// ── Additional glibc internal stubs ────────────────────────────────────────
+int __libc_single_threaded = 1;
+void __ctype_b_loc(void) { }
+void __ctype_tolower_loc(void) { }
+void __ctype_toupper_loc(void) { }
+
+// ── Checked string functions ───────────────────────────────────────────────
+char *__strcpy_chk(char *dest, const char *src, size_t destlen) {
+    (void)destlen; return __builtin_strcpy(dest, src);
+}
+char *__strncpy_chk(char *dest, const char *src, size_t n, size_t destlen) {
+    (void)destlen; return __builtin_strncpy(dest, src, n);
+}
+int __sprintf_chk(char *str, int flag, size_t destlen, const char *format, ...) {
+    (void)str; (void)flag; (void)destlen; (void)format; return 0;
+}
+int __vsnprintf_chk(char *str, size_t size, int flag, size_t destlen, const char *format, va_list ap) {
+    (void)str; (void)size; (void)flag; (void)destlen; (void)format; (void)ap; return 0;
+}
+int __snprintf_chk(char *str, size_t size, int flag, size_t destlen, const char *format, ...) {
+    (void)str; (void)size; (void)flag; (void)destlen; (void)format; return 0;
+}
+int __fprintf_chk(struct _IO_FILE *stream, int flag, const char *format, ...) {
+    (void)stream; (void)flag; (void)format; return 0;
+}
+int __printf_chk(int flag, const char *format, ...) {
+    (void)flag; (void)format; return 0;
+}
+
+// ── strcoll ─────────────────────────────────────────────────────────────────
+int strcoll(const char *s1, const char *s2) { return __builtin_strcmp(s1, s2); }
+char *strtok_r(char *str, const char *delim, char **saveptr) {
+    return strtok(str, delim);
+}
+
+// ── Additional string/mem functions ─────────────────────────────────────────
+void *__memmove_chk(void *dest, const void *src, size_t n, size_t destlen) {
+    if (n > destlen) __builtin_trap();
+    return memmove(dest, src, n);
+}
+
+// ── scanf stubs ─────────────────────────────────────────────────────────────
+int sscanf(const char *str, const char *format, ...) { (void)str; (void)format; return 0; }
+int vsscanf(const char *str, const char *format, va_list ap) { (void)str; (void)format; (void)ap; return 0; }
+int fscanf(struct _IO_FILE *stream, const char *format, ...) { (void)stream; (void)format; return 0; }
+
+// ── syscall wrapper ─────────────────────────────────────────────────────────
+// Qt6 objects reference the libc syscall() function: long syscall(long, ...)
+// This symbol is also provided in qt6_syscall_stub.c for the Qt6 build.
+// Here we skip it because alloy_syscall.h already has a static inline "syscall".
+// The Qt6 build uses a separate syscall stub file compiled without alloy_syscall.h.
+
+// ── Compiler builtins ──────────────────────────────────────────────────────
+unsigned int __popcountdi2(unsigned long long val) {
+    unsigned int count = 0;
+    while (val) { count += (unsigned int)(val & 1); val >>= 1; }
+    return count;
+}
+
+// ── Harfbuzz stubs (from compiled bundled lib) ──────────────────────────────
+size_t __fread_chk(void* ptr, size_t size, size_t nmemb, size_t bufsize, struct _IO_FILE* stream) {
+    (void)ptr; (void)size; (void)nmemb; (void)bufsize; (void)stream; return 0;
+}
+int ferror(struct _IO_FILE* stream) { (void)stream; return 0; }
+long __isoc23_strtol(const char* nptr, char** endptr, int base) {
+    return strtol(nptr, endptr, base);
+}
+unsigned long __isoc23_strtoul(const char* nptr, char** endptr, int base) {
+    return strtoul(nptr, endptr, base);
+}
+int __isoc23_sscanf(const char *str, const char *format, ...) { (void)str; (void)format; return 0; }
+
+// ── setjmp/longjmp stubs (for libpng) ───────────────────────────────────────
+// libpng uses setjmp/longjmp for error handling. We provide atomic-based
+// implementations since we don't have the full setjmp machinery.
+
+typedef struct { unsigned long __jmpbuf[8]; int __mask_was_saved; } __jmp_buf_struct;
+typedef __jmp_buf_struct jmp_buf[1];
+typedef __jmp_buf_struct sigjmp_buf[1];
+
+int _setjmp(jmp_buf env) {
+    (void)env;
+    return 0;
+}
+
+void __longjmp_chk(jmp_buf env, int val) {
+    (void)env; (void)val;
+    __builtin_trap();
+}
+
+int setjmp(jmp_buf env) { return _setjmp(env); }
+void longjmp(jmp_buf env, int val) { __longjmp_chk(env, val); }
+
+// ── Additional C library stubs ──────────────────────────────────────────────
+void* memchr(const void* s, int c, unsigned long n) {
+    for (unsigned long i = 0; i < n; i++) {
+        if (((const unsigned char*)s)[i] == (unsigned char)c)
+            return (void*)((const unsigned char*)s + i);
+    }
+    return 0;
+}
+
+double hypot(double x, double y) {
+    (void)x; (void)y;
+    return 0.0;
+}
+
+// tzname — POSIX timezone name array
+char* tzname[2] = { "UTC", "UTC" };

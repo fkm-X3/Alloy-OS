@@ -17,11 +17,12 @@ static inline uint8_t inb(uint16_t port) {
 }
 
 static bool keyboard_wait_input_ready() {
-    for (uint32_t i = 0; i < 100000; i++) {
+    for (int i = 0; i < 20000000; i++) {
         if ((inb(KEYBOARD_STATUS_PORT) & KEYBOARD_STATUS_INPUT_FULL) == 0) {
             return true;
         }
     }
+    serial_print("[KBD] Timed out waiting for input ready\n");
     return false;
 }
 
@@ -104,12 +105,7 @@ void keyboard_init() {
     capslock_active = false;
     extended_scancode = false;
 
-    keyboard_flush_output_buffer();
-
-    if (keyboard_wait_input_ready()) {
-        outb(KEYBOARD_DATA_PORT, 0xF4);
-        keyboard_flush_output_buffer();
-    }
+    serial_print("[KBD] Skip init for testing\n");
 }
 
 void keyboard_handler() {

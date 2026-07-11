@@ -68,5 +68,136 @@ $(BUILD_DIR)/%: $(TEST_DIR)/%.cpp $(LIB_OBJS)
 	$(CXX) $(CXXFLAGS) -c $< -o $(BUILD_DIR)/$*.o
 	$(LD) $(LDFLAGS) -o $@ $(CRT0_OBJ) $(CRT_CPP_OBJ) $(BUILD_DIR)/$*.o $(C_LIB_OBJS) $(CPP_LIB_OBJS)
 
+# ── Qt6 Test App (x86_64 only) ─────────────────────────────────────────────────
+# Compiles the minimal_window test + Fusion QPA plugin against static Qt6 libs.
+# Uses host g++ (not freestanding) for compilation, then links with userland.ld.
+
+QT6_CXX = x86_64-elf-g++-qt6
+QT6_LD = ld
+QT6_BASE = /opt/alloy/qt6
+QT6_BUILD = $(QT6_BASE)/build/qtbase-hangtest
+QT6_INCLUDES = -I$(QT6_BASE)/include \
+               -I$(QT6_BUILD)/include \
+               -I$(QT6_BUILD)/include/QtGui \
+               -I$(QT6_BUILD)/include/QtCore \
+               -I$(QT6_BUILD)/include/QtGui/6.4.2 \
+               -I$(QT6_BUILD)/include/QtCore/6.4.2 \
+               -I$(QT6_BUILD)/include/QtCore/6.4.2/QtCore \
+               -I$(QT6_BUILD)/include/QtGui/6.4.2/QtGui \
+               -I$(QT6_BUILD)/include/QtGui/6.4.2/QtGui/private \
+               -I$(QT6_BUILD)/include/QtCore/6.4.2/QtCore/private \
+               -I$(QT6_BASE)/src/qtbase/src \
+               -I$(QT6_BASE)/src/qtbase/include \
+               -I$(QT6_BASE)/src/qtbase/mkspecs/alloyos-g++ \
+               -I$(QT6_BASE)/src/qtbase/mkspecs/linux-g++-64 \
+               -I$(QT6_BUILD)/src/gui \
+               -iquote $(LIB_DIR) \
+               -I../../de/qpa
+QT6_CXXFLAGS = -m64 -std=c++17 -fno-exceptions -Wall -O2 -ffunction-sections -fdata-sections $(QT6_INCLUDES) -include qtgui_features_fix.h
+QT6_LD = gcc
+QT6_LDFLAGS = -m64 -static -nostdlib -nostartfiles -Wl,--gc-sections -Wl,-e_start -Wl,-Ttext-segment=0x10000
+QT6_LIBS = /opt/alloy/qt6/lib/libQt6Gui.a \
+           /opt/alloy/qt6/lib/libQt6Core.a \
+           /opt/alloy/qt6/lib/libQt6BundledPcre2.a \
+           /opt/alloy/qt6/lib/libQt6BundledFreetype.a \
+           /opt/alloy/qt6/lib/libQt6BundledHarfbuzz.a \
+           /opt/alloy/qt6/lib/libQt6BundledLibpng.a \
+           /opt/alloy/qt6/lib/libQt6BundledZLIB.a
+QT6_HOSTLIBS = -lgcc
+
+# Qt6 test binary (only for x86_64)
+ifeq ($(ARCH),x86_64)
+QT6_BUILD_DIR = $(BUILD_DIR)/qt6_test
+QT6_TEST_BIN = $(BUILD_DIR)/test_window
+
+# Source files that need Qt6-aware compilation (paths relative to os/userland/)
+QPA_SRCS = ../../de/qpa/alloyplatform.cpp ../../de/qpa/alloystcreen.cpp \
+           ../../de/qpa/alloywindow.cpp ../../de/qpa/alloybackingstore.cpp \
+           ../../de/qpa/alloycursor.cpp ../../de/qpa/alloykeyboard.cpp \
+           ../../de/qpa/alloymouse.cpp ../../de/qpa/plugin.cpp
+QT6_SRCS = $(QPA_SRCS) ../../de/tests/minimal_window.cpp
+
+# Objects (basename-based to keep object names short)
+QT6_OBJS = $(QT6_BUILD_DIR)/alloyplatform.o \
+           $(QT6_BUILD_DIR)/alloystcreen.o \
+           $(QT6_BUILD_DIR)/alloywindow.o \
+           $(QT6_BUILD_DIR)/alloybackingstore.o \
+           $(QT6_BUILD_DIR)/alloycursor.o \
+           $(QT6_BUILD_DIR)/alloykeyboard.o \
+           $(QT6_BUILD_DIR)/alloymouse.o \
+           $(QT6_BUILD_DIR)/plugin.o \
+           $(QT6_BUILD_DIR)/minimal_window.o \
+           $(QT6_BUILD_DIR)/posix_stubs.o \
+           $(QT6_BUILD_DIR)/cxxabi_stubs.o \
+           $(QT6_BUILD_DIR)/qt6_syscall_stub.o \
+           $(QT6_BUILD_DIR)/wayland_client.o \
+           $(QT6_BUILD_DIR)/new_delete.o \
+           $(QT6_BUILD_DIR)/qt6_platform_stubs.o \
+           $(BUILD_DIR)/stdlib.o
+
+# Qt6 test binary depends on all these objects and Qt6 libs
+$(QT6_TEST_BIN): $(QT6_OBJS) $(CRT0_OBJ) $(CRT_CPP_OBJ)
+	@mkdir -p $(dir $@)
+	$(QT6_LD) $(QT6_LDFLAGS) -o $@ $(CRT0_OBJ) $(CRT_CPP_OBJ) \
+	    $(QT6_OBJS) -Wl,--start-group $(QT6_LIBS) $(QT6_HOSTLIBS) -Wl,--end-group
+
+# Rule to compile Qt6 sources (with host g++, not freestanding)
+$(QT6_BUILD_DIR)/minimal_window.o: ../../de/tests/minimal_window.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloyplatform.o: ../../de/qpa/alloyplatform.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloystcreen.o: ../../de/qpa/alloystcreen.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloywindow.o: ../../de/qpa/alloywindow.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloybackingstore.o: ../../de/qpa/alloybackingstore.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloycursor.o: ../../de/qpa/alloycursor.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloykeyboard.o: ../../de/qpa/alloykeyboard.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/alloymouse.o: ../../de/qpa/alloymouse.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/plugin.o: ../../de/qpa/plugin.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+# Posix stubs and wayland client compiled with Qt6-aware host toolchain
+$(QT6_BUILD_DIR)/posix_stubs.o: $(LIB_DIR)/posix_stubs.c | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -x c -c $< -o $@
+
+$(QT6_BUILD_DIR)/wayland_client.o: $(LIB_DIR)/wayland_client.c | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -x c -c $< -o $@
+
+# C++ operator new/delete stubs
+$(QT6_BUILD_DIR)/new_delete.o: ../../de/qpa/new_delete.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/cxxabi_stubs.o: $(LIB_DIR)/cxxabi_stubs.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR)/qt6_syscall_stub.o: $(LIB_DIR)/qt6_syscall_stub.c | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -x c -c $< -o $@
+
+$(QT6_BUILD_DIR)/qt6_platform_stubs.o: $(LIB_DIR)/qt6_platform_stubs.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
+$(QT6_BUILD_DIR):
+	mkdir -p $(QT6_BUILD_DIR)
+
+# Build target for Qt6 test
+.PHONY: qt6-test
+qt6-test: $(QT6_TEST_BIN)
+
+all: $(QT6_TEST_BIN)
+endif
+
 clean:
 	rm -rf $(BUILD_DIR)

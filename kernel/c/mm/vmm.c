@@ -5,7 +5,7 @@
 
 VirtualMemoryManager g_vmm;
 
-#define KERNEL_HEAP_START 0x01000000
+#define KERNEL_HEAP_START 0x02000000
 #define KERNEL_HEAP_END   0xC0000000
 
 void vmm_init() {

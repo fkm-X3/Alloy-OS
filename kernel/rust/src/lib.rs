@@ -65,8 +65,10 @@ pub extern "C" fn rust_main() {
 
     unsafe {
         ffi::serial_print(c"[Rust] Kernel entry - initializing subsystems\n".as_ptr() as *const u8);
+        ffi::serial_print(c"[Rust] About to vga_clear\n".as_ptr() as *const u8);
         #[cfg(feature = "x86_64")]
         ffi::vga_clear();
+        ffi::serial_print(c"[Rust] vga_clear done\n".as_ptr() as *const u8);
     }
 
     crate::fs::vfs_init();
@@ -152,6 +154,21 @@ pub extern "C" fn rust_main() {
                             ffi::serial_print(c"[Spawn] Compositor task created\n".as_ptr() as *const u8);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // Spawn the Qt6 test window (requires compositor to be ready)
+    #[cfg(feature = "x86_64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/test_window", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    unsafe {
+                        ffi::serial_print(c"[Spawn] Loading test_window (Qt6 QPA test)\n".as_ptr() as *const u8);
+                    }
+                    process::spawn_user_elf(&image);
                 }
             }
         }

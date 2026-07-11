@@ -62,9 +62,7 @@ void pmm_init(uint32_t multiboot_addr) {
         g_pmm.bitmap[i] = 0xFFFFFFFF;
     }
 
-    for (uint32_t i = 0; i < MAX_PHYSICAL_FRAMES; i++) {
-        frame_refcounts[i] = 0;
-    }
+    __builtin_memset(frame_refcounts, 0, sizeof(frame_refcounts));
 
     if (multiboot_addr == 0) {
         serial_print("PMM: No multiboot info (aarch64), using default memory layout\n");
@@ -95,9 +93,15 @@ void pmm_init(uint32_t multiboot_addr) {
             else if (tag->type == MULTIBOOT_TAG_TYPE_MMAP) {
                 struct multiboot_tag_mmap* mmap = (struct multiboot_tag_mmap*)tag;
                 serial_print("PMM: Memory map:\n");
+                serial_print("  entry_size=");
+                serial_print_hex(mmap->entry_size);
+                serial_print(", tag->size=");
+                serial_print_hex(tag->size);
+                serial_print("\n");
 
+                uint8_t* tag_end = (uint8_t*)tag + tag->size;
                 for (uint8_t* entry_ptr = (uint8_t*)mmap->entries;
-                     entry_ptr < (uint8_t*)tag + tag->size;
+                     entry_ptr + sizeof(struct multiboot_mmap_entry) <= tag_end;
                      entry_ptr += mmap->entry_size) {
 
                     struct multiboot_mmap_entry* entry =
@@ -134,17 +138,52 @@ void pmm_init(uint32_t multiboot_addr) {
                         uint32_t start_frame = base / PAGE_SIZE;
                         uint32_t num_frames = length / PAGE_SIZE;
 
-                        for (uint32_t i = 0; i < num_frames; i++) {
-                            uint32_t frame = start_frame + i;
-                            if (frame < 1024 * 1024) {
-                                clear_frame(frame);
-                                if (frame >= g_pmm.total_frames) {
-                                    g_pmm.total_frames = frame + 1;
+                        uint32_t end_frame = start_frame + num_frames;
+                        uint32_t start_idx = start_frame / 32;
+                        uint32_t end_idx = (end_frame - 1) / 32;
+                        uint32_t start_bit = start_frame & 31;
+                        uint32_t end_bit = (end_frame - 1) & 31;
+                        uint32_t max_idx = sizeof(frame_bitmap) / sizeof(uint32_t);
+
+                        if (end_idx >= max_idx) {
+                            end_idx = max_idx - 1;
+                            end_bit = 31;
+                            end_frame = max_idx * 32;
+                        }
+
+                        if (start_idx >= max_idx) {
+                            serial_print("PMM: WARNING - start_idx out of bounds, skipping entry\n");
+                            continue;
+                        }
+
+                        if (start_idx == end_idx) {
+                            uint32_t mask;
+                            if (end_bit == 31) {
+                                mask = 0xFFFFFFFF << start_bit;
+                            } else {
+                                mask = (0xFFFFFFFF << start_bit) & ~(0xFFFFFFFF << (end_bit + 1));
+                            }
+                            g_pmm.bitmap[start_idx] &= ~mask;
+                        } else {
+                            g_pmm.bitmap[start_idx] &= ~(0xFFFFFFFF << start_bit);
+                            for (uint32_t i = start_idx + 1; i < end_idx && i < max_idx; i++) {
+                                g_pmm.bitmap[i] = 0;
+                            }
+                            if (end_idx < max_idx) {
+                                if (end_bit == 31) {
+                                    g_pmm.bitmap[end_idx] = 0;
+                                } else {
+                                    g_pmm.bitmap[end_idx] &= ~((1 << (end_bit + 1)) - 1);
                                 }
                             }
                         }
+
+                        if (end_frame > g_pmm.total_frames) {
+                            g_pmm.total_frames = end_frame;
+                        }
                     }
                 }
+                serial_print("PMM: Memory map entries done\n");
             }
 
             tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));

@@ -125,7 +125,9 @@ impl SlabCache {
         
         // Allocate memory for slab (1 page = 4KB)
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
+        ffi::serial_print(c"[Slab] Before vmm_alloc_region\n".as_ptr() as *const u8);
         let ptr = ffi::vmm_alloc_region(4096, flags) as *mut u8;
+        ffi::serial_print(c"[Slab] After vmm_alloc_region\n".as_ptr() as *const u8);
         
         if ptr.is_null() {
             return null_mut();

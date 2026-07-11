@@ -17,21 +17,33 @@ struct FsState {
     next_id: u64,
     path_to_id: BTreeMap<String, u64>,
     data: BTreeMap<u64, Vec<u8>>,
-    mount_table: MountTable,
+    mount_table: Box<MountTable>,
     block_devices: Vec<Option<Box<dyn BlockDevice>>>,
     fat32_filesystems: BTreeMap<u64, fat32::Fat32Fs>,
 }
 
 impl FsState {
     fn new() -> Self {
-        FsState {
+        unsafe { crate::ffi::serial_print(c"[VFS] FsState::new start\n".as_ptr() as *const u8); }
+        unsafe { crate::ffi::serial_print(c"[VFS] Creating BTreeMaps\n".as_ptr() as *const u8); }
+        let path_id = BTreeMap::new();
+        let dat = BTreeMap::new();
+        let fat = BTreeMap::new();
+        let devs = Vec::new();
+        unsafe { crate::ffi::serial_print(c"[VFS] Calling MountTable::new\n".as_ptr() as *const u8); }
+        let mt = mount::make_mount_table();
+        unsafe { crate::ffi::serial_print(c"[VFS] MountTable returned\n".as_ptr() as *const u8); }
+        unsafe { crate::ffi::serial_print(c"[VFS] Building FsState struct\n".as_ptr() as *const u8); }
+        let fs = FsState {
             next_id: 1,
-            path_to_id: BTreeMap::new(),
-            data: BTreeMap::new(),
-            mount_table: MountTable::new(),
-            block_devices: Vec::new(),
-            fat32_filesystems: BTreeMap::new(),
-        }
+            path_to_id: path_id,
+            data: dat,
+            mount_table: mt,
+            block_devices: devs,
+            fat32_filesystems: fat,
+        };
+        unsafe { crate::ffi::serial_print(c"[VFS] FsState constructed\n".as_ptr() as *const u8); }
+        fs
     }
 
     fn register_block_device(&mut self, dev: Box<dyn BlockDevice>) -> usize {
@@ -105,10 +117,26 @@ fn normalize_path(path: &str) -> String {
 }
 
 pub fn vfs_init() {
+    unsafe { crate::ffi::serial_print(c"[VFS] vfs_init entered\n".as_ptr() as *const u8); }
+    
+    // Test: simple integer on stack, no allocation
+    let x: u64 = 42;
+    let y = x + 1;
+    if y > 0 {
+        unsafe { crate::ffi::serial_print(c"[VFS] Stack test ok\n".as_ptr() as *const u8); }
+    }
+
+    // Test: simplest lock acquire
     {
         let mut guard = VFS_STATE.lock();
-        *guard = Some(FsState::new());
+        unsafe { crate::ffi::serial_print(c"[VFS] Lock acquired\n".as_ptr() as *const u8); }
+        unsafe { crate::ffi::serial_print(c"[VFS] About to call FsState::new\n".as_ptr() as *const u8); }
+        let new_state = FsState::new();
+        unsafe { crate::ffi::serial_print(c"[VFS] FsState::new returned, about to assign\n".as_ptr() as *const u8); }
+        *guard = Some(new_state);
+        unsafe { crate::ffi::serial_print(c"[VFS] FsState created\n".as_ptr() as *const u8); }
     }
+    unsafe { crate::ffi::serial_print(c"[VFS] Lock released\n".as_ptr() as *const u8); }
 
     if let Ok(_id) = vfs_open("/dev/console", 0, 0) {
         unsafe { crate::ffi::serial_print(c"[VFS] /dev/console created\n".as_ptr() as *const u8); }
@@ -178,6 +206,23 @@ pub fn vfs_init() {
             let mut g2 = VFS_STATE.lock();
             if let Some(state2) = g2.as_mut() {
                 state2.data.insert(id2, hello_cpp_bytes.to_vec());
+            }
+        }
+    }
+
+    let test_window_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_window"));
+    if !test_window_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/test_window", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, test_window_bytes.to_vec());
+                unsafe { crate::ffi::serial_print(c"[VFS] /test_window embedded into VFS\n".as_ptr() as *const u8); }
+            }
+        }
+        if let Ok(id2) = vfs_open("/bin/test_window", 0, 0) {
+            let mut g2 = VFS_STATE.lock();
+            if let Some(state2) = g2.as_mut() {
+                state2.data.insert(id2, test_window_bytes.to_vec());
             }
         }
     }

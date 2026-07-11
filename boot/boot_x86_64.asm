@@ -65,7 +65,12 @@ start:
     ; Enable PAE (Physical Address Extension)
     mov eax, cr4
     or eax, 1 << 5
+    ; Enable SSE/SSE2: OSFXSR (bit 9) + OSXMMEXCPT (bit 10)
+    or eax, (1 << 9) | (1 << 10)
     mov cr4, eax
+
+    ; Initialize x87 FPU
+    finit
 
     ; Load PML4 address into CR3
     mov eax, PML4_BASE
@@ -127,7 +132,7 @@ setup_page_tables:
     mov dword [PDPT_BASE + 0], PD_BASE | 0x03
     mov dword [PDPT_BASE + 4], 0
 
-    ; PD entries 0-1: 2MB pages identity mapping (covers 4MB)
+    ; PD entries 0-6: 2MB pages identity mapping (covers ~14MB)
     ; PD entry 0: 0x000000 -> 0x1FFFFF (2MB)
     mov dword [PD_BASE + 0], 0x000000 | 0x83  ; present, writable, huge page
     mov dword [PD_BASE + 4], 0x000000
@@ -135,6 +140,30 @@ setup_page_tables:
     ; PD entry 1: 0x200000 -> 0x3FFFFF (2MB)
     mov dword [PD_BASE + 8], 0x200000 | 0x83
     mov dword [PD_BASE + 12], 0x000000
+
+    ; PD entry 2: 0x400000 -> 0x5FFFFF (2MB)
+    mov dword [PD_BASE + 16], 0x400000 | 0x83
+    mov dword [PD_BASE + 20], 0x000000
+
+    ; PD entry 3: 0x600000 -> 0x7FFFFF (2MB)
+    mov dword [PD_BASE + 24], 0x600000 | 0x83
+    mov dword [PD_BASE + 28], 0x000000
+
+    ; PD entry 4: 0x800000 -> 0x9FFFFF (2MB)
+    mov dword [PD_BASE + 32], 0x800000 | 0x83
+    mov dword [PD_BASE + 36], 0x000000
+
+    ; PD entry 5: 0xA00000 -> 0xBFFFFF (2MB)
+    mov dword [PD_BASE + 40], 0xA00000 | 0x83
+    mov dword [PD_BASE + 44], 0x000000
+
+    ; PD entry 6: 0xC00000 -> 0xDFFFFF (2MB)
+    mov dword [PD_BASE + 48], 0xC00000 | 0x83
+    mov dword [PD_BASE + 52], 0x000000
+
+    ; PD entry 7: 0xE00000 -> 0xFFFFFF (2MB)
+    mov dword [PD_BASE + 56], 0xE00000 | 0x83
+    mov dword [PD_BASE + 60], 0x000000
 
     ret
 

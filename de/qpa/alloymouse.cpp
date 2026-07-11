@@ -33,8 +33,8 @@ void QAlloyMouse::handleMotion(int x, int y)
     QWindow *win = surfaceWindow(m_focusedSurface);
 
     QWindowSystemInterface::handleMouseEvent(win, QPointF(x, y), QPointF(x, y),
-                                             translateButtons(), Qt::NoModifier,
-                                             QEvent::MouseMove);
+                                             translateButtons(), Qt::NoButton,
+                                             QEvent::MouseMove, Qt::NoModifier);
 }
 
 void QAlloyMouse::handleButton(int button, int state, int x, int y)
@@ -64,14 +64,14 @@ void QAlloyMouse::handleAxis(int axis, int value)
 {
     QWindow *win = surfaceWindow(m_focusedSurface);
 
-    QPointF pixelDelta;
-    QPointF angleDelta;
+    QPoint pixelDelta;
+    QPoint angleDelta;
     if (axis == 0) {
-        angleDelta = QPointF(0, value * 15);
-        pixelDelta = QPointF(0, value * 10);
+        angleDelta = QPoint(0, value * 15);
+        pixelDelta = QPoint(0, value * 10);
     } else {
-        angleDelta = QPointF(value * 15, 0);
-        pixelDelta = QPointF(value * 10, 0);
+        angleDelta = QPoint(value * 15, 0);
+        pixelDelta = QPoint(value * 10, 0);
     }
 
     QWindowSystemInterface::handleWheelEvent(win, QPointF(m_pos), QPointF(m_pos),

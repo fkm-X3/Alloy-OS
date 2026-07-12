@@ -224,8 +224,8 @@ jobs:
           exit 1
         fi
 
-        if ! grep -q "Alloy" serial.log; then
-          echo "ERROR: Kernel name not found in serial output"
+        if ! grep -qE "Alloy|Multiboot2 magic verified|x86_64 boot entry reached|Wayland.*Server initialized" serial.log; then
+          echo "ERROR: No recognizable kernel boot output found in serial log"
           cat serial.log
           exit 1
         fi

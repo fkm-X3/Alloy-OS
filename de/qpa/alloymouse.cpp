@@ -117,3 +117,5 @@ Qt::MouseButton QAlloyMouse::translateButton(int waylandButton) const
 }
 
 QT_END_NAMESPACE
+
+#include "alloymouse.moc"

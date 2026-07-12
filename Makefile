@@ -119,7 +119,7 @@ userland:
 	cp -f os/userland/build/$(ARCH)/test_wl_client test_wl_client 2>/dev/null || true
 ifneq ($(ARCH),aarch64)
 	cp -f os/userland/build/$(ARCH)/hello_cpp hello_cpp 2>/dev/null || true
-	cp -f os/userland/build/$(ARCH)/test_window test_window 2>/dev/null || true
+	cp -f os/userland/build/$(ARCH)/test_qml test_window 2>/dev/null || true
 endif
 
 # Build the Qt6/QML DE for host development (requires Qt6 SDK)

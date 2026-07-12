@@ -246,3 +246,5 @@ void QAlloyKeyboard::updateModifiers(int evdevKey, bool pressed)
 }
 
 QT_END_NAMESPACE
+
+#include "alloykeyboard.moc"

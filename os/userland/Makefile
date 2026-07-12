@@ -103,6 +103,12 @@ QT6_LIBS = /opt/alloy/qt6/lib/libQt6Gui.a \
            /opt/alloy/qt6/lib/libQt6BundledHarfbuzz.a \
            /opt/alloy/qt6/lib/libQt6BundledLibpng.a \
            /opt/alloy/qt6/lib/libQt6BundledZLIB.a
+QD_BUILD = /opt/alloy/qt6/src/qtdeclarative/build
+QT6_QML_LIBS = $(QD_BUILD)/lib/libQt6Qml.a \
+               $(QD_BUILD)/lib/libQt6Quick.a \
+               $(QD_BUILD)/lib/libQt6QuickControls2.a \
+               $(QD_BUILD)/lib/libQt6QuickLayouts.a \
+               $(QD_BUILD)/lib/libQt6QuickTemplates2.a
 QT6_HOSTLIBS = -lgcc
 
 # Qt6 test binary (only for x86_64 with Qt6 libraries available)
@@ -135,6 +141,7 @@ QT6_OBJS = $(QT6_BUILD_DIR)/alloyplatform.o \
            $(QT6_BUILD_DIR)/wayland_client.o \
            $(QT6_BUILD_DIR)/new_delete.o \
            $(QT6_BUILD_DIR)/qt6_platform_stubs.o \
+           $(QT6_BUILD_DIR)/qt6_extra_stubs.o \
            $(BUILD_DIR)/stdlib.o
 
 # Qt6 test binary depends on all these objects and Qt6 libs
@@ -191,14 +198,46 @@ $(QT6_BUILD_DIR)/qt6_syscall_stub.o: $(LIB_DIR)/qt6_syscall_stub.c | $(QT6_BUILD
 $(QT6_BUILD_DIR)/qt6_platform_stubs.o: $(LIB_DIR)/qt6_platform_stubs.cpp | $(QT6_BUILD_DIR)
 	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
 
+$(QT6_BUILD_DIR)/qt6_extra_stubs.o: $(LIB_DIR)/qt6_extra_stubs.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -c $< -o $@
+
 $(QT6_BUILD_DIR):
 	mkdir -p $(QT6_BUILD_DIR)
 
-# Build target for Qt6 test
-.PHONY: qt6-test
-qt6-test: $(QT6_TEST_BIN)
+# ── Qt6 QML test binary ───────────────────────────────────────────────────
+QT6_QML_TEST_BIN = $(BUILD_DIR)/test_qml
+QT6_QML_OBJS = $(QT6_BUILD_DIR)/alloyplatform.o \
+               $(QT6_BUILD_DIR)/alloystcreen.o \
+               $(QT6_BUILD_DIR)/alloywindow.o \
+               $(QT6_BUILD_DIR)/alloybackingstore.o \
+               $(QT6_BUILD_DIR)/alloycursor.o \
+               $(QT6_BUILD_DIR)/alloykeyboard.o \
+               $(QT6_BUILD_DIR)/alloymouse.o \
+               $(QT6_BUILD_DIR)/plugin.o \
+               $(QT6_BUILD_DIR)/minimal_qml.o \
+               $(QT6_BUILD_DIR)/posix_stubs.o \
+               $(QT6_BUILD_DIR)/cxxabi_stubs.o \
+               $(QT6_BUILD_DIR)/qt6_syscall_stub.o \
+               $(QT6_BUILD_DIR)/wayland_client.o \
+               $(QT6_BUILD_DIR)/new_delete.o \
+               $(QT6_BUILD_DIR)/qt6_platform_stubs.o \
+               $(QT6_BUILD_DIR)/qt6_extra_stubs.o \
+               $(BUILD_DIR)/stdlib.o
 
-all: $(QT6_TEST_BIN)
+$(QT6_QML_TEST_BIN): $(QT6_QML_OBJS) $(CRT0_OBJ) $(CRT_CPP_OBJ)
+	@mkdir -p $(dir $@)
+	$(QT6_LD) $(QT6_LDFLAGS) -o $@ $(CRT0_OBJ) $(CRT_CPP_OBJ) \
+	    $(QT6_QML_OBJS) -Wl,--start-group $(QT6_LIBS) $(QT6_QML_LIBS) $(QT6_HOSTLIBS) -Wl,--end-group
+
+$(QT6_BUILD_DIR)/minimal_qml.o: ../../de/tests/minimal_qml.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -I$(QD_BUILD)/include -I$(QD_BUILD)/include/QtQml -I$(QD_BUILD)/include/QtQuick -c $< -o $@
+
+# Build target for Qt6 test
+.PHONY: qt6-test qt6-qml-test
+qt6-test: $(QT6_TEST_BIN)
+qt6-qml-test: $(QT6_QML_TEST_BIN)
+
+all: $(QT6_TEST_BIN) $(QT6_QML_TEST_BIN)
 endif # QT6_AVAILABLE
 endif # ARCH == x86_64
 

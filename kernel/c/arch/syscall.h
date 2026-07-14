@@ -30,6 +30,12 @@
 #define SYS_WAITPID    22
 #define SYS_SOCKET_READ  23
 #define SYS_SOCKET_WRITE 24
+#define SYS_ALLOC_SHM    25
+#define SYS_SHM_USER_VADDR 26
+#define SYS_MMAP         27
+#define SYS_GETTIMEOFDAY 28
+#define SYS_DUP2         29
+#define SYS_KILL         30
 
 // Syscall dispatcher (called from assembly stub)
 #ifdef __cplusplus

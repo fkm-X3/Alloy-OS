@@ -2,7 +2,8 @@
 #define TERMINALPROCESS_H
 
 #include <QObject>
-#include <QProcess>
+#include <QTimer>
+#include <QString>
 
 class TerminalProcess : public QObject
 {
@@ -25,12 +26,14 @@ signals:
     void runningChanged();
 
 private slots:
-    void onReadyReadStdout();
-    void onReadyReadStderr();
-    void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void pollOutput();
 
 private:
-    QProcess *m_process;
+    int m_childPid;
+    int m_stdinFd;
+    int m_stdoutFd;
+    int m_stderrFd;
+    QTimer *m_pollTimer;
 };
 
 #endif

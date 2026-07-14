@@ -37,6 +37,8 @@ pub fn dispatch_syscall(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
         Some(table::SyscallNumber::ShmUserVaddr) => crate::syscall::rust_sys_shm_user_vaddr(ebx),
         Some(table::SyscallNumber::Mmap) => crate::syscall::rust_sys_mmap(ebx, ecx, edx),
         Some(table::SyscallNumber::GetTimeOfDay) => crate::syscall::rust_sys_gettimeofday(ebx),
+        Some(table::SyscallNumber::Dup2) => crate::syscall::rust_sys_dup2(ebx, ecx),
+        Some(table::SyscallNumber::Kill) => crate::syscall::rust_sys_kill(ebx, ecx),
         None => {
             u32::MAX
         }

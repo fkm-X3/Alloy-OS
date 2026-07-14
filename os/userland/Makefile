@@ -215,6 +215,7 @@ QT6_QML_OBJS = $(QT6_BUILD_DIR)/alloyplatform.o \
                $(QT6_BUILD_DIR)/alloymouse.o \
                $(QT6_BUILD_DIR)/plugin.o \
                $(QT6_BUILD_DIR)/minimal_qml.o \
+               $(QT6_BUILD_DIR)/TerminalProcess.o \
                $(QT6_BUILD_DIR)/posix_stubs.o \
                $(QT6_BUILD_DIR)/cxxabi_stubs.o \
                $(QT6_BUILD_DIR)/qt6_syscall_stub.o \
@@ -230,6 +231,9 @@ $(QT6_QML_TEST_BIN): $(QT6_QML_OBJS) $(CRT0_OBJ) $(CRT_CPP_OBJ)
 	    $(QT6_QML_OBJS) -Wl,--start-group $(QT6_LIBS) $(QT6_QML_LIBS) $(QT6_HOSTLIBS) -Wl,--end-group
 
 $(QT6_BUILD_DIR)/minimal_qml.o: ../../de/tests/minimal_qml.cpp | $(QT6_BUILD_DIR)
+	$(QT6_CXX) $(QT6_CXXFLAGS) -I$(QD_BUILD)/include -I$(QD_BUILD)/include/QtQml -I$(QD_BUILD)/include/QtQuick -c $< -o $@
+
+$(QT6_BUILD_DIR)/TerminalProcess.o: ../../de/src/TerminalProcess.cpp ../../de/src/TerminalProcess.h ../../de/src/alloy_syscalls.h | $(QT6_BUILD_DIR)
 	$(QT6_CXX) $(QT6_CXXFLAGS) -I$(QD_BUILD)/include -I$(QD_BUILD)/include/QtQml -I$(QD_BUILD)/include/QtQuick -c $< -o $@
 
 # Build target for Qt6 test

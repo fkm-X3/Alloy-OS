@@ -30,6 +30,8 @@ pub const ALLOC_SHM: u32 = 25;
 pub const SHM_USER_VADDR: u32 = 26;
 pub const MMAP: u32 = 27;
 pub const GETTIMEOFDAY: u32 = 28;
+pub const DUP2: u32 = 29;
+pub const KILL: u32 = 30;
 
 /// Enum representation of syscall numbers
 #[repr(u32)]
@@ -64,6 +66,8 @@ pub enum SyscallNumber {
     ShmUserVaddr = SHM_USER_VADDR,
     Mmap = MMAP,
     GetTimeOfDay = GETTIMEOFDAY,
+    Dup2 = DUP2,
+    Kill = KILL,
 }
 
 impl SyscallNumber {
@@ -98,6 +102,8 @@ impl SyscallNumber {
             SHM_USER_VADDR => Some(SyscallNumber::ShmUserVaddr),
             MMAP => Some(SyscallNumber::Mmap),
             GETTIMEOFDAY => Some(SyscallNumber::GetTimeOfDay),
+            DUP2 => Some(SyscallNumber::Dup2),
+            KILL => Some(SyscallNumber::Kill),
             _ => None,
         }
     }

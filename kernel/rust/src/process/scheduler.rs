@@ -337,6 +337,35 @@ impl Scheduler {
         Self::schedule();
     }
 
+    /// Terminate a task by PID. Returns 0 on success, u32::MAX on error.
+    pub fn terminate_pid(target_pid: u32, exit_code: u32) -> u32 {
+        let mut scheduler = SCHEDULER.lock();
+        let sched = match scheduler.as_mut() {
+            Some(s) => s,
+            None => return u32::MAX,
+        };
+
+        let current_pid = sched.current_task.as_ref().map(|t| t.id().as_u32());
+
+        // Check if target is the current task
+        if current_pid == Some(target_pid) {
+            drop(scheduler);
+            Self::terminate_current(exit_code);
+            return 0;
+        }
+
+        // Search ready queues
+        for queue in &mut sched.ready_queues {
+            if let Some(task) = queue.iter_mut().find(|t| t.id().as_u32() == target_pid) {
+                task.set_state(TaskState::Terminated);
+                task.set_exit_code(exit_code);
+                return 0;
+            }
+        }
+
+        u32::MAX
+    }
+
     /// Wait for any child process to exit. Returns (child_pid, exit_code)
     /// or u32::MAX if no children.
     pub fn wait_for_child() -> (u32, u32) {

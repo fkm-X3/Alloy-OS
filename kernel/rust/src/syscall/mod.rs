@@ -192,6 +192,29 @@ pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
     }
 }
 
+/// dup2 - Duplicate a file descriptor to a specific target fd.
+/// If newfd is already open, it is closed first.
+#[no_mangle]
+pub extern "C" fn rust_sys_dup2(oldfd: u32, newfd: u32) -> u32 {
+    unsafe { ffi::serial_print(c"[Syscall] sys_dup2 called\n".as_ptr() as *const u8); }
+    if oldfd == newfd {
+        return newfd;
+    }
+    match Scheduler::with_current_task_mut(|task| {
+        if let Some(entry) = task.get_fd_entry_mut(oldfd) {
+            let vnode = entry.0;
+            let offset = entry.1;
+            let _ = task.close_fd(newfd);
+            task.set_fd_at(newfd, vnode, offset);
+            return Some(newfd);
+        }
+        None
+    }) {
+        Some(fd_opt) => fd_opt.unwrap_or(u32::MAX),
+        None => u32::MAX,
+    }
+}
+
 /// lseek
 #[no_mangle]
 pub extern "C" fn rust_sys_lseek(fd: u32, offset: u32, whence: u32) -> u32 {
@@ -531,6 +554,20 @@ pub extern "C" fn rust_sys_waitpid(_pid: u32, _options: u32) -> u32 {
     }
     // Pack PID and exit code: higher 16 bits = PID, lower 16 bits = exit code
     ((child_pid & 0xFFFF) << 16) | (exit_code & 0xFFFF)
+}
+
+/// sys_kill - Send a signal to a process.
+/// For now, only supports SIGTERM (signal 15) which terminates the process.
+#[no_mangle]
+pub extern "C" fn rust_sys_kill(pid: u32, sig: u32) -> u32 {
+    unsafe {
+        ffi::serial_print(c"[Syscall] sys_kill called\n".as_ptr() as *const u8);
+    }
+    if sig == 15 || sig == 9 {
+        Scheduler::terminate_pid(pid, sig)
+    } else {
+        u32::MAX
+    }
 }
 
 /// sys_brk - Set the program break (heap end) for the current task.

@@ -143,6 +143,13 @@ impl Task {
         None
     }
 
+    /// Set a file descriptor at a specific slot (used by dup2).
+    pub fn set_fd_at(&mut self, fd: u32, vnode_id: u64, offset: usize) {
+        if (fd as usize) < self.fds.len() {
+            self.fds[fd as usize] = Some((vnode_id, offset));
+        }
+    }
+
     /// Get vnode id for a fd
     pub fn get_fd(&self, fd: u32) -> Option<u64> {
         if (fd as usize) < self.fds.len() {

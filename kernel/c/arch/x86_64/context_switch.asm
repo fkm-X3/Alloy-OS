@@ -64,10 +64,9 @@ context_switch:
     test rsi, rsi
     jz .done
 
-    ; Restore RFLAGS
-    mov rax, [rsi + 184]
-    push rax
-    popfq
+    ; Disable interrupts during the critical section to prevent
+    ; timer ISR from re-entering the scheduler mid-switch.
+    cli
 
     ; Restore CR3 BEFORE restoring stack pointer
     mov rax, [rsi + 192]
@@ -103,7 +102,14 @@ context_switch:
     mov r13, [rsi + 104]
     mov r14, [rsi + 112]
     mov r15, [rsi + 120]
-    mov rax, [rsi + 0]        ; Restore RAX last
+
+    ; Restore RFLAGS last — popfq + ret is atomically safe on x86
+    mov rax, [rsi + 184]
+    push rax
+    popfq
+
+    ; Restore RAX after all other registers
+    mov rax, [rsi + 0]
 
     ; Jump to restored RIP
     ret

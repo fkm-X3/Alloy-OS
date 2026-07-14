@@ -685,6 +685,63 @@ pub extern "C" fn rust_sys_shm_user_vaddr(fd: u32) -> u32 {
     crate::shm_alloc::shm_user_vaddr(fd as i32)
 }
 
+/// sys_mmap - Map memory pages for the current task.
+/// arg0: hint address (or 0 for auto)
+/// arg1: length in bytes
+/// arg2: mmap flags (bitmask)
+/// Returns: user virtual address on success, 0xFFFFFFFF on failure
+///
+/// Flags (matching Linux mmap):
+///   bit 0 (0x01): MAP_SHARED
+///   bit 1 (0x02): MAP_PRIVATE
+///   bit 4 (0x10): MAP_ANONYMOUS
+#[no_mangle]
+pub extern "C" fn rust_sys_mmap(hint: u32, length: u32, flags: u32) -> u32 {
+    if length == 0 { return 0xFFFFFFFF; }
+
+    let map_anonymous = (flags & 0x10) != 0;
+    let page_ceil = |x: u32| (x + 0xFFF) & !0xFFF;
+    let alloc_pages = page_ceil(length);
+    let num_pages = (alloc_pages / 4096) as usize;
+
+    if map_anonymous {
+        // For anonymous mappings, use the mmap region above the brk region.
+        // Find a free virtual address range and map physical frames to it.
+        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
+        let ptr = unsafe { ffi::vmm_alloc_region(alloc_pages as usize, flags) };
+        if ptr.is_null() {
+            return 0xFFFFFFFF;
+        }
+        return ptr as u32;
+    }
+
+    // For non-anonymous mmap, return failure for now
+    0xFFFFFFFF
+}
+
+/// sys_gettimeofday - Get current time.
+/// arg0: pointer to user timeval struct { tv_sec, tv_usec }
+/// Returns: 0 on success, -1 on error
+#[no_mangle]
+pub extern "C" fn rust_sys_gettimeofday(timeval_ptr: u32) -> u32 {
+    if timeval_ptr == 0 { return 0xFFFFFFFF; }
+
+    let uptime_ms = unsafe { crate::ffi::timer_get_uptime_ms_ffi() };
+    let tv_sec = (uptime_ms / 1000) as u32;
+    let tv_usec = ((uptime_ms % 1000) * 1000) as u32;
+
+    let mut buf = [0u8; 8];
+    buf[0..4].copy_from_slice(&tv_sec.to_ne_bytes());
+    buf[4..8].copy_from_slice(&tv_usec.to_ne_bytes());
+
+    unsafe {
+        if crate::utils::copy_to_user(timeval_ptr, &buf).is_err() {
+            return 0xFFFFFFFF;
+        }
+    }
+    0
+}
+
 /// Dispatcher wrapper callable from C/C++: routes raw registers to Rust dispatcher
 #[no_mangle]
 pub extern "C" fn rust_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {

@@ -29,6 +29,8 @@
 #define SYS_SOCKET_WRITE 24
 #define SYS_ALLOC_SHM   25
 #define SYS_SHM_USER_VADDR 26
+#define SYS_MMAP        27
+#define SYS_GETTIMEOFDAY 28
 
 // INT 0x80 calling convention (x86 only):
 //   eax = syscall number

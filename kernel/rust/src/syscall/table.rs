@@ -28,6 +28,8 @@ pub const SOCKET_READ: u32 = 23;
 pub const SOCKET_WRITE: u32 = 24;
 pub const ALLOC_SHM: u32 = 25;
 pub const SHM_USER_VADDR: u32 = 26;
+pub const MMAP: u32 = 27;
+pub const GETTIMEOFDAY: u32 = 28;
 
 /// Enum representation of syscall numbers
 #[repr(u32)]
@@ -60,6 +62,8 @@ pub enum SyscallNumber {
     SocketWrite = SOCKET_WRITE,
     AllocShm = ALLOC_SHM,
     ShmUserVaddr = SHM_USER_VADDR,
+    Mmap = MMAP,
+    GetTimeOfDay = GETTIMEOFDAY,
 }
 
 impl SyscallNumber {
@@ -92,6 +96,8 @@ impl SyscallNumber {
             SOCKET_WRITE => Some(SyscallNumber::SocketWrite),
             ALLOC_SHM => Some(SyscallNumber::AllocShm),
             SHM_USER_VADDR => Some(SyscallNumber::ShmUserVaddr),
+            MMAP => Some(SyscallNumber::Mmap),
+            GETTIMEOFDAY => Some(SyscallNumber::GetTimeOfDay),
             _ => None,
         }
     }

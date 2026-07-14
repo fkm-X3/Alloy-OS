@@ -285,7 +285,18 @@ int clock_getres(int clk_id, void* res) { (void)clk_id; (void)res; return 0; }
 int ppoll(void* fds, unsigned long nfds, const void* timeout, const void* sigmask) {
     (void)fds; (void)nfds; (void)timeout; (void)sigmask; return 0;
 }
-int pipe2(int pipefd[2], int flags) { (void)pipefd; (void)flags; return -1; }
+int pipe2(int pipefd[2], int flags) {
+    (void)flags;
+    // Use the kernel SYS_PIPE syscall (number 10) via x86_64 syscall instruction
+    long ret;
+    asm volatile (
+        "syscall"
+        : "=a" (ret)
+        : "a" (10), "D" ((long)pipefd), "S" (0), "d" (0)
+        : "rcx", "r11", "memory"
+    );
+    return (int)ret;
+}
 int eventfd(unsigned int initval, int flags) { (void)initval; (void)flags; return -1; }
 int linkat(int olddirfd, const char* oldpath, int newdirfd, const char* newpath, int flags) {
     (void)olddirfd; (void)oldpath; (void)newdirfd; (void)newpath; (void)flags; return -1;
@@ -716,11 +727,7 @@ extern "C" {
     };
 }
 
-// ── QElapsedTimer (mangled symbols) ────────────────────────────────────────
-extern "C" {
-    long long _ZNK13QElapsedTimer12nsecsElapsedEv(const void*) { return 0; }
-    long long _ZN13QElapsedTimer7restartEv(void*) { return 0; }
-}
+// ── QElapsedTimer — REMOVED: real implementation in libQt6Core.a ────────────
 
 // ── QFSFileEngine::drives ──────────────────────────────────────────────────
 extern "C" {
@@ -752,9 +759,9 @@ extern "C" {
 }
 
 // ── QtGenericUnixDispatcher ─────────────────────────────────────────────────
-extern "C" {
-    void* _ZN23QtGenericUnixDispatcher25createUnixEventDispatcherEv() { return nullptr; }
-}
+// REMOVED: The real createUnixEventDispatcher() from libQt6Core.a should be
+// linked instead of this nullptr stub. If the real one fails to link, we'll
+// need to provide a working implementation.
 
 // ── vtable for QPlatformNativeInterface (weak — real vtable in libQt6Gui) ───
 extern "C" {
@@ -771,41 +778,7 @@ __attribute__((weak)) void* _ZTV24QPlatformNativeInterface[3] = {
     nullptr
 };
 
-// ── QSocketNotifier stubs (weak — real symbols in libQt6Core) ──────────────
-
-__attribute__((weak)) void _ZN15QSocketNotifierC1ExNS_4TypeEP7QObject(void*, long long, int, void*)
-    __asm__("_ZN15QSocketNotifierC1ExNS_4TypeEP7QObject");
-void _ZN15QSocketNotifierC1ExNS_4TypeEP7QObject(void*, long long, int, void*) {}
-
-__attribute__((weak)) void _ZN15QSocketNotifier9activatedE17QSocketDescriptorNS_4TypeENS_14QPrivateSignalE(void*, void*, int, void*)
-    __asm__("_ZN15QSocketNotifier9activatedE17QSocketDescriptorNS_4TypeENS_14QPrivateSignalE");
-void _ZN15QSocketNotifier9activatedE17QSocketDescriptorNS_4TypeENS_14QPrivateSignalE(void*, void*, int, void*) {}
-
-// staticMetaObject — raw byte array to avoid QMetaObject dependency
-__attribute__((weak)) unsigned char _ZN15QSocketNotifier16staticMetaObjectE[64] = {};
-
-// ── QQmlApplicationEngine stubs (weak — real symbols in libQt6Qml) ─────────
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngineC1EP7QObject(void*)
-    __asm__("_ZN21QQmlApplicationEngineC1EP7QObject");
-void _ZN21QQmlApplicationEngineC1EP7QObject(void*) {}
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngineC2EP7QObject(void*)
-    __asm__("_ZN21QQmlApplicationEngineC2EP7QObject");
-void _ZN21QQmlApplicationEngineC2EP7QObject(void*) {}
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngineD1Ev(void*)
-    __asm__("_ZN21QQmlApplicationEngineD1Ev");
-void _ZN21QQmlApplicationEngineD1Ev(void*) {}
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngineD2Ev(void*)
-    __asm__("_ZN21QQmlApplicationEngineD2Ev");
-void _ZN21QQmlApplicationEngineD2Ev(void*) {}
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngineD0Ev(void*)
-    __asm__("_ZN21QQmlApplicationEngineD0Ev");
-void _ZN21QQmlApplicationEngineD0Ev(void*) {}
-
-__attribute__((weak)) void _ZN21QQmlApplicationEngine8loadDataERK10QByteArrayRK4QUrl(void*, const void*, const void*)
-    __asm__("_ZN21QQmlApplicationEngine8loadDataERK10QByteArrayRK4QUrl");
-void _ZN21QQmlApplicationEngine8loadDataERK10QByteArrayRK4QUrl(void*, const void*, const void*) {}
+// ── QQmlApplicationEngine stubs ────────────────────────────────────────────
+// REMOVED: The real QQmlApplicationEngine implementations from libQt6Qml.a
+// should be linked. These weak stubs were shadowing the real constructors,
+// destructor, and loadData(), causing the QML engine to do nothing.

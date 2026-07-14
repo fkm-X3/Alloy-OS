@@ -274,12 +274,8 @@ void _ZN18QTzTimeZonePrivateC1ERK10QByteArray(void* this_, void* id) {
     (void)this_; (void)id;
 }
 
-// ── qt_readlink ──────────────────────────────────────────────────────────
+// ── qt_readlink — REMOVED: real implementation in libQt6Core.a ─────────────
 // Normally in qfilesystemengine_unix.cpp (wraps POSIX readlink)
-
-void _Z11qt_readlinkPKc(void* ret, const char* path) {
-    (void)ret; (void)path;
-}
 
 // ── Plugin registration ──────────────────────────────────────────────────
 // Called by Q_IMPORT_PLUGIN(AlloyIntegrationPlugin)

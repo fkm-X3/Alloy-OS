@@ -27,79 +27,73 @@ extern uintptr_t _kernel_end;
 /* Window for temporary 4KB page-table mappings.
  * PD[PD_WIN_IDX] points to an allocated PT page; virtual address:
  *   PML4[0] → PDPT[0] → PD[PD_WIN_IDX] → PT[pt_idx]
- *   VA = PD_WIN_IDX << 21 | pt_idx << 12                                 */
-#define PD_WIN_IDX   8
-#define PT_WIN_BASE  ((uint64_t)PD_WIN_IDX << 21)   /* 0x1000000 = 16 MB */
+ *   VA = PD_WIN_IDX << 21 | pt_idx << 12
+ * Use PD index 10 (20 MB) to stay above the kernel image (~19 MB)
+ * but within the 32 MB identity-mapped region and below the heap.          */
+#define PD_WIN_IDX   10
+#define PT_WIN_BASE  ((uint64_t)PD_WIN_IDX << 21)   /* 0x1400000 = 20 MB */
 #define PT_TEMP_IDX  0
 #define PT_TEMP_VA   (PT_WIN_BASE + (PT_TEMP_IDX << 12))
 
 /* Second window slot for map_page_in_pd / destroy_directory etc. */
-#define PD_WIN2_IDX  9
-#define PT_WIN2_BASE  ((uint64_t)PD_WIN2_IDX << 21)  /* 0x1200000 = 18 MB */
+#define PD_WIN2_IDX  11
+#define PT_WIN2_BASE  ((uint64_t)PD_WIN2_IDX << 21)  /* 0x1600000 = 22 MB */
+
+/* Permanent accessor for g_win_pt via PD[12] (VA 24 MB).
+ * Identity-mapped pages at g_win_pt's physical address get clobbered when
+ * user ELF loading maps a page at the same VA via paging_map_page_in_pd.
+ * PD[12] is outside any user ELF segment range so this mapping is safe.   */
+#define PD_GWIN_IDX  12
+#define G_WIN_PT_VA  ((struct page_table*)((uint64_t)PD_GWIN_IDX << 21))
+#define G_WIN2_PT_VA ((struct page_table*)(((uint64_t)PD_GWIN_IDX << 21) + 0x1000))
 
 static uint64_t kernel_pml4_phys = X86_64_PML4_PHYS;
 
-/* Allocated PT page for the PD_WIN window — allocated once in paging_init. */
-static struct page_table* g_win_pt = 0;
+/* Physical addresses of window page tables (immutable after paging_init). */
+static uint64_t g_win_pt_phys_addr = 0;
+static uint64_t g_win2_pt_phys_addr = 0;
 
 static inline void invlpg(uint64_t virt) {
     asm volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
 /* Map a physical 4KB frame at the PD_WIN window (returns virtual address).
- *
- * Access the window page-table DIRECTLY via g_win_pt (which is identity-mapped
- * within the first 16 MB) so that writing a PTE never corrupts the self-map at
- * g_win_pt[0]. The returned VA is PT_WIN_BASE + pt_idx * 4096.
- */
+ * PTE writes go through the permanent PD[12] accessor (G_WIN_PT_VA) to avoid
+ * clobbering identity-mapped pages that overlap user ELF virtual addresses. */
 static void* win_map(uint64_t phys, int pt_idx) {
     struct page_table* pd = X86_64_PD_VIRT;
     uint64_t old = pd->entries[PD_WIN_IDX];
     if ((old & 1) == 0 || (old & 0x80) != 0) {
         /* PD_WIN_IDX entry not yet a 4KB PT pointer — set it up once. */
-        if (!g_win_pt) {
-            void* pt_frame = pmm_alloc_frame();
-            if (!pt_frame) return 0;
-            g_win_pt = (struct page_table*)((uint64_t)(uintptr_t)pt_frame);
-            __builtin_memset(g_win_pt, 0, 4096);
-        }
-        uint64_t pt_phys = (uint64_t)(uintptr_t)g_win_pt;
-        pd->entries[PD_WIN_IDX] = (pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        pd->entries[PD_WIN_IDX] = (g_win_pt_phys_addr & 0xFFFFFFFFF000ULL) | 0x03;
         invlpg(PT_WIN_BASE);
     }
     uint64_t va = PT_WIN_BASE + (uint64_t)pt_idx * 4096;
-    /* Write PTE directly through identity-mapped g_win_pt.
-     * g_win_pt lives in the first 16 MB (identity-mapped), so virtual address
-     * equals physical address — safe to dereference directly. */
-    g_win_pt->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
+    G_WIN_PT_VA->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(va);
     return (void*)(uintptr_t)va;
 }
 
 static void win_unmap(int pt_idx) {
     uint64_t va = PT_WIN_BASE + (uint64_t)pt_idx * 4096;
-    g_win_pt->entries[pt_idx] = 0;
+    G_WIN_PT_VA->entries[pt_idx] = 0;
     invlpg(va);
 }
 
 /* Helper: same for PD_WIN2 */
 static void* win2_map(uint64_t phys, int pt_idx) {
     struct page_table* pd = X86_64_PD_VIRT;
-    uint64_t pt_phys = (uint64_t)(uintptr_t)g_win_pt;
-    uint64_t win2_pt_phys = pt_phys + 0x1000; /* one page after win_pt */
-    pd->entries[PD_WIN2_IDX] = (win2_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+    pd->entries[PD_WIN2_IDX] = (g_win2_pt_phys_addr & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(PT_WIN2_BASE);
     uint64_t va = PT_WIN2_BASE + (uint64_t)pt_idx * 4096;
-    struct page_table* win2_pt = (struct page_table*)((uint64_t)(uintptr_t)g_win_pt + 0x1000);
-    win2_pt->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
+    G_WIN2_PT_VA->entries[pt_idx] = (phys & 0xFFFFFFFFF000ULL) | 0x03;
     invlpg(va);
     return (void*)(uintptr_t)va;
 }
 
 static void win2_unmap(int pt_idx) {
     uint64_t va = PT_WIN2_BASE + (uint64_t)pt_idx * 4096;
-    struct page_table* win2_pt = (struct page_table*)((uint64_t)(uintptr_t)g_win_pt + 0x1000);
-    win2_pt->entries[pt_idx] = 0;
+    G_WIN2_PT_VA->entries[pt_idx] = 0;
     invlpg(va);
 }
 
@@ -116,28 +110,58 @@ void paging_init() {
 
     g_paging.kernel_directory = X86_64_PML4_VIRT;
 
-    /* Extend identity map to 16 MB: PD entries 2-7 as 2MB huge pages */
+    /* Extend identity map to 32 MB: PD entries 2-15 as 2MB huge pages.
+     * The kernel image may exceed 16 MB when large userland binaries are
+     * embedded via include_bytes!, so we need the full 32 MB range.       */
     struct page_table* pd = X86_64_PD_VIRT;
-    for (int i = 2; i < 8; i++) {
+    for (int i = 2; i < 16; i++) {
         pd->entries[i] = ((uint64_t)i << 21) | 0x83ULL;
     }
 
-    /* Pre-allocate the window page table */
+    /* Pre-allocate three separate frames:
+     *   g_win_pt_phys_addr   — page table for PD_WIN  (window 1)
+     *   g_win2_pt_phys_addr  — page table for PD_WIN2 (window 2)
+     *   accessor PT          — maps G_WIN_PT_VA / G_WIN2_PT_VA
+     * Each must be a distinct physical frame to avoid aliasing.             */
     void* win_frame = pmm_alloc_frame();
     if (win_frame) {
-        g_win_pt = (struct page_table*)(uintptr_t)win_frame;
-        __builtin_memset(g_win_pt, 0, 4096);
-        /* Also zero the page after win_pt for win2 */
-        __builtin_memset((void*)((uintptr_t)g_win_pt + 0x1000), 0, 4096);
-
-        /* Self-map: PT[0] → g_win_pt so win_map can access 0x1000000 */
-        ((uint64_t*)(uintptr_t)g_win_pt)[0] =
-            ((uint64_t)(uintptr_t)g_win_pt & 0xFFFFFFFFF000ULL) | 0x03;
+        g_win_pt_phys_addr = (uint64_t)(uintptr_t)win_frame;
+        __builtin_memset(win_frame, 0, 4096);
+    }
+    void* win2_frame = pmm_alloc_frame();
+    if (win2_frame) {
+        g_win2_pt_phys_addr = (uint64_t)(uintptr_t)win2_frame;
+        __builtin_memset(win2_frame, 0, 4096);
     }
 
-    serial_print("  Identity map extended to 16 MB\n");
+    /* Set up permanent g_win_pt accessor via PD[12] (VA 24 MB).
+     * User ELF loading overwrites identity-mapped PTEs that overlap with
+     * user virtual addresses (e.g. g_win_pt at phys 0x100000 gets clobbered
+     * when a user page is mapped at VA 0x100000).  PD[12] is outside any
+     * user ELF segment range, so this mapping is never touched.           */
+    void* gwin_acc_frame = pmm_alloc_frame();
+    if (gwin_acc_frame) {
+        uint64_t acc_phys = (uint64_t)(uintptr_t)gwin_acc_frame;
+        /* Temporarily identity-map the accessor PT frame to initialize it.
+         * At this point identity mapping is still intact.                 */
+        ((struct page_table*)(uintptr_t)acc_phys)->entries[0] =
+            (g_win_pt_phys_addr & 0xFFFFFFFFF000ULL) | 0x03;
+        ((struct page_table*)(uintptr_t)acc_phys)->entries[1] =
+            (g_win2_pt_phys_addr & 0xFFFFFFFFF000ULL) | 0x03;
+        /* Install PD[12] entry (replaces the 2MB huge page) */
+        pd->entries[PD_GWIN_IDX] = (acc_phys & 0xFFFFFFFFF000ULL) | 0x03;
+        invlpg((uint64_t)PD_GWIN_IDX << 21);
+    }
+
+    serial_print("  Identity map extended to 32 MB\n");
     serial_print("  Window PT at phys 0x");
-    serial_print_hex64((uint64_t)(uintptr_t)g_win_pt);
+    serial_print_hex64(g_win_pt_phys_addr);
+    serial_print("\n");
+    serial_print("  Window2 PT at phys 0x");
+    serial_print_hex64(g_win2_pt_phys_addr);
+    serial_print("\n");
+    serial_print("  g_win_pt VA (PD[12]) = 0x");
+    serial_print_hex64((uint64_t)G_WIN_PT_VA);
     serial_print("\n");
 }
 
@@ -146,7 +170,7 @@ void paging_enable() {
 }
 
 /* 4-level page walk: PML4 → PDPT → PD → PT.
- * For virtual addresses in the first 16 MB (PML4[0], PDPT[0]),
+ * For virtual addresses in the first 32 MB (PML4[0], PDPT[0]),
  * the tables are identity-mapped and directly accessible.       */
 static uint64_t* get_page_entry(uint64_t virt_addr, bool create) {
     uint64_t pml4_idx = (virt_addr >> 39) & 0x1FF;
@@ -286,29 +310,83 @@ uintptr_t paging_get_physical_address(uintptr_t virt_addr) {
 
 uintptr_t paging_create_directory_phys() {
     /* Allocate a new PML4 frame */
-    void* pd_frame = pmm_alloc_frame();
-    if (!pd_frame) {
+    void* pml4_frame = pmm_alloc_frame();
+    if (!pml4_frame) {
         serial_print("Paging: ERROR - Failed to allocate PML4 frame\n");
         return 0;
     }
-    uint64_t new_pml4_phys = (uint64_t)(uintptr_t)pd_frame;
+    uint64_t new_pml4_phys = (uint64_t)(uintptr_t)pml4_frame;
 
-    /* Map it through the window and zero it */
-    void* win_va = win_map(new_pml4_phys, PT_TEMP_IDX);
-    if (!win_va) {
+    /* Allocate a new PDPT frame (user gets its own copy) */
+    void* pdpt_frame = pmm_alloc_frame();
+    if (!pdpt_frame) {
+        pmm_free_frame(pml4_frame);
+        serial_print("Paging: ERROR - Failed to allocate PDPT frame\n");
+        return 0;
+    }
+    uint64_t new_pdpt_phys = (uint64_t)(uintptr_t)pdpt_frame;
+
+    /* Allocate a new PD frame (user gets its own copy of identity map entries).
+     * This is critical: if the user shares the kernel's PD, mapping user ELF
+     * pages at VA >= 2MB would corrupt the kernel's own page tables.         */
+    void* pd_frame = pmm_alloc_frame();
+    if (!pd_frame) {
+        pmm_free_frame(pml4_frame);
+        pmm_free_frame(pdpt_frame);
+        serial_print("Paging: ERROR - Failed to allocate PD frame\n");
+        return 0;
+    }
+    uint64_t new_pd_phys = (uint64_t)(uintptr_t)pd_frame;
+
+    /* Map and initialize the new PD: copy kernel identity-map entries (0-15)
+     * and window-mapping entries so the user has valid identity mapping
+     * starting from boot.                                                    */
+    void* pd_va = win_map(new_pd_phys, PT_TEMP_IDX);
+    if (!pd_va) {
+        pmm_free_frame(pml4_frame);
+        pmm_free_frame(pdpt_frame);
         pmm_free_frame(pd_frame);
         return 0;
     }
-    struct page_directory* new_pml4 = (struct page_directory*)win_va;
+    struct page_directory* new_pd = (struct page_directory*)pd_va;
+
+    /* Read kernel PD entries via its identity-mapped VA */
+    struct page_directory* kern_pd = X86_64_PD_VIRT;
+    for (int i = 0; i < 512; i++) {
+        new_pd->entries[i] = kern_pd->entries[i];
+    }
+    win_unmap(PT_TEMP_IDX);
+
+    /* Map and initialize the new PDPT: only entry[0] → new PD */
+    void* pdpt_va = win_map(new_pdpt_phys, PT_TEMP_IDX);
+    if (!pdpt_va) {
+        pmm_free_frame(pml4_frame);
+        pmm_free_frame(pdpt_frame);
+        pmm_free_frame(pd_frame);
+        return 0;
+    }
+    struct page_directory* new_pdpt = (struct page_directory*)pdpt_va;
+    for (int i = 0; i < 512; i++) {
+        new_pdpt->entries[i] = 0;
+    }
+    new_pdpt->entries[0] = (new_pd_phys & 0xFFFFFFFFF000ULL) | 0x03;
+    win_unmap(PT_TEMP_IDX);
+
+    /* Map and initialize the new PML4: entry[0] → new PDPT */
+    void* pml4_va = win_map(new_pml4_phys, PT_TEMP_IDX);
+    if (!pml4_va) {
+        pmm_free_frame(pml4_frame);
+        pmm_free_frame(pdpt_frame);
+        pmm_free_frame(pd_frame);
+        return 0;
+    }
+    struct page_directory* new_pml4 = (struct page_directory*)pml4_va;
     for (int i = 0; i < 512; i++) {
         new_pml4->entries[i] = 0;
     }
-
-    /* Copy kernel PML4 entries (only index 0 for now) */
-    struct page_directory* cur_pml4 = X86_64_PML4_VIRT;
-    new_pml4->entries[0] = cur_pml4->entries[0];
-
+    new_pml4->entries[0] = (new_pdpt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     win_unmap(PT_TEMP_IDX);
+
     return (uintptr_t)new_pml4_phys;
 }
 
@@ -319,6 +397,69 @@ void paging_destroy_directory(uintptr_t pd_phys) {
     void* win_va = win_map((uint64_t)pd_phys, PT_TEMP_IDX);
     if (!win_va) return;
     struct page_directory* pml4 = (struct page_directory*)win_va;
+
+    /* Also destroy user-owned entry[0] (PDPT + PD allocated separately
+     * by paging_create_directory_phys).  We skip entry[0] in the normal
+     * walk because it was previously shared with the kernel, but now it
+     * points to user-owned frames that must be freed.                    */
+    {
+        uint64_t pml4e0 = pml4->entries[0];
+        if (pml4e0 & 1) {
+            uint64_t pdpt0_phys = pml4e0 & 0xFFFFFFFFF000ULL;
+            void* pdpt0_va = win_map(pdpt0_phys, PT_TEMP_IDX);
+            if (pdpt0_va) {
+                struct page_directory* pdpt0 = (struct page_directory*)pdpt0_va;
+                uint64_t pd0_entry = pdpt0->entries[0];
+                if (pd0_entry & 1) {
+                    uint64_t pd0_phys = pd0_entry & 0xFFFFFFFFF000ULL;
+                    /* Walk the user PD and free all owned PTs + page frames */
+                    struct page_table* pd0 = (struct page_table*)win_map(pd0_phys, PT_TEMP_IDX);
+                    if (pd0) {
+                        for (int pd_i = 0; pd_i < 512; pd_i++) {
+                            uint64_t pde = pd0->entries[pd_i];
+                            if (!(pde & 1)) continue;
+                            if (pde & 0x80) {
+                                /* 2MB huge page — original identity map entry,
+                                 * not owned by the user process. Skip.         */
+                                continue;
+                            }
+                            /* 4KB PT pointer — may be user-allocated PT */
+                            uint64_t pt_phys = pde & 0xFFFFFFFFF000ULL;
+                            /* Check if this PT was allocated for the user
+                             * (not the kernel's original identity-map PT).
+                             * Kernel identity-map PTs have physical addresses
+                             * below 32 MB.  User-allocated PTs are above.     */
+                            if (pt_phys >= 0x02000000) {
+                                struct page_table* pt = (struct page_table*)win_map(pt_phys, PT_TEMP_IDX);
+                                if (pt) {
+                                    for (int pt_i = 0; pt_i < 512; pt_i++) {
+                                        uint64_t pte = pt->entries[pt_i];
+                                        if (!(pte & 1)) continue;
+                                        uint64_t frame = pte & 0xFFFFFFFFF000ULL;
+                                        /* Only free user-allocated frames (above 32 MB) */
+                                        if (frame >= 0x02000000) {
+                                            if (pte & PAGE_COW)
+                                                pmm_refcount_dec((void*)(uintptr_t)frame);
+                                            else
+                                                pmm_free_frame((void*)(uintptr_t)frame);
+                                        }
+                                        pt->entries[pt_i] = 0;
+                                    }
+                                    pmm_free_frame((void*)(uintptr_t)pt_phys);
+                                }
+                                pd0->entries[pd_i] = 0;
+                            }
+                        }
+                        win_unmap(PT_TEMP_IDX);
+                    }
+                    pmm_free_frame((void*)(uintptr_t)pd0_phys);
+                }
+                win_unmap(PT_TEMP_IDX);
+            }
+            pmm_free_frame((void*)(uintptr_t)pdpt0_phys);
+            pml4->entries[0] = 0;
+        }
+    }
 
     /* Walk PML4 entries 4..511 (skip kernel entries 0..3). */
     for (int pml4_i = 4; pml4_i < 512; pml4_i++) {
@@ -775,9 +916,13 @@ uint8_t paging_handle_cow_fault(uintptr_t fault_addr) {
 
 bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
                             uintptr_t phys_addr, uint32_t flags) {
-    /* Map source PD through window */
+    /* NOTE: caller must disable interrupts — win_map/win_unmap use a shared
+     * window slot (PT_TEMP_IDX) that gets clobbered if a context switch
+     * fires between win_map and win_unmap. */
+    bool result = false;
+
     void* win_va = win_map((uint64_t)pd_phys, PT_TEMP_IDX);
-    if (!win_va) return false;
+    if (!win_va) goto out;
     struct page_directory* pml4 = (struct page_directory*)win_va;
 
     uint64_t vaddr = (uint64_t)virt_addr;
@@ -786,37 +931,19 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     uint64_t pd_idx   = (vaddr >> 21) & 0x1FF;
     uint64_t pt_idx   = (vaddr >> 12) & 0x1FF;
 
-    /* First 16 MB is shared kernel space — use kernel_pts */
-    if (pml4_idx == 0 && pdpt_idx == 0 && pd_idx < 8) {
-        /* For the identity-mapped PD entries, need a proper 4KB PT window.
-         * Since PD entries 0-7 are 2MB huge pages, we can't do 4KB mapping there.
-         * Use the dedicated window PT instead. */
-        /* Share kernel page tables by cloning entries into the target PML4.
-         * pml4 is still mapped at the window VA — write before unmapping. */
-        pml4->entries[0] = X86_64_PML4_VIRT->entries[0];
-        /* Unmap pd_phys from the window slot, then install the user mapping
-         * through g_win_pt (identity-mapped) so the self-map is not needed. */
-        win_unmap(PT_TEMP_IDX);
-        g_win_pt->entries[pt_idx] = ((uint64_t)phys_addr & 0xFFFFFFFFF000ULL) | (flags & 0xFFFULL) | 1;
-        invlpg(virt_addr);
-        return true;
-    }
-
-    /* Walk/create page tables in the target PML4 for non-shared addresses */
+    /* Walk/create page tables in the target PML4 */
     /* --- PML4 entry --- */
     if (!(pml4->entries[pml4_idx] & 1)) {
         void* new_pdpt = pmm_alloc_frame();
-        if (!new_pdpt) { win_unmap(PT_TEMP_IDX); return false; }
+        if (!new_pdpt) { win_unmap(PT_TEMP_IDX); goto out; }
         uint64_t new_pdpt_phys = (uint64_t)(uintptr_t)new_pdpt;
-        /* Map through window before zeroing — frame may not be identity-mapped */
         win_unmap(PT_TEMP_IDX);
         void* zero_va = win_map(new_pdpt_phys, PT_TEMP_IDX);
-        if (!zero_va) { pmm_free_frame(new_pdpt); return false; }
+        if (!zero_va) { pmm_free_frame(new_pdpt); goto out; }
         __builtin_memset(zero_va, 0, 4096);
-        /* Remap source PML4 and install entry */
         win_unmap(PT_TEMP_IDX);
         pml4 = (struct page_directory*)win_map((uint64_t)pd_phys, PT_TEMP_IDX);
-        if (!pml4) { pmm_free_frame(new_pdpt); return false; }
+        if (!pml4) { pmm_free_frame(new_pdpt); goto out; }
         pml4->entries[pml4_idx] = (new_pdpt_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
@@ -824,22 +951,20 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     uint64_t pdpt_phys = pml4->entries[pml4_idx] & 0xFFFFFFFFF000ULL;
     win_unmap(PT_TEMP_IDX);
     void* pdpt_va = win_map(pdpt_phys, PT_TEMP_IDX);
-    if (!pdpt_va) return false;
+    if (!pdpt_va) goto out;
     struct page_table* pdpt = (struct page_table*)pdpt_va;
 
     if (!(pdpt->entries[pdpt_idx] & 1)) {
         void* new_pd = pmm_alloc_frame();
-        if (!new_pd) { win_unmap(PT_TEMP_IDX); return false; }
+        if (!new_pd) { win_unmap(PT_TEMP_IDX); goto out; }
         uint64_t new_pd_phys = (uint64_t)(uintptr_t)new_pd;
-        /* Map through window before zeroing — frame may not be identity-mapped */
         win_unmap(PT_TEMP_IDX);
         void* zero_va = win_map(new_pd_phys, PT_TEMP_IDX);
-        if (!zero_va) { pmm_free_frame(new_pd); return false; }
+        if (!zero_va) { pmm_free_frame(new_pd); goto out; }
         __builtin_memset(zero_va, 0, 4096);
-        /* Remap PDPT and install entry */
         win_unmap(PT_TEMP_IDX);
         pdpt = (struct page_table*)win_map(pdpt_phys, PT_TEMP_IDX);
-        if (!pdpt) { pmm_free_frame(new_pd); return false; }
+        if (!pdpt) { pmm_free_frame(new_pd); goto out; }
         pdpt->entries[pdpt_idx] = (new_pd_phys & 0xFFFFFFFFF000ULL) | 0x03;
     }
 
@@ -847,43 +972,68 @@ bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr,
     uint64_t pd_phys_tbl = pdpt->entries[pdpt_idx] & 0xFFFFFFFFF000ULL;
     win_unmap(PT_TEMP_IDX);
     void* pd_va = win_map(pd_phys_tbl, PT_TEMP_IDX);
-    if (!pd_va) return false;
+    if (!pd_va) goto out;
     struct page_table* pd_tbl = (struct page_table*)pd_va;
 
     if (!(pd_tbl->entries[pd_idx] & 1)) {
+        /* Not present — allocate a fresh PT */
         void* new_pt = pmm_alloc_frame();
-        if (!new_pt) { win_unmap(PT_TEMP_IDX); return false; }
+        if (!new_pt) { win_unmap(PT_TEMP_IDX); goto out; }
         uint64_t new_pt_phys = (uint64_t)(uintptr_t)new_pt;
-        /* Map through window before zeroing — frame may not be identity-mapped */
         win_unmap(PT_TEMP_IDX);
         void* zero_va = win_map(new_pt_phys, PT_TEMP_IDX);
-        if (!zero_va) { pmm_free_frame(new_pt); return false; }
+        if (!zero_va) { pmm_free_frame(new_pt); goto out; }
         __builtin_memset(zero_va, 0, 4096);
-        /* Remap PD and install entry */
         win_unmap(PT_TEMP_IDX);
         pd_tbl = (struct page_table*)win_map(pd_phys_tbl, PT_TEMP_IDX);
-        if (!pd_tbl) { pmm_free_frame(new_pt); return false; }
+        if (!pd_tbl) { pmm_free_frame(new_pt); goto out; }
         pd_tbl->entries[pd_idx] = (new_pt_phys & 0xFFFFFFFFF000ULL) | 0x03;
+    } else if (pd_tbl->entries[pd_idx] & 0x80) {
+        /* 2MB huge page — split into a 4KB page table with identity-mapped entries. */
+        uint64_t huge_phys_base = pd_tbl->entries[pd_idx] & 0xFFFFFFFFFE00ULL;
+        uint64_t huge_flags     = pd_tbl->entries[pd_idx] & 0xFFfull;
+        uint64_t pt_flags = huge_flags & ~0x80ULL;
+
+        void* new_pt = pmm_alloc_frame();
+        if (!new_pt) { win_unmap(PT_TEMP_IDX); goto out; }
+        uint64_t new_pt_phys = (uint64_t)(uintptr_t)new_pt;
+
+        win_unmap(PT_TEMP_IDX);
+        void* pt_fill_va = win_map(new_pt_phys, PT_TEMP_IDX);
+        if (!pt_fill_va) { pmm_free_frame(new_pt); goto out; }
+        struct page_table* new_pt_tbl = (struct page_table*)pt_fill_va;
+        for (int i = 0; i < 512; i++) {
+            new_pt_tbl->entries[i] = (huge_phys_base + ((uint64_t)i << 12)) | pt_flags | 1;
+        }
+        win_unmap(PT_TEMP_IDX);
+        pd_tbl = (struct page_table*)win_map(pd_phys_tbl, PT_TEMP_IDX);
+        if (!pd_tbl) { pmm_free_frame(new_pt); goto out; }
+        pd_tbl->entries[pd_idx] = (new_pt_phys & 0xFFFFFFFFF000ULL) | (pt_flags & ~0x80ULL);
+        asm volatile("mov %%cr3, %%rax; mov %%rax, %%cr3" ::: "rax", "memory");
     }
 
     /* --- PT entry --- */
     uint64_t pt_phys = pd_tbl->entries[pd_idx] & 0xFFFFFFFFF000ULL;
     win_unmap(PT_TEMP_IDX);
     void* pt_va = win_map(pt_phys, PT_TEMP_IDX);
-    if (!pt_va) return false;
+    if (!pt_va) goto out;
     struct page_table* pt = (struct page_table*)pt_va;
 
     pt->entries[pt_idx] = ((uint64_t)phys_addr & 0xFFFFFFFFF000ULL) | (flags & 0xFFFULL) | 1;
 
     win_unmap(PT_TEMP_IDX);
-    return true;
+    invlpg(virt_addr);
+    result = true;
+
+out:
+    return result;
 }
 
 void* paging_temp_map_frame(uintptr_t phys_addr) {
     /* Use a dedicated window slot (511) via win_map so we don't
      * conflict with the self-map at index 0 or with other win_map
-     * callers that use index 0.  win_map accesses g_win_pt through
-     * identity-mapped memory, so the self-map is not needed.       */
+     * callers that use index 0. PTE writes go through PD[12]
+     * (G_WIN_PT_VA) so identity-mapped pages are not touched.    */
     return win_map(phys_addr, 511);
 }
 

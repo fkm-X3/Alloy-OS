@@ -173,11 +173,33 @@ int atexit(void (*func)(void)) { (void)func; return 0; }
 // ── Time ─────────────────────────────────────────────────────────────────────
 
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
-    (void)clk_id; if (tp) { tp->tv_sec = 0; tp->tv_nsec = 0; } return 0;
+    (void)clk_id;
+    if (!tp) return -1;
+    // Use SYS_GETTIMEOFDAY to get real uptime
+    unsigned long tv_buf[2] = {0, 0};
+    long ret = SYSCALL_FN(SYS_GETTIMEOFDAY, (long)tv_buf, 0, 0, 0, 0);
+    if (ret == 0 || ret == (long)tv_buf) {
+        tp->tv_sec = (time_t)tv_buf[0];
+        tp->tv_nsec = (long)tv_buf[1] * 1000; // usec -> nsec
+    } else {
+        tp->tv_sec = 0;
+        tp->tv_nsec = 0;
+    }
+    return 0;
 }
 int gettimeofday(struct timeval *tv, void *tz) {
-    if (tv) { tv->tv_sec = 0; tv->tv_usec = 0; }
-    (void)tz; return 0;
+    (void)tz;
+    if (!tv) return -1;
+    unsigned long tv_buf[2] = {0, 0};
+    long ret = SYSCALL_FN(SYS_GETTIMEOFDAY, (long)tv_buf, 0, 0, 0, 0);
+    if (ret == 0 || ret == (long)tv_buf) {
+        tv->tv_sec = (time_t)tv_buf[0];
+        tv->tv_usec = (suseconds_t)tv_buf[1];
+    } else {
+        tv->tv_sec = 0;
+        tv->tv_usec = 0;
+    }
+    return 0;
 }
 time_t time(time_t *t) { if (t) *t = 0; return 0; }
 int nanosleep(const struct timespec *req, struct timespec *rem) {
@@ -430,9 +452,13 @@ int stat(const char *path, struct stat *buf) { (void)path; (void)buf; return -1;
 int fstat(int fd, struct stat *buf) { (void)fd; (void)buf; return -1; }
 int lstat(const char *path, struct stat *buf) { (void)path; (void)buf; return -1; }
 int access(const char *path, int mode) { (void)path; (void)mode; return 0; }
+ssize_t readlink(const char *path, char *buf, size_t bufsiz) { (void)path; (void)buf; (void)bufsiz; return -1; }
 int dup(int oldfd) { (void)oldfd; return -1; }
 int dup2(int oldfd, int newfd) { (void)oldfd; (void)newfd; return -1; }
-int pipe(int pipefd[2]) { (void)pipefd; return -1; }
+int pipe(int pipefd[2]) {
+    if (!pipefd) return -1;
+    return (int)SYSCALL_FN(SYS_PIPE, (long)pipefd, 0, 0, 0, 0);
+}
 int fcntl(int fd, int cmd, ...) { (void)fd; (void)cmd; return -1; }
 int ioctl(int fd, unsigned long request, ...) { (void)fd; (void)request; return -1; }
 int ftruncate(int fd, off_t length) { (void)fd; (void)length; return -1; }
@@ -640,12 +666,20 @@ int fstat64(int fd, struct stat *buf) { (void)fd; (void)buf; return -1; }
 
 // ── Memory mapping ─────────────────────────────────────────────────────────
 void *mmap64(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-    (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset; return (void*)-1;
+    (void)fd; (void)offset; (void)prot;
+    if (length == 0) return (void*)-1;
+    // MAP_ANONYMOUS: allocate via SYS_MMAP
+    int map_anon = (flags & 0x10) != 0;
+    if (map_anon) {
+        void *p = (void*)(long)SYSCALL_FN(SYS_MMAP, (long)addr, (long)length, (long)flags, 0, 0);
+        return p;
+    }
+    return (void*)-1;
 }
 void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset) {
-    (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset; return (void*)-1;
+    return mmap64(addr, length, prot, flags, fd, offset);
 }
-int munmap(void *addr, size_t length) { (void)addr; (void)length; return -1; }
+int munmap(void *addr, size_t length) { (void)addr; (void)length; return 0; }
 
 // ── System info ────────────────────────────────────────────────────────────
 struct utsname { char sysname[65]; char nodename[65]; char release[65]; char version[65]; char machine[65]; };

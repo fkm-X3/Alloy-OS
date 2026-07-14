@@ -165,6 +165,24 @@ setup_page_tables:
     mov dword [PD_BASE + 56], 0xE00000 | 0x83
     mov dword [PD_BASE + 60], 0x000000
 
+    ; PD entries 8-15: 16MB-32MB (needed for large kernel with embedded Qt6 binary)
+    mov dword [PD_BASE + 64], 0x1000000 | 0x83
+    mov dword [PD_BASE + 68], 0x000000
+    mov dword [PD_BASE + 72], 0x1200000 | 0x83
+    mov dword [PD_BASE + 76], 0x000000
+    mov dword [PD_BASE + 80], 0x1400000 | 0x83
+    mov dword [PD_BASE + 84], 0x000000
+    mov dword [PD_BASE + 88], 0x1600000 | 0x83
+    mov dword [PD_BASE + 92], 0x000000
+    mov dword [PD_BASE + 96], 0x1800000 | 0x83
+    mov dword [PD_BASE + 100], 0x000000
+    mov dword [PD_BASE + 104], 0x1A00000 | 0x83
+    mov dword [PD_BASE + 108], 0x000000
+    mov dword [PD_BASE + 112], 0x1C00000 | 0x83
+    mov dword [PD_BASE + 116], 0x000000
+    mov dword [PD_BASE + 120], 0x1E00000 | 0x83
+    mov dword [PD_BASE + 124], 0x000000
+
     ret
 
 bits 64

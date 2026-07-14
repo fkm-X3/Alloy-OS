@@ -143,13 +143,39 @@ fn map_elf_segment(
     let aligned_start = vaddr & !(page_size - 1);
     let aligned_end = (vaddr + memsz).div_ceil(page_size) * page_size;
     let alloc_size = aligned_end - aligned_start;
+    let npages = alloc_size / page_size;
+    unsafe {
+        ffi::serial_print(c"[spawn] seg v=0x".as_ptr() as *const u8);
+        ffi::serial_print_hex64(vaddr as u64);
+        ffi::serial_print(c" pages=0x".as_ptr() as *const u8);
+        ffi::serial_print_hex64(npages as u64);
+        ffi::serial_print(c"\n".as_ptr() as *const u8);
+    }
 
     let mut page_addr = aligned_start;
+    let mut count: u64 = 0;
+
+    // Disable interrupts for the ENTIRE mapping loop to prevent timer-driven
+    // context switches from clobbering the shared window slot (PT_TEMP_IDX)
+    // used by win_map/win_unmap inside paging_map_page_in_pd and
+    // paging_temp_map_frame.  Serial I/O is polled so it works without ints.
+    unsafe { core::arch::asm!("cli"); }
+
     while page_addr < aligned_start + alloc_size {
+        unsafe { ffi::serial_print(c"a".as_ptr() as *const u8); }
         let phys = unsafe { ffi::pmm_alloc_frame() };
-        if phys.is_null() { return false; }
+        if phys.is_null() {
+            unsafe {
+                ffi::serial_print(c"[spawn] OOM at page_addr=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(page_addr as u64);
+                ffi::serial_print(c"\n".as_ptr() as *const u8);
+                core::arch::asm!("sti");
+            }
+            return false;
+        }
         let phys_addr = phys as usize;
 
+        unsafe { ffi::serial_print(c"b".as_ptr() as *const u8); }
         let temp = unsafe { ffi::paging_temp_map_frame(phys_addr) };
         let page_off = page_addr.saturating_sub(vaddr);
         if page_off < filesz {
@@ -161,9 +187,36 @@ fn map_elf_segment(
         }
         unsafe { ffi::paging_temp_unmap_frame(); }
 
+        unsafe { ffi::serial_print(c"c".as_ptr() as *const u8); }
         let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr, phys_addr, page_flags) };
-        if !ok { return false; }
+        unsafe { ffi::serial_print(c"d".as_ptr() as *const u8); }
+        if !ok {
+            unsafe {
+                ffi::serial_print(c"[spawn] MAP FAIL page_addr=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(page_addr as u64);
+                ffi::serial_print(c"\n".as_ptr() as *const u8);
+                core::arch::asm!("sti");
+            }
+            return false;
+        }
         page_addr += page_size;
+        count += 1;
+        if (count & 0xFF) == 0 {
+            unsafe {
+                ffi::serial_print(c"[spawn] progress count=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(count);
+                ffi::serial_print(c" page_addr=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(page_addr as u64);
+                ffi::serial_print(c"\n".as_ptr() as *const u8);
+            }
+        }
+    }
+
+    unsafe { core::arch::asm!("sti"); }
+    unsafe {
+        ffi::serial_print(c"[spawn] seg done v=0x".as_ptr() as *const u8);
+        ffi::serial_print_hex64(vaddr as u64);
+        ffi::serial_print(c"\n".as_ptr() as *const u8);
     }
     true
 }

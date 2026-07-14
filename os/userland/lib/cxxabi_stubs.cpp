@@ -440,15 +440,11 @@ void __cxa_call_once(void* flag, void (*func)(void*), void* arg) {
 // ── Qt internal platform stubs (missing platform-specific implementations) ──
 // These should never be called at runtime in our test app; they exist only to
 // satisfy the linker. Compiled with -fno-rtti -fno-exceptions.
-
-// QElapsedTimer platform implementation (normally in qelapsedtimer_unix.cpp)
-extern "C" void _ZN13QElapsedTimer5startEv(void* this_) {
-    (void)this_;
-}
-extern "C" long long _ZNK13QElapsedTimer7elapsedEv(void* this_) {
-    (void)this_;
-    return 0;
-}
+//
+// NOTE: QElapsedTimer, QDeadlineTimer, qt_readlink are now provided by the
+// real Qt6 static libraries (libQt6Core.a). We must NOT define them here or
+// the object file definitions shadow the archive definitions and the real
+// implementations are never linked.
 
 // QThreadData::current(bool create) — normally in qthread_unix.cpp
 extern "C" void* _ZN11QThreadData7currentEb(void* this_, int create) {
@@ -532,18 +528,6 @@ extern "C" int _ZN7QThread4waitE14QDeadlineTimer(void* this_, void* timer) {
 // QThread::idealThreadCount() — static, normally in qthread_unix.cpp
 extern "C" int _ZN7QThread16idealThreadCountEv() {
     return 1;
-}
-
-// QDeadlineTimer::current(Qt::TimerType) — static platform-specific
-extern "C" void _ZN14QDeadlineTimer7currentEN2Qt9TimerTypeE(void* this_, int timerType) {
-    // Return a timer that never expires (very far in the future)
-    // The struct QDeadlineTimer has a single int64_t field
-    (void)timerType;
-    if (this_) {
-        // Set to a very large value (milliseconds from "now")
-        long long* ptr = (long long*)this_;
-        *ptr = 0x7FFFFFFFFFFFFFFFLL;
-    }
 }
 
 // QFSFileEngine::id() const — normally in qfsfileengine_unix.cpp

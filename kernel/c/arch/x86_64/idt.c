@@ -208,6 +208,28 @@ void exception_handler(struct interrupt_frame* frame) {
         uint64_t fault_addr;
         asm volatile("mov %%cr2, %0" : "=r"(fault_addr));
 
+        uint64_t cr3_val;
+        asm volatile("mov %%cr3, %0" : "=r"(cr3_val));
+        serial_print("\n!!! PAGE FAULT at 0x");
+        serial_print_hex64(fault_addr);
+        serial_print(" Error Code: ");
+        serial_print_hex((uint32_t)err_code);
+        serial_print("\n  CR3=0x"); serial_print_hex64(cr3_val);
+        serial_print(" RIP=0x"); serial_print_hex64(frame->rip);
+        serial_print(" RSP=0x"); serial_print_hex64(frame->rsp);
+        serial_print("\n");
+
+        /* Dump kernel PML4[0], PDPT[0], PD[12] for G_WIN_PT_VA diagnosis */
+        {
+            uint64_t pml4e0 = *(uint64_t*)0x1000;
+            uint64_t pdpte0 = *(uint64_t*)0x2000;
+            uint64_t pde12  = *(uint64_t*)0x3060;
+            serial_print("  PML4[0]=0x"); serial_print_hex64(pml4e0);
+            serial_print(" PDPT[0]=0x"); serial_print_hex64(pdpte0);
+            serial_print(" PD[12]=0x");  serial_print_hex64(pde12);
+            serial_print("\n");
+        }
+
         // Check for COW fault: user-mode (bit 2), write (bit 1), present (bit 0)
         if ((err_code & 0x7) == 0x7) {
             if (paging_handle_cow_fault((uintptr_t)fault_addr)) {
@@ -217,12 +239,6 @@ void exception_handler(struct interrupt_frame* frame) {
                 return;
             }
         }
-
-        serial_print("\n!!! PAGE FAULT at 0x");
-        serial_print_hex64(fault_addr);
-        serial_print(" Error Code: ");
-        serial_print_hex((uint32_t)err_code);
-        serial_print("\n");
 
         if (err_code & 0x4) {
             serial_print("User-mode page fault, terminating current task...\n");

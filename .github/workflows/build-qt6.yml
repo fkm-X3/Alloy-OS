@@ -54,7 +54,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: qt6-${{ env.QT_VERSION }}
-          name: "Qt6 ${{{ env.QT_VERSION }}} for Alloy OS"
+          name: "Qt6 ${{ env.QT_VERSION }} for Alloy OS"
           files: qt6-build-tmp/qt6-alloy-x86_64.tar.gz
           make_latest: false
         env:

@@ -1,0 +1,61 @@
+name: Build Qt6 for Alloy OS
+
+on:
+  workflow_dispatch:
+    inputs:
+      qt_version:
+        description: 'Qt version to build'
+        required: false
+        default: '6.4.2'
+
+env:
+  QT_VERSION: ${{ github.event.inputs.qt_version || '6.4.2' }}
+
+jobs:
+  build-qt6:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            perl \
+            python3 \
+            pkg-config \
+            libclang-dev \
+            libgl1-mesa-dev \
+            libfontconfig1-dev \
+            libxkbcommon-dev \
+            libxcb-*-dev \
+            libwayland-dev
+
+      - name: Cache Qt6 build
+        uses: actions/cache@v4
+        with:
+          path: qt6-build-tmp
+          key: qt6-${{ env.QT_VERSION }}-${{ hashFiles('tools/build-qt6.sh') }}
+          restore-keys: |
+            qt6-${{ env.QT_VERSION }}-
+
+      - name: Build Qt6
+        run: |
+          CREATE_ARCHIVE=1 JOBS=$(nproc) ./tools/build-qt6.sh
+
+      - name: Upload Qt6 archive
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: qt6-${{ env.QT_VERSION }}
+          name: "Qt6 ${{{ env.QT_VERSION }}} for Alloy OS"
+          files: qt6-build-tmp/qt6-alloy-x86_64.tar.gz
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

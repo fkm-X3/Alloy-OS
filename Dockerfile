@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
     && add-apt-repository universe \
     && apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
+        cmake \
         nasm \
         grub-pc-bin \
         grub-common \
@@ -29,6 +30,13 @@ RUN apt-get update && apt-get install -y software-properties-common \
         g++-aarch64-linux-gnu \
         wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Qt6 cross-compiled static libs for Alloy OS DE (built by .github/workflows/build-qt6.yml)
+ARG QT6_RELEASE_URL=https://github.com/alloy-os/Alloy-OS/releases/download/qt6-6.4.2/qt6-alloy-x86_64.tar.gz
+RUN mkdir -p /opt/alloy && \
+    wget -qO /tmp/qt6-alloy.tar.gz "${QT6_RELEASE_URL}" && \
+    tar xzf /tmp/qt6-alloy.tar.gz -C / && \
+    rm /tmp/qt6-alloy.tar.gz
 
 RUN mkdir -p /opt/cross/bin && \
     printf '#!/bin/bash\nexec /usr/bin/gcc -m64 -ffreestanding -nostdlib "$@"\n' > /opt/cross/bin/x86_64-elf-gcc && \

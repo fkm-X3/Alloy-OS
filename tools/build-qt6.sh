@@ -1,20 +1,9 @@
-#!/usr/bin/env bash
-# build-qt6.sh — Cross-compile Qt6 6.4.2 for Alloy OS (x86_64)
-#
-# Produces a self-contained /opt/alloy/qt6/ tree with:
-#   - Static libraries (Core, Gui, Qml, Quick, QuickControls2, etc.)
-#   - rcc, moc, qsb tools
-#   - Headers and cmake configs
-#
-# Usage:
-#   sudo ./tools/build-qt6.sh              # install to /opt/alloy/qt6
-#   DESTDIR=/tmp/qt6 ./tools/build-qt6.sh  # install to /tmp/qt6/opt/alloy/qt6
-#
-# Requirements: cmake, ninja-build, python3, build-essential, perl
+# tools/build-qt6.sh
 set -euo pipefail
 
 QT_VERSION="6.4.2"
 QT_MAJOR="6.4"
+DESTDIR="${DESTDIR:-}"
 INSTALL_PREFIX="${DESTDIR}/opt/alloy/qt6"
 JOBS="${JOBS:-$(nproc)}"
 WORK_DIR=$(pwd)/qt6-build-tmp

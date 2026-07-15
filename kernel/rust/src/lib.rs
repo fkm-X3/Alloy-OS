@@ -174,6 +174,21 @@ pub extern "C" fn rust_main() {
         }
     }
 
+    // Spawn the QML desktop environment (Qt6 Quick + Wayland)
+    #[cfg(feature = "x86_64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/alloy_de_qml", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    unsafe {
+                        ffi::serial_print(c"[Spawn] Loading alloy_de_qml (QML desktop environment)\n".as_ptr() as *const u8);
+                    }
+                    process::spawn_user_elf(&image);
+                }
+            }
+        }
+    }
+
     unsafe {
         ffi::serial_print(c"[Rust] Starting scheduler — entering multitasking\n".as_ptr() as *const u8);
     }

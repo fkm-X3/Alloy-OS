@@ -110,12 +110,14 @@ endif()
 # ── QML resources (via rcc) ─────────────────────────────────────
 set(QRC_FILE ${CMAKE_SOURCE_DIR}/resources.qrc)
 set(RCC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qml_resources.cpp)
+if(EXISTS "${QT_HOST_PATH}/lib/cmake/Qt6" OR EXISTS "${QT_HOST_PATH}/libexec/rcc")
+    set(RCC_ENV QT_HOST_PATH=${QT_HOST_PATH} QT_PLUGIN_PATH=${QT_HOST_PATH}/plugins QML2_IMPORT_PATH=${QT_HOST_PATH}/qml)
+else()
+    set(RCC_ENV "")
+endif()
 add_custom_command(
     OUTPUT ${RCC_OUTPUT}
-    COMMAND ${CMAKE_COMMAND} -E env
-        "QT_HOST_PATH=${QT_HOST_PATH}"
-        "QT_PLUGIN_PATH=${QT_HOST_PATH}/plugins"
-        "QML2_IMPORT_PATH=${QT_HOST_PATH}/qml"
+    COMMAND ${CMAKE_COMMAND} -E env ${RCC_ENV}
         ${RCC_EXECUTABLE} --name qml --output ${RCC_OUTPUT} ${QRC_FILE}
     DEPENDS ${QRC_FILE}
         qml/main.qml qml/Desktop.qml qml/Panel.qml
@@ -127,10 +129,14 @@ add_custom_command(
 # ── MOC for TerminalProcess (Q_OBJECT without #include .moc) ────
 set(MOC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/moc_TerminalProcess.cpp)
 set(MOC_INCLUDES -I${QT6_QTBUILD}/include -I${QT6_QTBUILD}/include/QtCore -I${QT6_QTBUILD}/include/QtCore/6.4.2 -I${QT6_QTBUILD}/include/QtCore/6.4.2/QtCore -I${QT6_INSTALL}/src/qtbase/src -I${CMAKE_SOURCE_DIR}/src)
+if(EXISTS "${QT_HOST_PATH}/lib/cmake/Qt6" OR EXISTS "${QT_HOST_PATH}/libexec/moc")
+    set(MOC_ENV QT_HOST_PATH=${QT_HOST_PATH})
+else()
+    set(MOC_ENV "")
+endif()
 add_custom_command(
     OUTPUT ${MOC_OUTPUT}
-    COMMAND ${CMAKE_COMMAND} -E env
-        "QT_HOST_PATH=${QT_HOST_PATH}"
+    COMMAND ${CMAKE_COMMAND} -E env ${MOC_ENV}
         ${MOC_EXECUTABLE} ${MOC_INCLUDES} -o ${MOC_OUTPUT} ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     DEPENDS ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     COMMENT "Running MOC on TerminalProcess.h"

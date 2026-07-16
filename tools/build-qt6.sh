@@ -86,7 +86,7 @@ cmake "${QTBASE_SRC}" \
     2>&1 | tee "${WORK_DIR}/qtbase-configure.log"
 
 echo "--- Building qtbase (Core + Gui) ---"
-cmake --build . --target Qt6Core Qt6Gui -j"${JOBS}" \
+cmake --build . --target Core Gui -j"${JOBS}" \
     2>&1 | tee "${WORK_DIR}/qtbase-build.log"
 
 echo "--- Installing qtbase ---"
@@ -120,8 +120,8 @@ cmake "${QTDECL_SRC}" \
     2>&1 | tee "${WORK_DIR}/qtdeclarative-configure.log"
 
 echo "--- Building qtdeclarative (Qml + Quick) ---"
-cmake --build . --target Qt6Qml Qt6QmlModels Qt6Quick \
-    Qt6QuickControls2 Qt6QuickLayouts Qt6QuickTemplates2 \
+cmake --build . --target Qml QmlModels Quick \
+    QuickControls2 QuickLayouts QuickTemplates2 \
     -j"${JOBS}" \
     2>&1 | tee "${WORK_DIR}/qtdeclarative-build.log"
 

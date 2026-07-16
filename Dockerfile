@@ -43,8 +43,9 @@ RUN mkdir -p /opt/cross/bin && \
     printf '#!/bin/bash\nexec /usr/bin/g++ -m64 -ffreestanding -nostdlib "$@"\n' > /opt/cross/bin/x86_64-elf-g++ && \
     printf '#!/bin/bash\nexec /usr/bin/gcc -m64 "$@"\n' > /opt/cross/bin/x86_64-elf-gcc-qt && \
     printf '#!/bin/bash\nexec /usr/bin/g++ -m64 "$@"\n' > /opt/cross/bin/x86_64-elf-g++-qt && \
+    printf '#!/bin/bash\nexec /usr/bin/gcc -m64 "$@"\n' > /opt/cross/bin/x86_64-elf-gcc-qt6 && \
     printf '#!/bin/bash\nexec /usr/bin/g++ -m64 "$@"\n' > /opt/cross/bin/x86_64-elf-g++-qt6 && \
-    chmod +x /opt/cross/bin/x86_64-elf-gcc /opt/cross/bin/x86_64-elf-g++ /opt/cross/bin/x86_64-elf-gcc-qt /opt/cross/bin/x86_64-elf-g++-qt /opt/cross/bin/x86_64-elf-g++-qt6
+    chmod +x /opt/cross/bin/x86_64-elf-gcc /opt/cross/bin/x86_64-elf-g++ /opt/cross/bin/x86_64-elf-gcc-qt /opt/cross/bin/x86_64-elf-g++-qt /opt/cross/bin/x86_64-elf-gcc-qt6 /opt/cross/bin/x86_64-elf-g++-qt6
 
 ENV PATH=/opt/cross/bin:${PATH}
 

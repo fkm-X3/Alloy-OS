@@ -126,7 +126,9 @@ endif
 # DE is x86_64-only; skipped on aarch64 until Qt6 cross-compilation is ported.
 DE_OUT = de/build/alloy_de_qml
 QT_HOST_TOOLS ?=
-CMAKE_QT_HOST_FLAGS = $(if $(QT_HOST_TOOLS),-DQT_HOST_TOOLS_DIR=$(QT_HOST_TOOLS))
+QT_HOST_PATH ?=
+CMAKE_QT_HOST_FLAGS = $(if $(QT_HOST_TOOLS),-DQT_HOST_TOOLS_DIR=$(QT_HOST_TOOLS)) \
+                      $(if $(QT_HOST_PATH),-DQT_HOST_PATH=$(QT_HOST_PATH))
 
 de-build: userland
 ifeq ($(ARCH),aarch64)

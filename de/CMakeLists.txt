@@ -15,6 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ── Paths ───────────────────────────────────────────────────────
 set(QT6_INSTALL   /opt/alloy/qt6 CACHE PATH "Qt6 cross-compiled install prefix")
+set(QT_HOST_PATH  "${QT6_INSTALL}" CACHE PATH "Host Qt6 installation (rcc, moc, plugins, metadata)")
 set(QT_HOST_TOOLS_DIR "" CACHE PATH "Directory containing host Qt6 tools (rcc, moc)")
 set(QT6_QTBUILD   ${QT6_INSTALL}/build/qtbase-hangtest)
 set(QT6_QDBUILD   ${QT6_INSTALL}/src/qtdeclarative/build)
@@ -82,7 +83,7 @@ set(APP_SRC
 )
 
 if(QT_HOST_TOOLS_DIR STREQUAL "")
-    set(QT_HOST_TOOLS_DIR "${QT6_INSTALL}/libexec")
+    set(QT_HOST_TOOLS_DIR "${QT_HOST_PATH}/libexec")
 endif()
 
 find_program(RCC_EXECUTABLE NAMES rcc
@@ -106,16 +107,16 @@ if(NOT MOC_EXECUTABLE)
     message(FATAL_ERROR "moc not found – set QT_HOST_TOOLS_DIR or ensure host Qt tools are installed")
 endif()
 
-set(ENV{QT_HOST_PATH} "${QT6_INSTALL}")
-set(ENV{QT_PLUGIN_PATH} "${QT6_INSTALL}/plugins")
-set(ENV{QML2_IMPORT_PATH} "${QT6_INSTALL}/qml")
-
 # ── QML resources (via rcc) ─────────────────────────────────────
 set(QRC_FILE ${CMAKE_SOURCE_DIR}/resources.qrc)
 set(RCC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qml_resources.cpp)
 add_custom_command(
     OUTPUT ${RCC_OUTPUT}
-    COMMAND ${RCC_EXECUTABLE} --name qml --output ${RCC_OUTPUT} ${QRC_FILE}
+    COMMAND ${CMAKE_COMMAND} -E env
+        "QT_HOST_PATH=${QT_HOST_PATH}"
+        "QT_PLUGIN_PATH=${QT_HOST_PATH}/plugins"
+        "QML2_IMPORT_PATH=${QT_HOST_PATH}/qml"
+        ${RCC_EXECUTABLE} --name qml --output ${RCC_OUTPUT} ${QRC_FILE}
     DEPENDS ${QRC_FILE}
         qml/main.qml qml/Desktop.qml qml/Panel.qml
         qml/AppLauncher.qml qml/Terminal.qml
@@ -128,7 +129,9 @@ set(MOC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/moc_TerminalProcess.cpp)
 set(MOC_INCLUDES -I${QT6_QTBUILD}/include -I${QT6_QTBUILD}/include/QtCore -I${QT6_QTBUILD}/include/QtCore/6.4.2 -I${QT6_QTBUILD}/include/QtCore/6.4.2/QtCore -I${QT6_INSTALL}/src/qtbase/src -I${CMAKE_SOURCE_DIR}/src)
 add_custom_command(
     OUTPUT ${MOC_OUTPUT}
-    COMMAND ${MOC_EXECUTABLE} ${MOC_INCLUDES} -o ${MOC_OUTPUT} ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
+    COMMAND ${CMAKE_COMMAND} -E env
+        "QT_HOST_PATH=${QT_HOST_PATH}"
+        ${MOC_EXECUTABLE} ${MOC_INCLUDES} -o ${MOC_OUTPUT} ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     DEPENDS ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     COMMENT "Running MOC on TerminalProcess.h"
 )

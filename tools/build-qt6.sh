@@ -142,7 +142,11 @@ ls -lh "${INSTALL_PREFIX}/bin/" 2>/dev/null
 if [ "${CREATE_ARCHIVE:-0}" = "1" ]; then
     ARCHIVE="qt6-alloy-x86_64.tar.gz"
     echo "--- Creating archive: ${ARCHIVE} ---"
-    cd "${INSTALL_PREFIX}/../.."
+    if [ -n "${DESTDIR}" ]; then
+        cd "${DESTDIR}"
+    else
+        cd /
+    fi
     tar czf "${WORK_DIR}/${ARCHIVE}" opt/alloy/qt6
     echo "Archive: ${WORK_DIR}/${ARCHIVE}"
     ls -lh "${WORK_DIR}/${ARCHIVE}"

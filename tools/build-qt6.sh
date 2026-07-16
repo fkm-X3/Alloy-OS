@@ -85,8 +85,8 @@ cmake "${QTBASE_SRC}" \
     -DFEATURE_system_pcre2=OFF \
     2>&1 | tee "${WORK_DIR}/qtbase-configure.log"
 
-echo "--- Building qtbase (Core + Gui + tools) ---"
-cmake --build . --target Core Gui rcc -j"${JOBS}" \
+echo "--- Building qtbase (all targets) ---"
+cmake --build . -j"${JOBS}" \
     2>&1 | tee "${WORK_DIR}/qtbase-build.log"
 
 echo "--- Installing qtbase ---"

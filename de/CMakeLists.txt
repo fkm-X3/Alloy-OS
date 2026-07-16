@@ -80,12 +80,21 @@ set(APP_SRC
     src/main.cpp
 )
 
+find_program(RCC_EXECUTABLE rcc HINTS ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
+find_program(MOC_EXECUTABLE moc HINTS ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
+if(NOT RCC_EXECUTABLE)
+    message(FATAL_ERROR "rcc not found – set Qt6 install to ${QT6_INSTALL} or add rcc to PATH")
+endif()
+if(NOT MOC_EXECUTABLE)
+    message(FATAL_ERROR "moc not found – set Qt6 install to ${QT6_INSTALL} or add moc to PATH")
+endif()
+
 # ── QML resources (via rcc) ─────────────────────────────────────
 set(QRC_FILE ${CMAKE_SOURCE_DIR}/resources.qrc)
 set(RCC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/qml_resources.cpp)
 add_custom_command(
     OUTPUT ${RCC_OUTPUT}
-    COMMAND ${QT6_INSTALL}/libexec/rcc --name qml --output ${RCC_OUTPUT} ${QRC_FILE}
+    COMMAND ${RCC_EXECUTABLE} --name qml --output ${RCC_OUTPUT} ${QRC_FILE}
     DEPENDS ${QRC_FILE}
         qml/main.qml qml/Desktop.qml qml/Panel.qml
         qml/AppLauncher.qml qml/Terminal.qml
@@ -98,7 +107,7 @@ set(MOC_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/moc_TerminalProcess.cpp)
 set(MOC_INCLUDES -I${QT6_QTBUILD}/include -I${QT6_QTBUILD}/include/QtCore -I${QT6_QTBUILD}/include/QtCore/6.4.2 -I${QT6_QTBUILD}/include/QtCore/6.4.2/QtCore -I${QT6_INSTALL}/src/qtbase/src -I${CMAKE_SOURCE_DIR}/src)
 add_custom_command(
     OUTPUT ${MOC_OUTPUT}
-    COMMAND ${QT6_INSTALL}/libexec/moc ${MOC_INCLUDES} -o ${MOC_OUTPUT} ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
+    COMMAND ${MOC_EXECUTABLE} ${MOC_INCLUDES} -o ${MOC_OUTPUT} ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     DEPENDS ${CMAKE_SOURCE_DIR}/src/TerminalProcess.h
     COMMENT "Running MOC on TerminalProcess.h"
 )

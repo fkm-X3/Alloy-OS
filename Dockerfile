@@ -32,7 +32,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
 # Qt6 cross-compiled static libs for Alloy OS DE (built by .github/workflows/build-qt6.yml)
-ARG QT6_RELEASE_URL=https://github.com/alloy-os/Alloy-OS/releases/download/qt6-6.4.2/qt6-alloy-x86_64.tar.gz
+ARG QT6_RELEASE_URL=https://github.com/fkm-X3/Alloy-OS/releases/download/qt6-6.4.2/qt6-alloy-x86_64.tar.gz
 RUN mkdir -p /opt/alloy && \
     wget -qO /tmp/qt6-alloy.tar.gz "${QT6_RELEASE_URL}" && \
     tar xzf /tmp/qt6-alloy.tar.gz -C / && \

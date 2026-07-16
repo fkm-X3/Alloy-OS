@@ -34,7 +34,8 @@ cat > "${MKSPEC_DIR}/qplatformdefs.h" <<'EOF'
 #include "../linux-g++/qplatformdefs.h"
 EOF
 
-# ── Compiler wrappers (host g++ -m64, used for cross-compile) ──
+# ── Compiler wrappers (host g++ -m64, used by DE build) ────────
+# These are only used by the DE/userland builds, not for Qt6 itself.
 CROSS_DIR="${WORK_DIR}/cross-bin"
 mkdir -p "${CROSS_DIR}"
 
@@ -48,13 +49,15 @@ exec /usr/bin/g++ -m64 "$@"
 WRAPPER
 chmod +x "${CROSS_DIR}/x86_64-elf-gcc-qt6" "${CROSS_DIR}/x86_64-elf-g++-qt6"
 
-export PATH="${CROSS_DIR}:${PATH}"
-
-# ── Build qtbase ────────────────────────────────────────────────
+# ── Build qtbase (native build) ─────────────────────────────────
+# Build Qt6 natively on the host. Host == target (x86_64 Linux), so
+# no cross-compilation flags. This avoids the QT_HOST_PATH requirement.
 QTBASE_SRC="${WORK_DIR}/src/qtbase"
 QTBASE_BUILD="${WORK_DIR}/build/qtbase-hangtest"
 QTBASE_INSTALL="${INSTALL_PREFIX}"
 
+# Clean cmake state to prevent stale CMAKE_CROSSCOMPILING from cache
+rm -rf "${QTBASE_BUILD}"
 mkdir -p "${QTBASE_BUILD}"
 cd "${QTBASE_BUILD}"
 
@@ -62,12 +65,9 @@ echo "--- Configuring qtbase ---"
 cmake "${QTBASE_SRC}" \
     -G Ninja \
     -DCMAKE_INSTALL_PREFIX="${QTBASE_INSTALL}" \
-    -DCMAKE_C_COMPILER=/usr/bin/gcc \
-    -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
     -DCMAKE_C_FLAGS="-m64" \
     -DCMAKE_CXX_FLAGS="-m64" \
     -DBUILD_SHARED_LIBS=OFF \
-    -DQT_FORCE_FIND_TOOLS=ON \
     -DQT_QMAKE_TARGET_MKSPEC=alloyos-g++ \
     -DFEATURE_xkbcommon=OFF \
     -DFEATURE_evdev=OFF \
@@ -98,6 +98,8 @@ QTDECL_SRC="${WORK_DIR}/src/qtdeclarative"
 QTDECL_BUILD="${WORK_DIR}/src/qtdeclarative/build"
 QTDECL_INSTALL="${INSTALL_PREFIX}"
 
+# Clean cmake state
+rm -rf "${QTDECL_BUILD}"
 mkdir -p "${QTDECL_BUILD}"
 cd "${QTDECL_BUILD}"
 
@@ -106,8 +108,6 @@ cmake "${QTDECL_SRC}" \
     -G Ninja \
     -DCMAKE_INSTALL_PREFIX="${QTDECL_INSTALL}" \
     -DCMAKE_PREFIX_PATH="${QTDECL_INSTALL}" \
-    -DCMAKE_C_COMPILER=/usr/bin/gcc \
-    -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
     -DCMAKE_C_FLAGS="-m64" \
     -DCMAKE_CXX_FLAGS="-m64" \
     -DBUILD_SHARED_LIBS=OFF \

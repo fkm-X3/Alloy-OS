@@ -119,10 +119,8 @@ cmake "${QTDECL_SRC}" \
     -DFEATURE_qml_worker_script=ON \
     2>&1 | tee "${WORK_DIR}/qtdeclarative-configure.log"
 
-echo "--- Building qtdeclarative (Qml + Quick) ---"
-cmake --build . --target Qml QmlModels Quick \
-    QuickControls2 QuickLayouts QuickTemplates2 \
-    -j"${JOBS}" \
+echo "--- Building qtdeclarative (all targets) ---"
+cmake --build . -j"${JOBS}" \
     2>&1 | tee "${WORK_DIR}/qtdeclarative-build.log"
 
 echo "--- Installing qtdeclarative ---"

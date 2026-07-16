@@ -61,10 +61,11 @@ cd "${QTBASE_BUILD}"
 echo "--- Configuring qtbase ---"
 cmake "${QTBASE_SRC}" \
     -G Ninja \
-    -DCMAKE_SYSTEM_NAME=Linux \
     -DCMAKE_INSTALL_PREFIX="${QTBASE_INSTALL}" \
-    -DCMAKE_C_COMPILER=x86_64-elf-gcc-qt6 \
-    -DCMAKE_CXX_COMPILER=x86_64-elf-g++-qt6 \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc \
+    -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+    -DCMAKE_C_FLAGS="-m64" \
+    -DCMAKE_CXX_FLAGS="-m64" \
     -DBUILD_SHARED_LIBS=OFF \
     -DQT_FORCE_FIND_TOOLS=ON \
     -DQT_QMAKE_TARGET_MKSPEC=alloyos-g++ \
@@ -105,9 +106,10 @@ cmake "${QTDECL_SRC}" \
     -G Ninja \
     -DCMAKE_INSTALL_PREFIX="${QTDECL_INSTALL}" \
     -DCMAKE_PREFIX_PATH="${QTDECL_INSTALL}" \
-    -DCMAKE_SYSTEM_NAME=Linux \
-    -DCMAKE_C_COMPILER=x86_64-elf-gcc-qt6 \
-    -DCMAKE_CXX_COMPILER=x86_64-elf-g++-qt6 \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc \
+    -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+    -DCMAKE_C_FLAGS="-m64" \
+    -DCMAKE_CXX_FLAGS="-m64" \
     -DBUILD_SHARED_LIBS=OFF \
     -DQT_QMAKE_TARGET_MKSPEC=alloyos-g++ \
     -DFEATURE_qml_debug=OFF \

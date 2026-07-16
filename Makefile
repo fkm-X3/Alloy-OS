@@ -125,6 +125,8 @@ endif
 # Cross-compile the Qt6/QML DE for Alloy OS (requires Qt6 at /opt/alloy/qt6)
 # DE is x86_64-only; skipped on aarch64 until Qt6 cross-compilation is ported.
 DE_OUT = de/build/alloy_de_qml
+QT_HOST_TOOLS ?=
+CMAKE_QT_HOST_FLAGS = $(if $(QT_HOST_TOOLS),-DQT_HOST_TOOLS_DIR=$(QT_HOST_TOOLS))
 
 de-build: userland
 ifeq ($(ARCH),aarch64)
@@ -132,7 +134,7 @@ ifeq ($(ARCH),aarch64)
 else
 	@echo "Building DE (cross-compile for Alloy OS x86_64)..."
 	@mkdir -p de/build
-	cd de && cmake -B build -DCMAKE_BUILD_TYPE=Release
+	cd de && cmake -B build -DCMAKE_BUILD_TYPE=Release $(CMAKE_QT_HOST_FLAGS)
 	cmake --build de/build --target alloy_de_qml
 	@cp $(DE_OUT) alloy_de_qml
 	@echo "DE binary at: $(DE_OUT) -> alloy_de_qml"

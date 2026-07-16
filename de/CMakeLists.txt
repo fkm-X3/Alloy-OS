@@ -14,7 +14,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ── Paths ───────────────────────────────────────────────────────
-set(QT6_INSTALL   /opt/alloy/qt6)
+set(QT6_INSTALL   /opt/alloy/qt6 CACHE PATH "Qt6 cross-compiled install prefix")
+set(QT_HOST_TOOLS_DIR "" CACHE PATH "Directory containing host Qt6 tools (rcc, moc)")
 set(QT6_QTBUILD   ${QT6_INSTALL}/build/qtbase-hangtest)
 set(QT6_QDBUILD   ${QT6_INSTALL}/src/qtdeclarative/build)
 set(USERLAND      ${CMAKE_SOURCE_DIR}/../os/userland)
@@ -80,8 +81,8 @@ set(APP_SRC
     src/main.cpp
 )
 
-find_program(RCC_EXECUTABLE rcc HINTS ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
-find_program(MOC_EXECUTABLE moc HINTS ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
+find_program(RCC_EXECUTABLE rcc HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
+find_program(MOC_EXECUTABLE moc HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
 if(NOT RCC_EXECUTABLE)
     message(FATAL_ERROR "rcc not found – set Qt6 install to ${QT6_INSTALL} or add rcc to PATH")
 endif()

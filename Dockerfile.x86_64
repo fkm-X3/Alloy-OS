@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
         curl \
         ca-certificates \
         git \
+        qt6-base-dev-tools \
         wget \
     && rm -rf /var/lib/apt/lists/*
 

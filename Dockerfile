@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
         g++-multilib \
         gcc-aarch64-linux-gnu \
         g++-aarch64-linux-gnu \
+        qt6-base-dev-tools \
         wget \
     && rm -rf /var/lib/apt/lists/*
 

@@ -81,14 +81,34 @@ set(APP_SRC
     src/main.cpp
 )
 
-find_program(RCC_EXECUTABLE rcc HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
-find_program(MOC_EXECUTABLE moc HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin)
+if(QT_HOST_TOOLS_DIR STREQUAL "")
+    set(QT_HOST_TOOLS_DIR "${QT6_INSTALL}/libexec")
+endif()
+
+find_program(RCC_EXECUTABLE NAMES rcc
+    HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin
+    NO_DEFAULT_PATH)
+find_program(MOC_EXECUTABLE NAMES moc
+    HINTS ${QT_HOST_TOOLS_DIR} ${QT6_INSTALL}/libexec ${QT6_INSTALL}/bin
+    NO_DEFAULT_PATH)
+
 if(NOT RCC_EXECUTABLE)
-    message(FATAL_ERROR "rcc not found – set Qt6 install to ${QT6_INSTALL} or add rcc to PATH")
+    find_program(RCC_EXECUTABLE NAMES rcc)
 endif()
 if(NOT MOC_EXECUTABLE)
-    message(FATAL_ERROR "moc not found – set Qt6 install to ${QT6_INSTALL} or add moc to PATH")
+    find_program(MOC_EXECUTABLE NAMES moc)
 endif()
+
+if(NOT RCC_EXECUTABLE)
+    message(FATAL_ERROR "rcc not found – set QT_HOST_TOOLS_DIR or ensure host Qt tools are installed")
+endif()
+if(NOT MOC_EXECUTABLE)
+    message(FATAL_ERROR "moc not found – set QT_HOST_TOOLS_DIR or ensure host Qt tools are installed")
+endif()
+
+set(ENV{QT_HOST_PATH} "${QT6_INSTALL}")
+set(ENV{QT_PLUGIN_PATH} "${QT6_INSTALL}/plugins")
+set(ENV{QML2_IMPORT_PATH} "${QT6_INSTALL}/qml")
 
 # ── QML resources (via rcc) ─────────────────────────────────────
 set(QRC_FILE ${CMAKE_SOURCE_DIR}/resources.qrc)

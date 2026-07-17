@@ -11,7 +11,6 @@ services:
       RUSTUP_HOME: /root/.rustup
     volumes:
       - .:/workspace
-      - x86_64-elf-cache:/root/.local/x86_64-elf
       - cargo-registry:/root/.cargo/registry
       - cargo-git:/root/.cargo/git
     stdin_open: true
@@ -20,6 +19,5 @@ services:
     command: bash
 
 volumes:
-  x86_64-elf-cache:
   cargo-registry:
   cargo-git:

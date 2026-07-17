@@ -38,24 +38,21 @@ jobs:
             libxcb-*-dev \
             libwayland-dev
 
-      - name: Cache Qt6 build
-        uses: actions/cache@v4
-        with:
-          path: qt6-build-tmp
-          key: qt6-${{ env.QT_VERSION }}-${{ hashFiles('tools/build-qt6.sh') }}
-          restore-keys: |
-            qt6-${{ env.QT_VERSION }}-
-
       - name: Build Qt6
         run: |
-          CREATE_ARCHIVE=1 JOBS=$(nproc) ./tools/build-qt6.sh
+          JOBS=$(nproc) ./tools/build-qt6.sh
 
-      - name: Upload Qt6 archive
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: qt6-${{ env.QT_VERSION }}
-          name: "Qt6 ${{ env.QT_VERSION }} for Alloy OS"
-          files: qt6-build-tmp/qt6-alloy-x86_64.tar.gz
-          make_latest: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify archive
+        run: |
+          ls -lh deps/qt6-alloy-x86_64.tar.gz
+          echo "Archive contents:"
+          tar tzf deps/qt6-alloy-x86_64.tar.gz | head -20
+
+      - name: Commit updated Qt6 archive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deps/qt6-alloy-x86_64.tar.gz
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "deps: update Qt6 ${QT_VERSION} archive [skip ci]"
+          git push

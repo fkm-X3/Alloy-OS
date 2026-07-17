@@ -1,6 +1,8 @@
 # tools/build-qt6.sh
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 QT_VERSION="6.4.2"
 QT_MAJOR="6.4"
 DESTDIR="${DESTDIR:-}"
@@ -138,18 +140,23 @@ echo "Tools:"
 ls -lh "${INSTALL_PREFIX}/libexec/" 2>/dev/null
 ls -lh "${INSTALL_PREFIX}/bin/" 2>/dev/null
 
-# ── Create archive (for CI upload) ──────────────────────────────
-if [ "${CREATE_ARCHIVE:-0}" = "1" ]; then
-    ARCHIVE="qt6-alloy-x86_64.tar.gz"
-    echo "--- Creating archive: ${ARCHIVE} ---"
-    if [ -n "${DESTDIR}" ]; then
-        cd "${DESTDIR}"
-    else
-        cd /
-    fi
-    tar czf "${WORK_DIR}/${ARCHIVE}" opt/alloy/qt6
-    echo "Archive: ${WORK_DIR}/${ARCHIVE}"
-    ls -lh "${WORK_DIR}/${ARCHIVE}"
+# ── Create archive ──────────────────────────────────────────────
+ARCHIVE="qt6-alloy-x86_64.tar.gz"
+REPO_DEPS="${SCRIPT_DIR}/../deps"
+echo "--- Creating archive: ${ARCHIVE} ---"
+if [ -n "${DESTDIR}" ]; then
+    cd "${DESTDIR}"
+else
+    cd /
+fi
+tar czf "${WORK_DIR}/${ARCHIVE}" opt/alloy/qt6
+echo "Archive: ${WORK_DIR}/${ARCHIVE}"
+ls -lh "${WORK_DIR}/${ARCHIVE}"
+
+# Copy to deps/ if it exists (for bundled repo distribution)
+if [ -d "${REPO_DEPS}" ]; then
+    cp "${WORK_DIR}/${ARCHIVE}" "${REPO_DEPS}/${ARCHIVE}"
+    echo "Copied to: ${REPO_DEPS}/${ARCHIVE}"
 fi
 
 # Cleanup

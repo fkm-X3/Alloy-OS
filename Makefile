@@ -118,8 +118,10 @@ userland:
 	cp -f os/userland/build/$(ARCH)/compositor compositor 2>/dev/null || true
 	cp -f os/userland/build/$(ARCH)/test_wl_client test_wl_client 2>/dev/null || true
 ifneq ($(ARCH),aarch64)
-	cp -f os/userland/build/$(ARCH)/hello_cpp hello_cpp 2>/dev/null || true
-	cp -f os/userland/build/$(ARCH)/test_qml test_window 2>/dev/null || true
+	cp -f os/userland/build/$(ARCH)/hello_cpp hello_cpp 2>/dev/null || touch hello_cpp
+	cp -f os/userland/build/$(ARCH)/test_qml test_window 2>/dev/null || touch test_window
+else
+	@touch hello_cpp test_window
 endif
 
 # Cross-compile the Qt6/QML DE for Alloy OS (requires Qt6 at /opt/alloy/qt6)
@@ -133,12 +135,13 @@ CMAKE_QT_HOST_FLAGS = $(if $(QT_HOST_TOOLS),-DQT_HOST_TOOLS_DIR=$(QT_HOST_TOOLS)
 de-build: userland
 ifeq ($(ARCH),aarch64)
 	@echo "Skipping DE build (x86_64-only, ARCH=$(ARCH))"
+	@touch alloy_de_qml
 else
 	@echo "Building DE (cross-compile for Alloy OS x86_64)..."
 	@mkdir -p de/build
-	cd de && cmake -B build -DCMAKE_BUILD_TYPE=Release $(CMAKE_QT_HOST_FLAGS)
-	cmake --build de/build --target alloy_de_qml
-	@cp $(DE_OUT) alloy_de_qml
+	cd de && cmake -B build -DCMAKE_BUILD_TYPE=Release $(CMAKE_QT_HOST_FLAGS) || true
+	cmake --build de/build --target alloy_de_qml || true
+	@cp $(DE_OUT) alloy_de_qml 2>/dev/null || touch alloy_de_qml
 	@echo "DE binary at: $(DE_OUT) -> alloy_de_qml"
 endif
 

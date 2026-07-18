@@ -9,10 +9,12 @@ services:
       HOME: /root
       CARGO_HOME: /root/.cargo
       RUSTUP_HOME: /root/.rustup
+      DISPLAY: ${DISPLAY:-:0}
     volumes:
       - .:/workspace
       - cargo-registry:/root/.cargo/registry
       - cargo-git:/root/.cargo/git
+      - /tmp/.X11-unix:/tmp/.X11-unix
     stdin_open: true
     tty: true
     user: root

@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
         g++-aarch64-linux-gnu \
         qt6-base-dev-tools \
         wget \
+        xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # Qt6 static libs for Alloy OS DE (uploaded manually to GitHub releases)

@@ -58,6 +58,7 @@ uintptr_t paging_clone_directory(uintptr_t pd_phys);
 uintptr_t paging_fork_directory(uintptr_t pd_phys);
 uint8_t paging_handle_cow_fault(uintptr_t fault_addr);
 bool paging_map_page_in_pd(uintptr_t pd_phys, uintptr_t virt_addr, uintptr_t phys_addr, uint32_t flags);
+bool paging_demand_map_kernel_page(uint64_t fault_addr, uint64_t user_cr3);
 void* paging_temp_map_frame(uintptr_t phys_addr);
 void paging_temp_unmap_frame(void);
 

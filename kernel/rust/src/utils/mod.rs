@@ -53,10 +53,15 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
     let mut cur = user_ptr as usize;
     let mut out_off = 0usize;
 
+    // Switch to user CR3 to access user memory
+    let saved_cr3: u64;
+    core::arch::asm!("mov {}, cr3", out(reg) saved_cr3);
+    core::arch::asm!("mov cr3, {}", in(reg) ffi::g_current_user_cr3);
+
     while remaining > 0 {
-        // Check page mapping
         let phys = ffi::paging_get_physical_address(cur & !(PAGE_SIZE - 1));
         if phys == 0 {
+            core::arch::asm!("mov cr3, {}", in(reg) saved_cr3);
             if out_off > 0 { return Ok(out_off); } else { return Err(-1); }
         }
 
@@ -72,6 +77,8 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
         cur = cur.saturating_add(chunk);
     }
 
+    core::arch::asm!("mov cr3, {}", in(reg) saved_cr3);
+
     Ok(out_off)
 }
 
@@ -86,9 +93,15 @@ pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
     let mut cur = user_ptr as usize;
     let mut in_off = 0usize;
 
+    // Switch to user CR3 to access user memory
+    let saved_cr3: u64;
+    core::arch::asm!("mov {}, cr3", out(reg) saved_cr3);
+    core::arch::asm!("mov cr3, {}", in(reg) ffi::g_current_user_cr3);
+
     while remaining > 0 {
         let phys = ffi::paging_get_physical_address(cur & !(PAGE_SIZE - 1));
         if phys == 0 {
+            core::arch::asm!("mov cr3, {}", in(reg) saved_cr3);
             if in_off > 0 { return Ok(in_off); } else { return Err(-1); }
         }
 
@@ -103,6 +116,8 @@ pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
         remaining -= chunk;
         cur = cur.saturating_add(chunk);
     }
+
+    core::arch::asm!("mov cr3, {}", in(reg) saved_cr3);
 
     Ok(in_off)
 }

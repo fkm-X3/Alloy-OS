@@ -5,11 +5,12 @@ use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
-use crate::sync::SpinLock;
+use crate::sync::{SpinLock, SpinlockIRQ};
 use crate::ffi;
 
-/// Global scheduler instance
-static SCHEDULER: SpinLock<Option<Scheduler>> = SpinLock::new(None);
+/// Global scheduler instance — must use SpinlockIRQ because timer interrupts
+/// call rust_timer_tick() which acquires this lock from interrupt context.
+static SCHEDULER: SpinlockIRQ<Option<Scheduler>> = SpinlockIRQ::new(None);
 
 const NUM_PRIORITIES: usize = 4;
 const QUANTA: [u32; NUM_PRIORITIES] = [5, 10, 20, 40];
@@ -117,6 +118,16 @@ impl Scheduler {
 
                 unsafe {
                     ffi::serial_print(c"[Scheduler] Calling context_switch\n".as_ptr() as *const u8);
+                    ffi::serial_print(c"  new_ctx_ptr=0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64(new_ctx_ptr as u64);
+                    ffi::serial_print(c" cr3=0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64((*new_ctx_ptr).cr3);
+                    ffi::serial_print(c" rsp=0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64((*new_ctx_ptr).rsp);
+                    ffi::serial_print(c" rip=0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64((*new_ctx_ptr).rip);
+                    ffi::serial_print(c"\n".as_ptr() as *const u8);
+                    core::arch::asm!("cli");
                     ffi::context_switch(old_ctx_ptr, new_ctx_ptr);
                     ffi::serial_print(c"[Scheduler] Returned from context_switch (old context)\n".as_ptr() as *const u8);
                 }
@@ -208,12 +219,12 @@ impl Scheduler {
             ctx.rsp = stack as u64;
             ctx.rbp = stack as u64;
             ctx.rax = arg as u64;
-            ctx.cs = 0x1B;
-            ctx.ds = 0x23;
-            ctx.es = 0x23;
-            ctx.fs = 0x23;
-            ctx.gs = 0x23;
-            ctx.ss = 0x23;
+            ctx.cs = 0x23;
+            ctx.ds = 0x1B;
+            ctx.es = 0x1B;
+            ctx.fs = 0x1B;
+            ctx.gs = 0x1B;
+            ctx.ss = 0x1B;
 
             let current_cr3: usize = sched.current_task.as_ref()
                 .map(|t| t.context().cr3 as usize)

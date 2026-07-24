@@ -5,10 +5,26 @@
 [BITS 64]
 
 global context_switch
+extern serial_print
+extern g_current_user_cr3
+
+section .rodata
+.msg_entry:  db "[CS] enter", 10, 0
+.msg_save:   db "[CS] saved", 10, 0
+.msg_load:   db "[CS] loading", 10, 0
+.msg_cr3:    db "[CS] cr3 switched", 10, 0
 
 section .text
 
 context_switch:
+    ; Debug: confirm context_switch entry
+    push rdi
+    push rsi
+    lea rdi, [rel .msg_entry]
+    call serial_print
+    pop rsi
+    pop rdi
+
     ; Save current context to old_ctx (in RDI)
     test rdi, rdi
     jz .load_only
@@ -64,54 +80,168 @@ context_switch:
     test rsi, rsi
     jz .done
 
-    ; Disable interrupts during the critical section to prevent
-    ; timer ISR from re-entering the scheduler mid-switch.
+    ; Debug: confirm we are about to load new context
+    push rdi
+    push rsi
+    lea rdi, [rel .msg_load]
+    call serial_print
+    pop rsi
+    pop rdi
+
     cli
 
-    ; Restore CR3 BEFORE restoring stack pointer
+    ; ================================================================
+    ; Pre-read ALL new_ctx values BEFORE CR3 switch.
+    ; new_ctx is in kernel heap (above 32 MB), which is NOT mapped in
+    ; the user page table — only PD[0..15] (0-32 MB) is copied from
+    ; the kernel identity map.  After CR3 switch we cannot dereference
+    ; RSI, so we push everything onto the kernel stack now.
+    ;
+    ; We also load RSP_new and RIP_new into registers now, because
+    ; they need special handling (RSP is set last; RIP is pushed onto
+    ; the new stack before `ret`).
+    ;
+    ; Push order (last in = first out):
+    ;   [19] RSP_new    — popped last, sets RSP
+    ;   [18] RIP_new    — popped 2nd-last, pushed to new stack
+    ;   [17] GS
+    ;   [16] FS
+    ;   [15] ES
+    ;   [14] DS
+    ;   [13] R15
+    ;   [12] R14
+    ;   [11] R13
+    ;   [10] R12
+    ;   [9]  R11
+    ;   [8]  R10
+    ;   [7]  R9
+    ;   [6]  R8
+    ;   [5]  RBP
+    ;   [4]  RDX
+    ;   [3]  RCX
+    ;   [2]  RBX
+    ;   [1]  RFLAGS
+    ;   [0]  RAX         — popped first
+    ; ================================================================
+
+    push qword [rsi + 56]     ; RSP_new
+    push qword [rsi + 128]    ; RIP_new
+
+    ; Segment registers
+    push qword [rsi + 168]    ; GS
+    push qword [rsi + 160]    ; FS
+    push qword [rsi + 152]    ; ES
+    push qword [rsi + 144]    ; DS
+
+    ; General-purpose registers
+    push qword [rsi + 120]    ; R15
+    push qword [rsi + 112]    ; R14
+    push qword [rsi + 104]    ; R13
+    push qword [rsi + 96]     ; R12
+    push qword [rsi + 88]     ; R11
+    push qword [rsi + 80]     ; R10
+    push qword [rsi + 72]     ; R9
+    push qword [rsi + 64]     ; R8
+    push qword [rsi + 48]     ; RBP
+    push qword [rsi + 24]     ; RDX
+    push qword [rsi + 16]     ; RCX
+    push qword [rsi + 8]      ; RBX
+
+    push qword [rsi + 184]    ; RFLAGS
+    push qword [rsi + 0]      ; RAX
+
+    ; Switch CR3 (must happen after all pre-reads)
     mov rax, [rsi + 192]
     mov cr3, rax
+    mov [g_current_user_cr3], rax
 
-    ; Restore segment registers (except CS/SS which are restored via retfq)
-    mov ax, [rsi + 144]
+    ; Debug: confirm CR3 switch
+    push rdi
+    push rsi
+    lea rdi, [rel .msg_cr3]
+    call serial_print
+    pop rsi
+    pop rdi
+
+    ; ================================================================
+    ; Pop all values in reverse order
+    ; Stack layout at this point (RSP → item[0]):
+    ;   [rsp+0]   RAX      (item[0])
+    ;   [rsp+8]   RFLAGS   (item[1])
+    ;   [rsp+16]  RBX      (item[2])
+    ;   [rsp+24]  RCX      (item[3])
+    ;   [rsp+32]  RDX      (item[4])
+    ;   [rsp+40]  RBP      (item[5])
+    ;   [rsp+48]  R8       (item[6])
+    ;   [rsp+56]  R9       (item[7])
+    ;   [rsp+64]  R10      (item[8])
+    ;   [rsp+72]  R11      (item[9])
+    ;   [rsp+80]  R12      (item[10])
+    ;   [rsp+88]  R13      (item[11])
+    ;   [rsp+96]  R14      (item[12])
+    ;   [rsp+104] R15      (item[13])
+    ;   [rsp+112] DS       (item[14])
+    ;   [rsp+120] ES       (item[15])
+    ;   [rsp+128] FS       (item[16])
+    ;   [rsp+136] GS       (item[17])
+    ;   [rsp+144] RIP_new  (item[18])
+    ;   [rsp+152] RSP_new  (item[19])
+    ; ================================================================
+
+    ; Use RDI and RSI as scratch — they are NOT restored from the new
+    ; context (original code skips offsets 32 and 40).  Save RAX and
+    ; RFLAGS here so they survive the pops that restore R14 and R15.
+    pop rdi             ; RDI = RAX (restored at the very end)
+    pop rsi             ; RSI = RFLAGS (restored via popfq)
+
+    ; Pop general-purpose registers
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rbp
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+
+    ; Set segment registers
+    pop rax
     mov ds, ax
-    mov ax, [rsi + 152]
+    pop rax
     mov es, ax
-    mov ax, [rsi + 160]
+    pop rax
     mov fs, ax
-    mov ax, [rsi + 168]
+    pop rax
     mov gs, ax
 
-    ; Restore stack pointer
-    mov rsp, [rsi + 56]
+    ; Pop RIP_new into a temp, then RSP_new into RSP
+    pop rdx             ; RDX = RIP_new
+    pop rsp             ; RSP = RSP_new  (changes stack!)
 
-    ; Push RIP onto stack and retire
-    mov rax, [rsi + 128]
-    push rax
+    ; Push RIP_new onto the new stack
+    push rdx
 
-    ; Restore general purpose registers (except RAX, RSP, RIP)
-    mov rbx, [rsi + 8]
-    mov rcx, [rsi + 16]
-    mov rdx, [rsi + 24]
-    mov rbp, [rsi + 48]
-    mov r8,  [rsi + 64]
-    mov r9,  [rsi + 72]
-    mov r10, [rsi + 80]
-    mov r11, [rsi + 88]
-    mov r12, [rsi + 96]
-    mov r13, [rsi + 104]
-    mov r14, [rsi + 112]
-    mov r15, [rsi + 120]
-
-    ; Restore RFLAGS last — popfq + ret is atomically safe on x86
-    mov rax, [rsi + 184]
-    push rax
+    ; Restore RFLAGS and RAX
+    push rsi
     popfq
+    mov rax, rdi
 
-    ; Restore RAX after all other registers
-    mov rax, [rsi + 0]
+    ; Clear GS_BASE MSR (0xC0000101) to prevent swapgs leakage
+    ; User tasks run with GS_BASE = 0; without this, a context switch
+    ; during syscall_entry (after swapgs) would leak the kernel save-area
+    ; address into the next task's GS_BASE, causing gs:0 to write to the
+    ; kernel save area (or to NULL if KERNEL_GS_BASE is uninitialized).
+    push rax
+    xor eax, eax
+    xor edx, edx
+    mov ecx, 0xC0000101
+    wrmsr
+    pop rax
 
-    ; Jump to restored RIP
     ret
 
 .done:

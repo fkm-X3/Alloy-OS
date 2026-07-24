@@ -188,8 +188,8 @@ pub mod paging {
 pub mod segments {
     pub const KERNEL_CODE: u16 = 0x08;
     pub const KERNEL_DATA: u16 = 0x10;
-    pub const USER_CODE: u16 = 0x18;
-    pub const USER_DATA: u16 = 0x20;
+    pub const USER_CODE: u16 = 0x20;  /* GDT[4] = user code (SYSRET CS) */
+    pub const USER_DATA: u16 = 0x18;  /* GDT[3] = user data (SYSRET SS) */
     pub const TSS: u16 = 0x28;
 }
 

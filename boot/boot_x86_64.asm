@@ -76,10 +76,11 @@ start:
     mov eax, PML4_BASE
     mov cr3, eax
 
-    ; Enable long mode in EFER MSR
+    ; Enable long mode + SYSCALL support in EFER MSR
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8    ; LME = Long Mode Enable
+    or eax, 1 << 0    ; SCE = System Call Extensions (enables SYSCALL/SYSRET)
     wrmsr
 
     ; Enable paging (and thus enter compatibility mode)

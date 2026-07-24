@@ -18,19 +18,31 @@
 
 global syscall_entry
 extern syscall_dispatcher
+extern kernel_pml4_phys
 
 section .text
 syscall_entry:
     swapgs                          ; GS.base ↔ KernelGS.base
 
-    ; Save user RSP to per-CPU scratch
+    ; Save original user RSP before any pushes
     mov gs:0, rsp
+
+    ; Save syscall number on user stack, then user CR3
+    push rax                        ; [user_rsp-8] = syscall number
+    mov rax, cr3
+    push rax                        ; [user_rsp-16] = user CR3
+
+    ; Load kernel CR3
+    mov rax, [kernel_pml4_phys]
+    mov cr3, rax
 
     ; Switch to kernel stack
     mov rsp, [kernel_stack_top]
 
-    ; Build saved context: user RSP, RIP (RCX), RFLAGS (R11)
-    push qword [gs:0]               ; user RSP
+    ; Build saved context: original RSP, user CR3, RIP (RCX), RFLAGS (R11)
+    push qword [gs:0]               ; original user RSP
+    mov rax, [gs:0]                 ; RAX = original user RSP
+    push qword [rax - 16]           ; user CR3 (at original RSP - 16, pushed second)
     push rcx                        ; return RIP
     push r11                        ; saved RFLAGS
 
@@ -42,8 +54,20 @@ syscall_entry:
     push rbp
     push rbx
 
+    ; Stack layout (top to bottom):
+    ;   rsp+0:  rbx
+    ;   rsp+8:  rbp
+    ;   rsp+16: r12
+    ;   rsp+24: r13
+    ;   rsp+32: r14
+    ;   rsp+40: r15
+    ;   rsp+48: RFLAGS (r11)
+    ;   rsp+56: RIP (rcx)
+    ;   rsp+64: user CR3
+    ;   rsp+72: original user RSP
+
     ; Arrange C calling convention for syscall_dispatcher:
-    ;   RDI = syscall_no (RAX)
+    ;   RDI = syscall_no
     ;   RSI = arg0 (original RDI)
     ;   RDX = arg1 (original RSI)
     ;   RCX = arg2 (original RDX)
@@ -55,14 +79,12 @@ syscall_entry:
     mov rcx, rdx                    ; arg2
     mov rdx, rsi                    ; arg1
     mov rsi, rdi                    ; arg0
-    mov rdi, rax                    ; syscall_no
+    mov rax, [gs:0]                 ; RAX = original user RSP
+    mov rdi, [rax - 8]             ; syscall_no from user stack (pushed first)
 
-    lea rax, [rsp]                  ; frame pointer = current RSP
-    push rax                        ; 7th argument on stack
-
+    ; 10 pushes = 80 bytes = 5*16, already 16-byte aligned.
+    ; call pushes 8 bytes, so callee gets RSP ≡ 8 (mod 16) ✓
     call syscall_dispatcher
-
-    add rsp, 8                      ; pop frame pointer
 
     ; Restore callee-saved registers
     pop rbx
@@ -75,7 +97,11 @@ syscall_entry:
     ; Restore user context
     pop r11                         ; RFLAGS
     pop rcx                         ; RIP
-    pop rsp                         ; user RSP
+    pop rax                         ; user CR3
+    mov cr3, rax
+    pop rsp                         ; original user RSP
+
+    ; (syscall number and CR3 copy remain on user stack below RSP, harmless)
 
     swapgs
     o64 sysret

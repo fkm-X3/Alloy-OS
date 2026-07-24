@@ -33,13 +33,11 @@ uint32_t syscall_dispatcher(uint32_t syscall_no,
                             uint32_t arg1,
                             uint32_t arg2,
                             uint32_t arg3,
-                            uint32_t arg4,
-                            uint32_t* int80_frame) {
+                            uint32_t arg4) {
     (void)arg1;
     (void)arg2;
     (void)arg3;
     (void)arg4;
-    (void)int80_frame;
 
     uint32_t result = 0;
 
@@ -147,6 +145,9 @@ extern uint64_t kernel_stack_bottom;
 extern uint64_t kernel_stack_top_alias;
 extern uint64_t kernel_stack_top;
 
+// Per-CPU save area for syscall entry RSP (used by syscall_entry.asm via swapgs / gs:0)
+__attribute__((aligned(16))) static uint64_t syscall_gs_save_area = 0;
+
 void syscall_init() {
     serial_print("[Syscall] Initializing x86_64 syscall interface\n");
 
@@ -186,6 +187,14 @@ void syscall_init() {
     uint32_t sf_low = (uint32_t)(sf_mask & 0xFFFFFFFF);
     uint32_t sf_high = (uint32_t)((sf_mask >> 32) & 0xFFFFFFFF);
     asm volatile("wrmsr" : : "c"(0xC0000084), "a"(sf_low), "d"(sf_high));
+
+    // KERNEL_GS_BASE (0xC0000102): per-CPU area for swapgs
+    // syscall_entry.asm uses swapgs + mov gs:0, rsp to save the user RSP.
+    // Without this MSR, swapgs leaves GS_BASE = 0, so mov gs:0 writes to NULL.
+    uint64_t gs_base = (uint64_t)(uintptr_t)&syscall_gs_save_area;
+    uint32_t kgs_low = (uint32_t)(gs_base & 0xFFFFFFFF);
+    uint32_t kgs_high = (uint32_t)((gs_base >> 32) & 0xFFFFFFFF);
+    asm volatile("wrmsr" : : "c"(0xC0000102), "a"(kgs_low), "d"(kgs_high));
 
     serial_print("[Syscall] x86_64 syscall MSRs configured\n");
 }

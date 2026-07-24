@@ -47,8 +47,7 @@ uint32_t syscall_dispatcher(uint32_t syscall_no,
                             uint32_t arg1,
                             uint32_t arg2,
                             uint32_t arg3,
-                            uint32_t arg4,
-                            uint32_t* int80_frame);
+                            uint32_t arg4);
 
 void syscall_init();
 

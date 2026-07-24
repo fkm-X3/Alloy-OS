@@ -175,6 +175,20 @@ impl<'a, T> SpinlockIRQGuard<'a, T> {
     }
 }
 
+impl<'a, T> Deref for SpinlockIRQGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        unsafe { &*self.lock.data.get() }
+    }
+}
+
+impl<'a, T> DerefMut for SpinlockIRQGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.lock.data.get() }
+    }
+}
+
 impl<'a, T> Drop for SpinlockIRQGuard<'a, T> {
     fn drop(&mut self) {
         // Memory barrier before releasing

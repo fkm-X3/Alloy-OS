@@ -58,7 +58,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         r8: 0, r9: 0, r10: 0, r11: 0,
         r12: 0, r13: 0, r14: 0, r15: 0,
         rip: entry as u64,
-        cs: 0x1B, ds: 0x23, es: 0x23, fs: 0x23, gs: 0x23, ss: 0x23,
+        cs: 0x23, ds: 0x1B, es: 0x1B, fs: 0x1B, gs: 0x1B, ss: 0x1B,
         rflags: 0x202,
         cr3: pd_phys as u64,
     });

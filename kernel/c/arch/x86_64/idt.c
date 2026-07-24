@@ -199,6 +199,9 @@ static const char* exception_messages[] = {
 
 extern void rust_handle_page_fault(uintptr_t addr, uint32_t err_code);
 extern uint8_t paging_handle_cow_fault(uintptr_t fault_addr);
+extern bool paging_demand_map_kernel_page(uint64_t fault_addr, uint64_t user_cr3);
+extern uintptr_t paging_get_kernel_directory_phys();
+extern uint64_t g_saved_user_cr3;
 
 void exception_handler(struct interrupt_frame* frame) {
     uint64_t int_no = frame->int_no;
@@ -208,26 +211,45 @@ void exception_handler(struct interrupt_frame* frame) {
         uint64_t fault_addr;
         asm volatile("mov %%cr2, %0" : "=r"(fault_addr));
 
-        uint64_t cr3_val;
-        asm volatile("mov %%cr3, %0" : "=r"(cr3_val));
+        /* ISR stub already switched to kernel CR3.  The faulting task's CR3
+         * was saved to g_saved_user_cr3 before the switch.  We use that for
+         * diagnostics and for page table manipulation (COW, demand-map).   */
+        uint64_t user_cr3 = g_saved_user_cr3;
+        uint64_t kern_cr3 = paging_get_kernel_directory_phys();
+        int from_user = (user_cr3 != kern_cr3);
         serial_print("\n!!! PAGE FAULT at 0x");
         serial_print_hex64(fault_addr);
         serial_print(" Error Code: ");
         serial_print_hex((uint32_t)err_code);
-        serial_print("\n  CR3=0x"); serial_print_hex64(cr3_val);
+        serial_print("\n  UserCR3=0x"); serial_print_hex64(user_cr3);
+        serial_print(" KernCR3=0x"); serial_print_hex64(kern_cr3);
         serial_print(" RIP=0x"); serial_print_hex64(frame->rip);
         serial_print(" RSP=0x"); serial_print_hex64(frame->rsp);
         serial_print("\n");
 
-        /* Dump kernel PML4[0], PDPT[0], PD[12] for G_WIN_PT_VA diagnosis */
+        /* Direct read of kernel page tables and window/accessor PTs via identity-map. */
         {
-            uint64_t pml4e0 = *(uint64_t*)0x1000;
-            uint64_t pdpte0 = *(uint64_t*)0x2000;
-            uint64_t pde12  = *(uint64_t*)0x3060;
-            serial_print("  PML4[0]=0x"); serial_print_hex64(pml4e0);
-            serial_print(" PDPT[0]=0x"); serial_print_hex64(pdpte0);
-            serial_print(" PD[12]=0x");  serial_print_hex64(pde12);
+            uint64_t* pml4_id = (uint64_t*)0x1000ULL;
+            uint64_t* pdpt_id = (uint64_t*)0x2000ULL;
+            uint64_t* pd_id   = (uint64_t*)0x3000ULL;
+            uint64_t* win_pt  = (uint64_t*)0x100000ULL;
+            uint64_t* acc_pt  = (uint64_t*)0x102000ULL;
+            uint64_t pd_idx   = (fault_addr >> 21) & 0x1FF;
+            serial_print("  IDmap: PML4[0]=0x"); serial_print_hex64(pml4_id[0]);
+            serial_print(" PDPT[0]=0x"); serial_print_hex64(pdpt_id[0]);
+            serial_print(" PD[10]=0x");  serial_print_hex64(pd_id[10]);
+            serial_print(" PD[12]=0x");  serial_print_hex64(pd_id[12]);
+            serial_print(" winPT[0]=0x"); serial_print_hex64(win_pt[0]);
+            serial_print(" accPT[0]=0x"); serial_print_hex64(acc_pt[0]);
+            serial_print(" PD[");        serial_print_hex((uint32_t)pd_idx);
+            serial_print("]=0x");        serial_print_hex64(pd_id[pd_idx]);
             serial_print("\n");
+        }
+
+        /* Walk the faulting task's own page tables via its saved CR3. */
+        {
+            extern void paging_dump_user_pt(uint64_t cr3, uint64_t fault_addr);
+            paging_dump_user_pt(user_cr3, fault_addr);
         }
 
         // Check for COW fault: user-mode (bit 2), write (bit 1), present (bit 0)
@@ -240,7 +262,26 @@ void exception_handler(struct interrupt_frame* frame) {
             }
         }
 
+        /* Demand-map kernel pages: when the kernel (ring 0) faults on a kernel
+         * address, map the missing page.  Under user CR3 (from_user), maps into
+         * the user PD.  Under kernel CR3, allocates a fresh page.            */
+        if (!(err_code & 0x4) && fault_addr >= 0x200000) {
+            bool ok = false;
+            if (from_user) {
+                ok = paging_demand_map_kernel_page(fault_addr, user_cr3);
+            } else {
+                extern bool paging_demand_alloc_kernel_page(uint64_t fault_addr);
+                ok = paging_demand_alloc_kernel_page(fault_addr);
+            }
+            if (ok) {
+                return;
+            }
+        }
+
         if (err_code & 0x4) {
+            /* User-mode page fault — never returns.  ISR stub is already on
+             * kernel CR3, so rust_handle_page_fault can safely access kernel
+             * heap (scheduler, CpuContext, etc.).                            */
             serial_print("User-mode page fault, terminating current task...\n");
             rust_handle_page_fault(fault_addr, (uint32_t)err_code);
             return;

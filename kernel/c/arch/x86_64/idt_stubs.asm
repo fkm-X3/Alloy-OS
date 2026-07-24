@@ -14,6 +14,8 @@ idt_flush:
 
 ; Common ISR stub - saves state and calls C handler
 extern exception_handler
+extern g_saved_user_cr3
+extern kernel_pml4_phys
 isr_common_stub:
     ; Save all general purpose registers
     push rax
@@ -49,9 +51,23 @@ isr_common_stub:
     mov fs, ax
     mov gs, ax
 
+    ; Save user CR3 and switch to kernel CR3.
+    ; paging_create_directory_phys() copies kernel PD entries as a snapshot.
+    ; Kernel heap pages allocated after that snapshot are not mapped in the
+    ; user PD.  The C handler (timer, page fault, etc.) needs access to the
+    ; full kernel address space, so we must switch to kernel CR3 first.
+    mov rax, cr3
+    mov [g_saved_user_cr3], rax
+    mov rax, [kernel_pml4_phys]
+    mov cr3, rax
+
     ; Pass stack pointer (interrupt frame) as argument
     mov rdi, rsp
     call exception_handler
+
+    ; Restore user CR3 (the handler returned, so the task was NOT terminated)
+    mov rax, [g_saved_user_cr3]
+    mov cr3, rax
 
     ; Restore segment registers
     pop rax
@@ -86,6 +102,8 @@ isr_common_stub:
 
 ; Common IRQ stub
 extern irq_handler
+extern g_saved_user_cr3
+extern kernel_pml4_phys
 irq_common_stub:
     push rax
     push rbx
@@ -118,8 +136,18 @@ irq_common_stub:
     mov fs, ax
     mov gs, ax
 
+    ; Save user CR3 and switch to kernel CR3 (same rationale as isr_common_stub).
+    mov rax, cr3
+    mov [g_saved_user_cr3], rax
+    mov rax, [kernel_pml4_phys]
+    mov cr3, rax
+
     mov rdi, rsp
     call irq_handler
+
+    ; Restore user CR3
+    mov rax, [g_saved_user_cr3]
+    mov cr3, rax
 
     pop rax
     mov gs, ax

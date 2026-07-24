@@ -129,7 +129,15 @@ pub extern "C" fn rust_sys_read(fd: u32, buf_ptr: u32, len: u32) -> u32 {
 /// Minimal write syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_write called\n".as_ptr() as *const u8); }
+    unsafe {
+        ffi::serial_print(c"[Syscall] sys_write fd=".as_ptr() as *const u8);
+        ffi::serial_print_hex(fd);
+        ffi::serial_print(c" buf=0x".as_ptr() as *const u8);
+        ffi::serial_print_hex64(buf_ptr as u64);
+        ffi::serial_print(c" len=".as_ptr() as *const u8);
+        ffi::serial_print_hex(len);
+        ffi::serial_print(c"\n".as_ptr() as *const u8);
+    }
     if fd == 1 {
         let max = core::cmp::min(len as usize, 240usize);
         let mut buffer = [0u8; 241];
@@ -297,7 +305,10 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
             unsafe { ffi::serial_print(c"[Syscall] ELF loaded successfully\n".as_ptr() as *const u8); }
             let switched = unsafe { ffi::paging_switch_to_directory(pd_phys) };
             if !switched { return u32::MAX; }
-            unsafe { ffi::serial_print(c"[Syscall] Switched to user directory\n".as_ptr() as *const u8); }
+            unsafe {
+                ffi::g_current_user_cr3 = pd_phys as u64;
+                ffi::serial_print(c"[Syscall] Switched to user directory\n".as_ptr() as *const u8);
+            }
 
             const STACK_BASE: u32 = 0x00C00000;
             const STACK_SIZE: u32 = 0x4000;
@@ -399,12 +410,12 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
                     ctx.rip = entry as u64;
                     ctx.rsp = argc_addr as u64;
                     ctx.cr3 = pd_phys as u64;
-                    ctx.cs = 0x1B;
-                    ctx.ds = 0x23;
-                    ctx.es = 0x23;
-                    ctx.fs = 0x23;
-                    ctx.gs = 0x23;
-                    ctx.ss = 0x23;
+                    ctx.cs = 0x23;
+                    ctx.ds = 0x1B;
+                    ctx.es = 0x1B;
+                    ctx.fs = 0x1B;
+                    ctx.gs = 0x1B;
+                    ctx.ss = 0x1B;
                 }
                 #[cfg(feature = "aarch64")]
                 {
@@ -426,18 +437,21 @@ pub extern "C" fn rust_sys_socket(domain: i32, socket_type: i32, protocol: i32) 
 }
 
 /// Bind syscall - binds socket to address
-///
-/// # Safety
-/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
-/// The address family byte at `addr[0..1]` must be readable.
 #[no_mangle]
 pub unsafe extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }
-    let path_bytes = unsafe { core::slice::from_raw_parts(addr.add(2) as *const u8, (addr_len - 2) as usize) };
-    let path = match core::str::from_utf8(path_bytes) {
-        Ok(s) => s,
+    let path_len = (addr_len - 2) as usize;
+    let max_path = if path_len > 256 { 256 } else { path_len };
+    let mut buf = [0u8; 256];
+    // addr itself is a user pointer; addr.add(2) is the path portion
+    let user_ptr = (addr as u32).wrapping_add(2);
+    if crate::utils::copy_from_user(user_ptr, &mut buf[..max_path]).is_err() {
+        return -1;
+    }
+    let path = match core::str::from_utf8(&buf[..max_path]) {
+        Ok(s) => s.trim_end_matches('\0'),
         Err(_) => return -1,
     };
     crate::net::socket_bind(fd, path)
@@ -456,18 +470,20 @@ pub extern "C" fn rust_sys_accept(fd: i32) -> i32 {
 }
 
 /// Connect syscall - connects socket to an address
-///
-/// # Safety
-/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
-/// The address family byte at `addr[0..1]` must be readable.
 #[no_mangle]
 pub unsafe extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }
-    let path_bytes = unsafe { core::slice::from_raw_parts(addr.add(2) as *const u8, (addr_len - 2) as usize) };
-    let path = match core::str::from_utf8(path_bytes) {
-        Ok(s) => s,
+    let path_len = (addr_len - 2) as usize;
+    let max_path = if path_len > 256 { 256 } else { path_len };
+    let mut buf = [0u8; 256];
+    let user_ptr = (addr as u32).wrapping_add(2);
+    if crate::utils::copy_from_user(user_ptr, &mut buf[..max_path]).is_err() {
+        return -1;
+    }
+    let path = match core::str::from_utf8(&buf[..max_path]) {
+        Ok(s) => s.trim_end_matches('\0'),
         Err(_) => return -1,
     };
     crate::net::socket_connect(fd, path)

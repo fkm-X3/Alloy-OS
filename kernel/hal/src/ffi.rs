@@ -72,6 +72,8 @@ extern "C" {
     pub fn paging_map_page_in_pd(pd_phys: usize, virt_addr: usize, phys_addr: usize, flags: u32) -> bool;
     pub fn paging_temp_map_frame(phys_addr: usize) -> *mut c_void;
     pub fn paging_temp_unmap_frame();
+    pub static mut g_current_user_cr3: u64;
+    pub static kernel_pml4_phys: u64;
 
     // --- Timer ---
     pub fn timer_init_ffi(frequency: u32);

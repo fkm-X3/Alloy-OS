@@ -192,6 +192,7 @@ pub extern "C" fn rust_main() {
     unsafe {
         ffi::serial_print(c"[Rust] Starting scheduler — entering multitasking\n".as_ptr() as *const u8);
     }
+    unsafe { ffi::timer_init_ffi(1000); }
     process::Scheduler::start();
 }
 

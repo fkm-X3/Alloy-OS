@@ -49,6 +49,7 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
     // Move the display into the Wayland server's framebuffer for compositing
     wayland.set_framebuffer(FusionDisplayBackend::new(display));
     wayland.composite_frame();
+    serial_log(b"[DisplayServer] First frame presented\n\0");
 
     let mut frame_counter: u64 = 0;
 

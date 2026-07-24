@@ -52,10 +52,9 @@ isr_common_stub:
     mov gs, ax
 
     ; Save user CR3 and switch to kernel CR3.
-    ; paging_create_directory_phys() copies kernel PD entries as a snapshot.
-    ; Kernel heap pages allocated after that snapshot are not mapped in the
-    ; user PD.  The C handler (timer, page fault, etc.) needs access to the
-    ; full kernel address space, so we must switch to kernel CR3 first.
+    ; Kernel pages are ring-0-only (no PAGE_USER in user PDs).  The C
+    ; handler (timer, page fault, etc.) needs access to the full kernel
+    ; address space, so we must switch to kernel CR3 first.
     mov rax, cr3
     mov [g_saved_user_cr3], rax
     mov rax, [kernel_pml4_phys]

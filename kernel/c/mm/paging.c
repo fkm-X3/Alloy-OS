@@ -366,9 +366,10 @@ uintptr_t paging_create_directory_phys() {
     }
     uint64_t new_pd_phys = (uint64_t)(uintptr_t)pd_frame;
 
-    /* Map and initialize the new PD: copy kernel identity-map entries (0-15)
-     * and window-mapping entries so the user has valid identity mapping
-     * starting from boot.                                                    */
+    /* Map and initialize the new PD: copy kernel PD entries so the
+     * identity-map page-table structure is reachable from user CR3.
+     * This is needed for demand-mapping (paging_demand_map_kernel_page)
+     * and page-table walks that resolve physical frames.                */
     void* pd_va = win_map(new_pd_phys, PT_TEMP_IDX);
     if (!pd_va) {
         pmm_free_frame(pml4_frame);
@@ -378,17 +379,17 @@ uintptr_t paging_create_directory_phys() {
     }
     struct page_directory* new_pd = (struct page_directory*)pd_va;
 
-    /* Read kernel PD entries via its identity-mapped VA.
-     * Copy ALL entries to the user page directory so the kernel heap
-     * (stacks, CpuContext, etc.) remains accessible after CR3 switch.
-     * User tasks currently run at CPL 0, so the PAGE_USER bit is
-     * advisory — a future CPL-3 switch will make it meaningful. */
+    /* Copy kernel PD entries so the identity-map page tables are reachable
+     * from the user PD (needed for demand-mapping and page-table walks).
+     * Do NOT set PAGE_USER on these entries — kernel code, data, heap,
+     * stacks, and page tables must be ring-0-only.  The ISR/IRQ stubs
+     * save the user CR3 and switch to kernel CR3 before touching any
+     * kernel state, so the kernel can always reach its own pages.
+     * User-mapped pages (ELF, stack, SHM) are added later via
+     * paging_map_page_in_pd() with PAGE_USER in their flags.            */
     struct page_directory* kern_pd = X86_64_PD_VIRT;
     for (int i = 0; i < 512; i++) {
         new_pd->entries[i] = kern_pd->entries[i];
-        if (new_pd->entries[i] & 0x1) {
-            new_pd->entries[i] |= PAGE_USER;
-        }
     }
     win_unmap(PT_TEMP_IDX);
 
@@ -1042,13 +1043,12 @@ void paging_dump_user_pt(uint64_t cr3, uint64_t fault_addr) {
 
 /* Demand-map a kernel page into the user's page directory.
  * Called from the page fault handler when the kernel (ring 0) faults on a
- * kernel address while running under a user CR3.  This happens because the
- * user PD was created with a snapshot of the kernel's PD entries; any kernel
- * heap pages allocated after that snapshot are missing from the user PD.
- *
- * We walk the kernel's own page tables (identity-mapped at fixed phys addrs)
- * to resolve the physical frame, then call paging_map_page_in_pd() to create
- * the mapping in the user PD.                                            */
+ * kernel address while the ISR is running under user CR3 (saved in
+ * g_saved_user_cr3).  Kernel pages are ring-0-only (no PAGE_USER), so
+ * post-snapshot heap pages are missing from the user PD.  We walk the
+ * kernel's own page tables (identity-mapped at fixed phys addrs) to
+ * resolve the physical frame, then call paging_map_page_in_pd() to create
+ * the mapping in the user PD (without PAGE_USER — ring-0-only).         */
 bool paging_demand_map_kernel_page(uint64_t fault_addr, uint64_t user_cr3) {
     uint64_t pml4_idx = (fault_addr >> 39) & 0x1FF;
     uint64_t pdpt_idx = (fault_addr >> 30) & 0x1FF;
@@ -1056,8 +1056,8 @@ bool paging_demand_map_kernel_page(uint64_t fault_addr, uint64_t user_cr3) {
     uint64_t pt_idx   = (fault_addr >> 12) & 0x1FF;
 
     /* Kernel PML4/PDPT/PD are identity-mapped at fixed phys addresses.
-     * They are accessible from user CR3 because the user PD has copies of
-     * the kernel's identity-map entries for 0-32 MB.                      */
+     * We are running under kernel CR3 (ISR stub switched), so these
+     * identity-mapped kernel page tables are directly accessible.        */
     uint64_t* pml4 = (uint64_t*)(uintptr_t)X86_64_PML4_PHYS;
     uint64_t pml4e = pml4[pml4_idx];
     if (!(pml4e & 1)) return false;

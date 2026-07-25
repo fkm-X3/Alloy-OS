@@ -74,6 +74,7 @@ pub(crate) struct Elf64Phdr {
 }
 
 const PT_LOAD: u32 = 1;
+const PT_TLS: u32 = 7;
 
 const MAX_LOADS: usize = 32;
 
@@ -233,6 +234,50 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
     }
 
     Ok((hdr.e_entry, phdr_vaddr))
+}
+
+/// Find the PT_TLS segment and return (vaddr, memsz).
+/// The thread pointer (FS base) on x86_64 = vaddr + memsz (end of TLS block).
+pub fn find_tls_info(image: &[u8]) -> Option<(u64, u64)> {
+    if image.len() < 16 { return None; }
+    if image[0] != 0x7f || image[1] != b'E' || image[2] != b'L' || image[3] != b'F' {
+        return None;
+    }
+    match image[4] {
+        1 => {
+            if image.len() < core::mem::size_of::<Elf32Ehdr>() { return None; }
+            let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
+            let phoff = hdr.e_phoff as usize;
+            let phentsize = hdr.e_phentsize as usize;
+            let phnum = hdr.e_phnum as usize;
+            for i in 0..phnum {
+                let off = phoff + i * phentsize;
+                if off + core::mem::size_of::<Elf32Phdr>() > image.len() { return None; }
+                let ph = unsafe { &*(image.as_ptr().add(off) as *const Elf32Phdr) };
+                if ph.p_type == PT_TLS {
+                    return Some((ph.p_vaddr as u64, ph.p_memsz as u64));
+                }
+            }
+            None
+        }
+        2 => {
+            if image.len() < core::mem::size_of::<Elf64Ehdr>() { return None; }
+            let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
+            let phoff = hdr.e_phoff as usize;
+            let phentsize = hdr.e_phentsize as usize;
+            let phnum = hdr.e_phnum as usize;
+            for i in 0..phnum {
+                let off = phoff + i * phentsize;
+                if off + core::mem::size_of::<Elf64Phdr>() > image.len() { return None; }
+                let ph = unsafe { &*(image.as_ptr().add(off) as *const Elf64Phdr) };
+                if ph.p_type == PT_TLS {
+                    return Some((ph.p_vaddr, ph.p_memsz));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 /// Parse minimal ELF header fields useful for execve auxv

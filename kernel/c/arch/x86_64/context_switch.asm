@@ -9,10 +9,10 @@ extern serial_print
 extern g_current_user_cr3
 
 section .rodata
-.msg_entry:  db "[CS] enter", 10, 0
-.msg_save:   db "[CS] saved", 10, 0
-.msg_load:   db "[CS] loading", 10, 0
-.msg_cr3:    db "[CS] cr3 switched", 10, 0
+msg_entry:  db "[CS] enter", 10, 0
+msg_save:   db "[CS] saved", 10, 0
+msg_load:   db "[CS] loading", 10, 0
+msg_cr3:    db "[CS] cr3 switched", 10, 0
 
 section .text
 
@@ -20,7 +20,7 @@ context_switch:
     ; Debug: confirm context_switch entry
     push rdi
     push rsi
-    lea rdi, [rel .msg_entry]
+    lea rdi, [rel msg_entry]
     call serial_print
     pop rsi
     pop rdi
@@ -75,6 +75,11 @@ context_switch:
     mov rax, cr3
     mov [rdi + 192], rax      ; CR3
 
+    ; Save FS_BASE MSR (0xC0000101) — controls TLS access via fs: segment
+    mov ecx, 0xC0000101
+    rdmsr                     ; edx:eax = FS_BASE (64-bit value in edx:eax)
+    mov [rdi + 200], rax      ; FS_BASE (low 64 bits only; high 32 always 0)
+
 .load_only:
     ; Load new context from new_ctx (in RSI)
     test rsi, rsi
@@ -83,7 +88,7 @@ context_switch:
     ; Debug: confirm we are about to load new context
     push rdi
     push rsi
-    lea rdi, [rel .msg_load]
+    lea rdi, [rel msg_load]
     call serial_print
     pop rsi
     pop rdi
@@ -150,6 +155,10 @@ context_switch:
     push qword [rsi + 184]    ; RFLAGS
     push qword [rsi + 0]      ; RAX
 
+    ; Pre-read new FS_BASE before CR3 switch (new_ctx not accessible after)
+    mov rax, [rsi + 200]      ; FS_BASE from new_ctx
+    mov [rel fs_base_new], rax
+
     ; Switch CR3 (must happen after all pre-reads)
     mov rax, [rsi + 192]
     mov cr3, rax
@@ -158,7 +167,7 @@ context_switch:
     ; Debug: confirm CR3 switch
     push rdi
     push rsi
-    lea rdi, [rel .msg_cr3]
+    lea rdi, [rel msg_cr3]
     call serial_print
     pop rsi
     pop rdi
@@ -242,7 +251,19 @@ context_switch:
     wrmsr
     pop rax
 
+    ; Write FS_BASE MSR (0xC0000100) — enables TLS via fs: segment
+    ; FS_BASE was pre-read from new_ctx before CR3 switch into fs_base_new.
+    push rax
+    mov rax, [rel fs_base_new]
+    xor edx, edx
+    mov ecx, 0xC0000100       ; MSR_FS_BASE
+    wrmsr
+    pop rax
+
     ret
 
 .done:
     ret
+
+section .data
+fs_base_new: dq 0

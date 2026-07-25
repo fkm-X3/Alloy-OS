@@ -4,12 +4,13 @@ use core::ptr;
 use crate::process::task::{Task, CpuContext};
 use crate::process::Scheduler;
 use crate::ffi;
-use crate::elf::{Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr};
+use crate::elf::{Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr, find_tls_info};
 
 const STACK_BASE: u64 = 0x00C00000;
 const STACK_SIZE: u64 = 0x4000;
 
 const PT_LOAD: u32 = 1;
+const PT_TLS: u32 = 7;
 
 /// Load an ELF binary (32 or 64-bit) into a new user-mode task and add it to the
 /// scheduler ready queue. Returns true on success.
@@ -49,6 +50,24 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         return false;
     }
 
+    // ── Compute FS base from PT_TLS (thread pointer = end of TLS block) ──
+    let fs_base: u64 = match find_tls_info(image) {
+        Some((vaddr, memsz)) => {
+            let tp = vaddr + memsz;
+            unsafe {
+                ffi::serial_print(c"[spawn] TLS vaddr=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(vaddr);
+                ffi::serial_print(c" memsz=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(memsz);
+                ffi::serial_print(c" fs_base=0x".as_ptr() as *const u8);
+                ffi::serial_print_hex64(tp);
+                ffi::serial_print(c"\n".as_ptr() as *const u8);
+            }
+            tp
+        }
+        None => 0,
+    };
+
     // ── Build user-mode CPU context ──────────────────────────────────
     #[cfg(feature = "x86_64")]
     let ctx = Box::new(CpuContext {
@@ -61,6 +80,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         cs: 0x23, ds: 0x1B, es: 0x1B, fs: 0x1B, gs: 0x1B, ss: 0x1B,
         rflags: 0x202,
         cr3: pd_phys as u64,
+        fs_base,
     });
     #[cfg(feature = "aarch64")]
     let ctx = Box::new(CpuContext {

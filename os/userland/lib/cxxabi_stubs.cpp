@@ -437,148 +437,24 @@ void __cxa_call_once(void* flag, void (*func)(void*), void* arg) {
 
 } // extern "C"
 
-// ── Qt internal platform stubs (missing platform-specific implementations) ──
-// These should never be called at runtime in our test app; they exist only to
-// satisfy the linker. Compiled with -fno-rtti -fno-exceptions.
-//
-// NOTE: QElapsedTimer, QDeadlineTimer, qt_readlink are now provided by the
-// real Qt6 static libraries (libQt6Core.a). We must NOT define them here or
-// the object file definitions shadow the archive definitions and the real
-// implementations are never linked.
+// ── Qt internal platform stubs (REMOVED) ──────────────────────────────────
+// All Qt internal stubs (QThreadData, QThread, QWaitCondition, QLockFile,
+// QFSFileEngine, QTzTimeZonePrivate) have been removed because they shadow
+// the real implementations in the Qt6 static libraries (.a archives).
+// The GNU linker resolves .o symbols before .a archives, so these stubs
+// prevented the real Qt6 code from being linked.
 
-// QThreadData::current(bool create) — normally in qthread_unix.cpp
-extern "C" void* _ZN11QThreadData7currentEb(void* this_, int create) {
-    (void)this_; (void)create;
-    return 0;
-}
-
-// QLockFilePrivate::tryLock_sys() — normally in qlockfile_unix.cpp
-extern "C" int _ZN16QLockFilePrivate11tryLock_sysEv(void* this_) {
-    (void)this_;
-    return -1;  // lock failed
-}
-
-// QLockFilePrivate::removeStaleLock()
-extern "C" void _ZN16QLockFilePrivate15removeStaleLockEv(void* this_) {
-    (void)this_;
-}
-
-// QLockFilePrivate::isProcessRunning(long long pid, QString const& name)
-extern "C" int _ZN16QLockFilePrivate16isProcessRunningExRK7QString(void* this_, long long pid, void* name) {
-    (void)this_; (void)pid; (void)name;
-    return 0;  // false
-}
-
-// QTzTimeZonePrivate::QTzTimeZonePrivate() — normally in qtztimezoneprivate.cpp
-extern "C" void _ZN18QTzTimeZonePrivateC1Ev(void* this_) {
-    (void)this_;
-}
-
-// QThread::msleep(unsigned long) — normally in qthread_unix.cpp
-extern "C" void _ZN7QThread6msleepEm(void* this_, unsigned long msecs) {
-    (void)this_; (void)msecs;
-}
-
-// QWaitCondition::QWaitCondition() — normally in qwaitcondition_unix.cpp
-extern "C" void _ZN14QWaitConditionC1Ev(void* this_) {
-    (void)this_;
-}
-extern "C" void _ZN14QWaitConditionC2Ev(void* this_) {
-    (void)this_;
-}
-
-// QWaitCondition::~QWaitCondition() — normally in qwaitcondition_unix.cpp
-extern "C" void _ZN14QWaitConditionD1Ev(void* this_) {
-    (void)this_;
-}
-extern "C" void _ZN14QWaitConditionD2Ev(void* this_) {
-    (void)this_;
-}
-extern "C" void _ZN14QWaitConditionD0Ev(void* this_) {
-    (void)this_;
-}
-
-// QWaitCondition::wait(QMutex*, QDeadlineTimer) — normally in qwaitcondition_unix.cpp
-extern "C" int _ZN14QWaitCondition4waitEP6QMutex14QDeadlineTimer(void* this_, void* mutex, void* timer) {
-    (void)this_; (void)mutex; (void)timer;
-    return 1;  // always succeeds
-}
-
-// QWaitCondition::wakeOne() — normally in qwaitcondition_unix.cpp
-extern "C" void _ZN14QWaitCondition7wakeOneEv(void* this_) {
-    (void)this_;
-}
-
-// QWaitCondition::wakeAll() — normally in qwaitcondition_unix.cpp
-extern "C" void _ZN14QWaitCondition7wakeAllEv(void* this_) {
-    (void)this_;
-}
-
-// QThread::start(QThread::Priority) — normally in qthread_unix.cpp
-extern "C" void _ZN7QThread5startENS_8PriorityE(void* this_, int priority) {
-    (void)this_; (void)priority;
-}
-
-// QThread::wait(QDeadlineTimer) — normally in qthread_unix.cpp
-extern "C" int _ZN7QThread4waitE14QDeadlineTimer(void* this_, void* timer) {
-    (void)this_; (void)timer;
-    return 1;  // always succeeds
-}
-
-// QThread::idealThreadCount() — static, normally in qthread_unix.cpp
-extern "C" int _ZN7QThread16idealThreadCountEv() {
-    return 1;
-}
-
-// QFSFileEngine::id() const — normally in qfsfileengine_unix.cpp
-extern "C" unsigned int _ZNK13QFSFileEngine2idEv(void* this_) {
-    (void)this_;
-    return 0;
-}
-
-// QFSFileEngine::owner(FileOwner) const — normally in qfsfileengine_unix.cpp
-extern "C" void _ZNK13QFSFileEngine5ownerEN19QAbstractFileEngine9FileOwnerE(void* this_, int owner) {
-    (void)this_; (void)owner;
-}
-
-// QFSFileEngine::ownerId(FileOwner) const — normally in qfsfileengine_unix.cpp
-extern "C" unsigned int _ZNK13QFSFileEngine7ownerIdEN19QAbstractFileEngine9FileOwnerE(void* this_, int owner) {
-    (void)this_; (void)owner;
-    return 0;
-}
-
-// QFSFileEngine::setFileTime(QDateTime const&, FileTime) — normally in qfsfileengine_unix.cpp
-extern "C" int _ZN13QFSFileEngine11setFileTimeERK9QDateTimeN19QAbstractFileEngine8FileTimeE(void* this_, void* dt, int fileTime) {
-    (void)this_; (void)dt; (void)fileTime;
-    return 0;  // false (unsupported)
-}
-
-// QFSFileEngine::cloneTo(QAbstractFileEngine*) — normally in qfsfileengine_unix.cpp
-extern "C" int _ZN13QFSFileEngine7cloneToEP19QAbstractFileEngine(void* this_, void* target) {
-    (void)this_; (void)target;
-    return 0;  // false (unsupported)
+// ── operator new[] (unsigned long, std::nothrow_t const&) ──────────────────
+// C++ ABI — not a Qt symbol, must not be removed.
+extern "C" void* _ZnamRKSt9nothrow_t(unsigned long sz, void* nt) {
+    (void)nt;
+    return operator new[](sz);
 }
 
 // operator new(unsigned long, std::nothrow_t const&) — nothrow placement new (64-bit)
 extern "C" void* _ZnwmRKSt9nothrow_t(unsigned long sz, void* nt) {
     (void)nt;
     return operator new(sz);
-}
-
-// operator new[](unsigned long, std::nothrow_t const&) — nothrow array placement new (64-bit)
-extern "C" void* _ZnamRKSt9nothrow_t(unsigned long sz, void* nt) {
-    (void)nt;
-    return operator new[](sz);
-}
-
-// QTzTimeZonePrivate::QTzTimeZonePrivate(QByteArray const&) — additional ctor
-extern "C" void _ZN18QTzTimeZonePrivateC2ERK10QByteArray(void* this_, void* id) {
-    (void)this_; (void)id;
-}
-
-// QLockFile::unlock() — normally in qlockfile_unix.cpp
-extern "C" void _ZN9QLockFile6unlockEv(void* this_) {
-    (void)this_;
 }
 
 // ── std::__detail::_List_node_base ──────────────────────────────────────────

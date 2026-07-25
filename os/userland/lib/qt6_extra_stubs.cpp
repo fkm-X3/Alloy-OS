@@ -51,14 +51,14 @@ unsigned long _Unwind_GetCFA(struct _Unwind_Context* context) { (void)context; r
 void _Unwind_Resume(struct _Unwind_Exception* exc) { (void)exc; __builtin_trap(); }
 
 // typeinfo for __cxxabiv1::__forced_unwind (needed by exception handling)
-extern const char _ZTSN10__cxxabiv114__forced_unwindE[];
+extern const char _ZTSN10__cxxabiv115__forced_unwindE[];
 extern void* _ZTVN10__cxxabiv117__class_type_infoE[];
-void* _ZTIN10__cxxabiv114__forced_unwindE[3] = {
+void* _ZTIN10__cxxabiv115__forced_unwindE[3] = {
     (void*)((char*)_ZTVN10__cxxabiv117__class_type_infoE + 16),
-    (void*)_ZTSN10__cxxabiv114__forced_unwindE,
+    (void*)_ZTSN10__cxxabiv115__forced_unwindE,
     (void*)0
 };
-const char _ZTSN10__cxxabiv114__forced_unwindE[] = "N10__cxxabiv114__forced_unwindE";
+const char _ZTSN10__cxxabiv115__forced_unwindE[] = "N10__cxxabiv115__forced_unwindE";
 
 // typeinfo/vtable for std::bad_alloc
 extern void* _ZTVN10__cxxabiv120__si_class_type_infoE[];
@@ -175,6 +175,37 @@ int32_t ucol_strcoll_74(void* coll, const void* source, int32_t sourceLength,
 // ICU callback data symbols (function pointers used as default callbacks)
 void UCNV_FROM_U_CALLBACK_SUBSTITUTE_74() {}
 void UCNV_TO_U_CALLBACK_SUBSTITUTE_74() {}
+
+// ICU calendar stubs (needed by QIcuTimeZonePrivate)
+void* ucal_open_74(const void* tzID, int32_t tzIDLength, const char* locale, int32_t type, int* status) {
+    (void)tzID; (void)tzIDLength; (void)locale; (void)type; if (status) *status = 0; return 0;
+}
+void ucal_close_74(void* cal) { (void)cal; }
+void* ucal_clone_74(void* cal, int* status) { (void)cal; if (status) *status = 0; return 0; }
+void ucal_setMillis_74(void* cal, double millis, int* status) { (void)cal; (void)millis; if (status) *status = 0; }
+void ucal_get_74(void* cal, int32_t field, int* status) { (void)cal; (void)field; if (status) *status = 0; }
+int32_t ucal_inDaylightTime_74(void* cal, int* status) { (void)cal; if (status) *status = 0; return 0; }
+int32_t ucal_getDSTSavings_74(void* tz, int* status) { (void)tz; if (status) *status = 0; return 0; }
+void ucal_openTimeZones_74(int* status) { if (status) *status = 0; }
+void ucal_openCountryTimeZones_74(const char* country, int* status) { (void)country; if (status) *status = 0; }
+void* ucal_openTimeZoneIDEnumeration_74(int32_t zoneType, void* region, const void* filter, int* status) {
+    (void)zoneType; (void)region; (void)filter; if (status) *status = 0; return 0;
+}
+void ucal_getDefaultTimeZone_74(void* resultID, int32_t resultIDCapacity, int* status) {
+    (void)resultID; (void)resultIDCapacity; if (status) *status = 0;
+}
+int32_t ucal_getTimeZoneDisplayName_74(void* cal, int32_t type, int32_t nameStyle, const void* locale, void* result, int32_t resultLength, int* status) {
+    (void)cal; (void)type; (void)nameStyle; (void)locale; (void)result; (void)resultLength; if (status) *status = 0; return 0;
+}
+int32_t ucal_getTimeZoneTransitionDate_74(void* cal, int32_t type, double* transition, int* status) {
+    (void)cal; (void)type; if (transition) *transition = 0; if (status) *status = 0; return 0;
+}
+
+// ICU enumeration stubs
+void* uenum_next_74(void* en, int32_t* resultLength, int* status) {
+    (void)en; if (resultLength) *resultLength = 0; if (status) *status = 0; return 0;
+}
+void uenum_close_74(void* en) { (void)en; }
 
 } // extern "C"
 
@@ -310,6 +341,85 @@ struct tm* gmtime_r(const void* timer, void* buf) { (void)timer; (void)buf; retu
 
 int madvise(void* addr, unsigned long length, int advice) { (void)addr; (void)length; (void)advice; return 0; }
 int mprotect(void* addr, unsigned long length, int prot) { (void)addr; (void)length; (void)prot; return 0; }
+
+// ── POSIX stubs needed by real Qt6 implementations ──────────────────────────
+
+int fileno(void* stream) { (void)stream; return -1; }
+int ftruncate64(int fd, long long length) { (void)fd; (void)length; return -1; }
+long long truncate64(const char* path, long long length) { (void)path; (void)length; return -1; }
+int flock(int fd, int operation) { (void)fd; (void)operation; return 0; }
+int fdatasync(int fd) { (void)fd; return 0; }
+int fchmod(int fd, unsigned int mode) { (void)fd; (void)mode; return -1; }
+int chmod(const char* path, unsigned int mode) { (void)path; (void)mode; return -1; }
+int symlink(const char* target, const char* linkpath) { (void)target; (void)linkpath; return -1; }
+int futimens(int fd, const void* times) { (void)fd; (void)times; return -1; }
+int renameat2(int olddirfd, const char* oldpath, int newdirfd, const char* newpath, unsigned int flags) {
+    (void)olddirfd; (void)oldpath; (void)newdirfd; (void)newpath; (void)flags; return -1;
+}
+int link(const char* oldpath, const char* newpath) { (void)oldpath; (void)newpath; return -1; }
+int lstat64(const char* pathname, void* statbuf) { (void)pathname; (void)statbuf; return -1; }
+char* realpath(const char* path, char* resolved_path) { (void)path; (void)resolved_path; return 0; }
+int fgetc(void* stream) { (void)stream; return -1; }
+unsigned long getpagesize(void) { return 4096; }
+
+struct statx { int dummy; };
+int statx(int dirfd, const char* pathname, unsigned flags, unsigned mask, struct statx* buf) {
+    (void)dirfd; (void)pathname; (void)flags; (void)mask; (void)buf; return -1;
+}
+long long sendfile(int out_fd, int in_fd, long long* offset, unsigned long count) {
+    (void)out_fd; (void)in_fd; (void)offset; (void)count; return -1;
+}
+
+// ── sched / pthread stubs ───────────────────────────────────────────────────
+
+int sched_getaffinity(int pid, unsigned int cpusetsize, void* cpuset) {
+    (void)pid; (void)cpusetsize; (void)cpuset; return -1;
+}
+int __sched_cpucount(unsigned long cpusetsize, const void* cpuset) {
+    (void)cpusetsize; (void)cpuset; return 1;
+}
+int sched_get_priority_min(int policy) { (void)policy; return 0; }
+int sched_get_priority_max(int policy) { (void)policy; return 0; }
+
+int pthread_attr_setdetachstate(void* attr, int detachstate) { (void)attr; (void)detachstate; return 0; }
+int pthread_attr_getschedpolicy(const void* attr, int* policy) { (void)attr; if (policy) *policy = 0; return 0; }
+int pthread_attr_setinheritsched(void* attr, int inherit) { (void)attr; (void)inherit; return 0; }
+int pthread_attr_setschedpolicy(void* attr, int policy) { (void)attr; (void)policy; return 0; }
+int pthread_attr_setstacksize(void* attr, unsigned long stacksize) { (void)attr; (void)stacksize; return 0; }
+int pthread_attr_setschedparam(void* attr, const void* param) { (void)attr; (void)param; return 0; }
+int pthread_getschedparam(int thread, int* policy, void* param) {
+    (void)thread; if (policy) *policy = 0; (void)param; return 0;
+}
+int pthread_setschedparam(int thread, int policy, const void* param) {
+    (void)thread; (void)policy; (void)param; return 0;
+}
+int pthread_setcancelstate(int state, int* oldstate) {
+    (void)state; if (oldstate) *oldstate = 0; return 0;
+}
+int pthread_testcancel(void) { return 0; }
+
+int pthread_condattr_init(void* attr) { (void)attr; return 0; }
+int pthread_condattr_destroy(void* attr) { (void)attr; return 0; }
+int pthread_condattr_setclock(void* attr, int clockid) { (void)attr; (void)clockid; return 0; }
+
+int prctl(int option, ...) { (void)option; return 0; }
+
+// ── User/group lookup stubs (needed by QFileSystemEngine) ───────────────────
+
+struct passwd { char* pw_name; char* pw_passwd; int pw_uid; int pw_gid; char* pw_gecos; char* pw_dir; char* pw_shell; };
+struct group { char* gr_name; char* gr_passwd; int gr_gid; char** gr_mem; };
+
+int getpwuid_r(int uid, struct passwd* pwd, char* buf, unsigned long buflen, struct passwd** result) {
+    (void)uid; (void)pwd; (void)buf; (void)buflen;
+    if (result) *result = 0;
+    return 0;
+}
+
+int getgrgid_r(int gid, struct group* grp, char* buf, unsigned long buflen, struct group** result) {
+    (void)gid; (void)grp; (void)buf; (void)buflen;
+    if (result) *result = 0;
+    return 0;
+}
 
 // ── Math stubs missing from posix_stubs.c ───────────────────────────────────
 
@@ -729,34 +839,10 @@ extern "C" {
 
 // ── QElapsedTimer — REMOVED: real implementation in libQt6Core.a ────────────
 
-// ── QFSFileEngine::drives ──────────────────────────────────────────────────
-extern "C" {
-    void _ZN13QFSFileEngine6drivesEv(void* ret) { (void)ret; }
-}
-
-// ── QFileSystemEngine ───────────────────────────────────────────────────────
-extern "C" {
-    long long _ZN17QFileSystemEngine2idERK16QFileSystemEntry(const void* entry) { (void)entry; return 0; }
-    int _ZN17QFileSystemEngine15moveFileToTrashERK16QFileSystemEntryRS0_R12QSystemError(
-        const void* src, void* dest, void* err) { (void)src; (void)dest; (void)err; return -1; }
-    void _ZN17QFileSystemEngine16resolveGroupNameEj(void* ret, unsigned int gid) { (void)ret; (void)gid; }
-    void _ZN17QFileSystemEngine15resolveUserNameEj(void* ret, unsigned int uid) { (void)ret; (void)uid; }
-}
-
-// ── QLockFilePrivate ───────────────────────────────────────────────────────
-extern "C" {
-    void _ZN16QLockFilePrivate16processNameByPidEx(void* ret, long long pid) { (void)ret; (void)pid; }
-}
-
-// ── QThread::yieldCurrentThread ─────────────────────────────────────────────
-extern "C" {
-    void _ZN7QThread18yieldCurrentThreadEv() {}
-}
-
-// ── QAdoptedThread ──────────────────────────────────────────────────────────
-extern "C" {
-    void _ZN14QAdoptedThread4initEv() {}
-}
+// ── QFSFileEngine, QFileSystemEngine, QLockFilePrivate, QThread, QAdoptedThread
+// REMOVED: all shadowing stubs deleted to let real implementations from
+// libQt6Core.a be linked instead. The GNU linker resolves .o before .a
+// archives, so these were preventing the real code from being used.
 
 // ── QtGenericUnixDispatcher ─────────────────────────────────────────────────
 // REMOVED: The real createUnixEventDispatcher() from libQt6Core.a should be

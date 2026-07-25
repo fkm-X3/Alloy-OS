@@ -28,79 +28,9 @@ int _ZN19QFileSystemIterator7advanceER16QFileSystemEntryR19QFileSystemMetaData(
     return 0;
 }
 
-// ── QFileSystemEngine ────────────────────────────────────────────────────
-// Normally in qfilesystemengine_unix.cpp
-
-void _ZN17QFileSystemEngine10removeFileERK16QFileSystemEntryR12QSystemError(
-    void* entry, void* error) {
-    (void)entry; (void)error;
-}
-
-void _ZN17QFileSystemEngine10renameFileERK16QFileSystemEntryS2_R12QSystemError(
-    void* oldName, void* newName, void* error) {
-    (void)oldName; (void)newName; (void)error;
-}
-
-void _ZN17QFileSystemEngine11currentPathEv(void* ret) {
-    (void)ret;
-}
-
-void _ZN17QFileSystemEngine12absoluteNameERK16QFileSystemEntry(
-    void* ret, void* entry) {
-    (void)ret; (void)entry;
-}
-
-void _ZN17QFileSystemEngine12fillMetaDataERK16QFileSystemEntryR19QFileSystemMetaData6QFlagsINS3_12MetaDataFlagEE(
-    void* entry, void* metaData, int flags) {
-    (void)entry; (void)metaData; (void)flags;
-}
-
-void _ZN17QFileSystemEngine13canonicalNameERK16QFileSystemEntryR19QFileSystemMetaData(
-    void* ret, void* entry, void* metaData) {
-    (void)ret; (void)entry; (void)metaData;
-}
-
-void _ZN17QFileSystemEngine13getLinkTargetERK16QFileSystemEntryR19QFileSystemMetaData(
-    void* ret, void* entry, void* metaData) {
-    (void)ret; (void)entry; (void)metaData;
-}
-
-void _ZN17QFileSystemEngine14setCurrentPathERK16QFileSystemEntry(
-    void* entry) {
-    (void)entry;
-}
-
-void _ZN17QFileSystemEngine15createDirectoryERK16QFileSystemEntrybSt8optionalI6QFlagsIN11QFileDevice10PermissionEEE(
-    void* path, int /*bool*/ treatRootAsDir, void* permissions) {
-    (void)path; (void)treatRootAsDir; (void)permissions;
-}
-
-void _ZN17QFileSystemEngine15removeDirectoryERK16QFileSystemEntryb(
-    void* entry, int recurse) {
-    (void)entry; (void)recurse;
-}
-
-void _ZN17QFileSystemEngine19renameOverwriteFileERK16QFileSystemEntryS2_R12QSystemError(
-    void* oldName, void* newName, void* error) {
-    (void)oldName; (void)newName; (void)error;
-}
-
-void _ZN17QFileSystemEngine8copyFileERK16QFileSystemEntryS2_R12QSystemError(
-    void* src, void* dest, void* error) {
-    (void)src; (void)dest; (void)error;
-}
-
-void _ZN17QFileSystemEngine8homePathEv(void* ret) {
-    (void)ret;
-}
-
-void _ZN17QFileSystemEngine8rootPathEv(void* ret) {
-    (void)ret;
-}
-
-void _ZN17QFileSystemEngine8tempPathEv(void* ret) {
-    (void)ret;
-}
+// ── QFileSystemEngine (REMOVED) ────────────────────────────────────────────
+// All QFileSystemEngine stubs removed because they shadow real implementations
+// in libQt6Core.a. The GNU linker resolves .o before .a archives.
 
 // ── QStandardPaths ───────────────────────────────────────────────────────
 // Normally in qstandardpaths_unix.cpp
@@ -115,145 +45,17 @@ void _ZN14QStandardPaths17standardLocationsENS_16StandardLocationE(
     (void)ret; (void)location;
 }
 
-// ── QFSFileEngine ────────────────────────────────────────────────────────
-// Normally in qfsfileengine_unix.cpp
+// ── QFSFileEngine (REMOVED) ───────────────────────────────────────────────
+// All QFSFileEngine stubs removed because they shadow real implementations
+// in libQt6Core.a. The GNU linker resolves .o before .a archives.
 
-void _ZNK13QFSFileEngine8fileNameEN19QAbstractFileEngine8FileNameE(
-    void* ret, void* this_, int file) {
-    (void)ret; (void)this_; (void)file;
-}
+// ── QFSFileEnginePrivate (REMOVED) ────────────────────────────────────────
+// All QFSFileEnginePrivate stubs removed because they shadow real implementations
+// in libQt6Core.a. The GNU linker resolves .o before .a archives.
 
-int _ZN13QFSFileEngine4linkERK7QString(void* this_, void* newName) {
-    (void)this_; (void)newName;
-    return 0;
-}
-
-int _ZN13QFSFileEngine7setSizeEx(void* this_, long long size) {
-    (void)this_; (void)size;
-    return 0;
-}
-
-int _ZNK13QFSFileEngine13caseSensitiveEv(void* this_) {
-    (void)this_;
-    return 0;
-}
-
-int _ZNK13QFSFileEngine14isRelativePathEv(void* this_) {
-    (void)this_;
-    return 0;
-}
-
-uint64_t _ZNK13QFSFileEngine9fileFlagsE6QFlagsIN19QAbstractFileEngine8FileFlagEE(
-    void* this_, int type) {
-    (void)this_; (void)type;
-    return 0;
-}
-
-int _ZN13QFSFileEngine14setPermissionsEj(void* this_, unsigned int perms) {
-    (void)this_; (void)perms;
-    return 0;
-}
-
-// ── QFSFileEnginePrivate ─────────────────────────────────────────────────
-// Normally in qfsfileengine_unix.cpp
-
-int _ZN20QFSFileEnginePrivate10nativeOpenE6QFlagsIN13QIODeviceBase12OpenModeFlagEESt8optionalIS0_IN11QFileDevice10PermissionEEE(
-    void* this_, int openMode, void* permissions) {
-    (void)this_; (void)openMode; (void)permissions;
-    return 0;
-}
-
-long long _ZN20QFSFileEnginePrivate10nativeReadEPcx(
-    void* this_, char* data, long long maxlen) {
-    (void)this_; (void)data; (void)maxlen;
-    return -1;
-}
-
-int _ZN20QFSFileEnginePrivate10nativeSeekEx(void* this_, long long pos) {
-    (void)this_; (void)pos;
-    return 0;
-}
-
-void _ZN20QFSFileEnginePrivate11nativeCloseEv(void* this_) {
-    (void)this_;
-}
-
-void _ZN20QFSFileEnginePrivate11nativeFlushEv(void* this_) {
-    (void)this_;
-}
-
-long long _ZN20QFSFileEnginePrivate11nativeWriteEPKcx(
-    void* this_, const char* data, long long len) {
-    (void)this_; (void)data; (void)len;
-    return -1;
-}
-
-long long _ZN20QFSFileEnginePrivate14nativeReadLineEPcx(
-    void* this_, char* data, long long maxlen) {
-    (void)this_; (void)data; (void)maxlen;
-    return -1;
-}
-
-void _ZN20QFSFileEnginePrivate16nativeSyncToDiskEv(void* this_) {
-    (void)this_;
-}
-
-void* _ZN20QFSFileEnginePrivate3mapExx6QFlagsIN11QFileDevice13MemoryMapFlagEE(
-    void* this_, long long offset, long long size, int flags) {
-    (void)this_; (void)offset; (void)size; (void)flags;
-    return nullptr;
-}
-
-void _ZN20QFSFileEnginePrivate5unmapEPh(void* this_, unsigned char* addr) {
-    (void)this_; (void)addr;
-}
-
-long long _ZNK20QFSFileEnginePrivate10nativeSizeEv(void* this_) {
-    (void)this_;
-    return -1;
-}
-
-long long _ZNK20QFSFileEnginePrivate12nativeHandleEv(void* this_) {
-    (void)this_;
-    return -1;
-}
-
-int _ZNK20QFSFileEnginePrivate18nativeIsSequentialEv(void* this_) {
-    (void)this_;
-    return 0;
-}
-
-long long _ZNK20QFSFileEnginePrivate6doStatE6QFlagsIN19QFileSystemMetaData12MetaDataFlagEE(
-    void* this_, int flags) {
-    (void)this_; (void)flags;
-    return -1;
-}
-
-long long _ZNK20QFSFileEnginePrivate9nativePosEv(void* this_) {
-    (void)this_;
-    return 0;
-}
-
-// ── QThread / QThreadData / QThreadPrivate ───────────────────────────────
-// Normally in qthread_unix.cpp
-
-void _ZN7QThread9terminateEv(void* this_) {
-    (void)this_;
-}
-
-void _ZN11QThreadData22clearCurrentThreadDataEv() {
-}
-
-void* _ZN14QThreadPrivate21createEventDispatcherEP11QThreadData(
-    void* this_, void* data) {
-    (void)this_; (void)data;
-    return nullptr;
-}
-
-void _ZN14QThreadPrivate11setPriorityEN7QThread8PriorityE(
-    void* this_, int priority) {
-    (void)this_; (void)priority;
-}
+// ── QThread / QThreadData / QThreadPrivate (REMOVED) ──────────────────────
+// QThreadPrivate::createEventDispatcher and QThreadPrivate::setPriority
+// removed because they shadow real implementations in libQt6Core.a.
 
 // ── QSystemLocale ────────────────────────────────────────────────────────
 // Normally in qsystemlocale_unix.cpp
@@ -267,12 +69,9 @@ void _ZNK13QSystemLocale5queryENS_9QueryTypeE8QVariant(
     (void)ret; (void)this_; (void)type; (void)variant;
 }
 
-// ── QTzTimeZonePrivate ───────────────────────────────────────────────────
-// Normally in qtztimezoneprivate.cpp
-
-void _ZN18QTzTimeZonePrivateC1ERK10QByteArray(void* this_, void* id) {
-    (void)this_; (void)id;
-}
+// ── QTzTimeZonePrivate (REMOVED) ──────────────────────────────────────────
+// QTzTimeZonePrivate constructors removed because they shadow real
+// implementations in libQt6Core.a.
 
 // ── qt_readlink — REMOVED: real implementation in libQt6Core.a ─────────────
 // Normally in qfilesystemengine_unix.cpp (wraps POSIX readlink)

@@ -206,6 +206,7 @@ impl super::CpuContext {
             cs: 0x08, ds: 0x10, es: 0x10, fs: 0x10, gs: 0x10, ss: 0x10,
             rflags: 0x202,
             cr3: kernel_cr3 as u64,
+            fs_base: 0,
         }
     }
 

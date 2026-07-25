@@ -89,6 +89,7 @@ pub struct CpuContext {
     pub ss: u64,
     pub rflags: u64,
     pub cr3: u64,
+    pub fs_base: u64,
 }
 
 #[cfg(feature = "aarch64")]

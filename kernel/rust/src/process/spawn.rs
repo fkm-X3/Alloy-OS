@@ -34,6 +34,50 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         return false;
     }
 
+    // ── Map user stack with user+writable permissions ────────────────
+    // paging_create_directory_phys() copies kernel PD entries verbatim,
+    // so PD[6] (covering 0xC00000) is a 2MB identity-map page with NO
+    // user bit — user code cannot access it.  Allocate fresh frames and
+    // map them with PAGE_USER | PAGE_WRITE so the stack works.
+    {
+        let stack_flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
+        unsafe { core::arch::asm!("cli"); }
+        let mut addr = STACK_BASE;
+        while addr < STACK_BASE + STACK_SIZE {
+            let phys = unsafe { ffi::pmm_alloc_frame() };
+            if phys.is_null() {
+                unsafe {
+                    ffi::serial_print(c"[spawn] OOM mapping stack page at 0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64(addr);
+                    ffi::serial_print(c"\n".as_ptr() as *const u8);
+                    core::arch::asm!("sti");
+                }
+                unsafe { ffi::paging_destroy_directory(pd_phys); }
+                return false;
+            }
+            let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, addr as usize, phys as usize, stack_flags) };
+            if !ok {
+                unsafe {
+                    ffi::serial_print(c"[spawn] FAIL mapping stack page at 0x".as_ptr() as *const u8);
+                    ffi::serial_print_hex64(addr);
+                    ffi::serial_print(c"\n".as_ptr() as *const u8);
+                    core::arch::asm!("sti");
+                }
+                unsafe { ffi::paging_destroy_directory(pd_phys); }
+                return false;
+            }
+            addr += 4096u64;
+        }
+        unsafe { core::arch::asm!("sti"); }
+        unsafe {
+            ffi::serial_print(c"[spawn] stack mapped at 0x".as_ptr() as *const u8);
+            ffi::serial_print_hex64(STACK_BASE);
+            ffi::serial_print(c" size=0x".as_ptr() as *const u8);
+            ffi::serial_print_hex64(STACK_SIZE);
+            ffi::serial_print(c"\n".as_ptr() as *const u8);
+        }
+    }
+
     // ── Load ELF segments into pd_phys (kernel PD stays active) ──────
     let page_flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
     let page_size = 4096usize;

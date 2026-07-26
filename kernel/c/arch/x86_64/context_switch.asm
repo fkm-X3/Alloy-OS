@@ -5,26 +5,11 @@
 [BITS 64]
 
 global context_switch
-extern serial_print
 extern g_current_user_cr3
-
-section .rodata
-msg_entry:  db "[CS] enter", 10, 0
-msg_save:   db "[CS] saved", 10, 0
-msg_load:   db "[CS] loading", 10, 0
-msg_cr3:    db "[CS] cr3 switched", 10, 0
 
 section .text
 
 context_switch:
-    ; Debug: confirm context_switch entry
-    push rdi
-    push rsi
-    lea rdi, [rel msg_entry]
-    call serial_print
-    pop rsi
-    pop rdi
-
     ; Save current context to old_ctx (in RDI)
     test rdi, rdi
     jz .load_only
@@ -75,40 +60,27 @@ context_switch:
     mov rax, cr3
     mov [rdi + 192], rax      ; CR3
 
-    ; Save FS_BASE MSR (0xC0000101) — controls TLS access via fs: segment
-    mov ecx, 0xC0000101
-    rdmsr                     ; edx:eax = FS_BASE (64-bit value in edx:eax)
-    mov [rdi + 200], rax      ; FS_BASE (low 64 bits only; high 32 always 0)
+    ; Save FS_BASE MSR (0xC0000100)
+    mov ecx, 0xC0000100
+    rdmsr
+    mov [rdi + 200], rax      ; FS_BASE
 
 .load_only:
     ; Load new context from new_ctx (in RSI)
     test rsi, rsi
     jz .done
 
-    ; Debug: confirm we are about to load new context
-    push rdi
-    push rsi
-    lea rdi, [rel msg_load]
-    call serial_print
-    pop rsi
-    pop rdi
-
     cli
 
     ; ================================================================
     ; Pre-read ALL new_ctx values BEFORE CR3 switch.
     ; new_ctx is in kernel heap (above 32 MB), which is NOT mapped in
-    ; the user page table — only PD[0..15] (0-32 MB) is copied from
-    ; the kernel identity map.  After CR3 switch we cannot dereference
+    ; the user page table.  After CR3 switch we cannot dereference
     ; RSI, so we push everything onto the kernel stack now.
-    ;
-    ; We also load RSP_new and RIP_new into registers now, because
-    ; they need special handling (RSP is set last; RIP is pushed onto
-    ; the new stack before `ret`).
     ;
     ; Push order (last in = first out):
     ;   [19] RSP_new    — popped last, sets RSP
-    ;   [18] RIP_new    — popped 2nd-last, pushed to new stack
+    ;   [18] RIP_new    — popped 2nd-last, stored in RDX
     ;   [17] GS
     ;   [16] FS
     ;   [15] ES
@@ -155,26 +127,20 @@ context_switch:
     push qword [rsi + 184]    ; RFLAGS
     push qword [rsi + 0]      ; RAX
 
-    ; Pre-read new FS_BASE before CR3 switch (new_ctx not accessible after)
+    ; Pre-read new FS_BASE and CS before CR3 switch
     mov rax, [rsi + 200]      ; FS_BASE from new_ctx
     mov [rel fs_base_new], rax
+    movzx eax, word [rsi + 136]  ; CS from new_ctx (16-bit selector)
+    mov [rel cs_new], rax
 
     ; Switch CR3 (must happen after all pre-reads)
     mov rax, [rsi + 192]
     mov cr3, rax
     mov [g_current_user_cr3], rax
 
-    ; Debug: confirm CR3 switch
-    push rdi
-    push rsi
-    lea rdi, [rel msg_cr3]
-    call serial_print
-    pop rsi
-    pop rdi
-
     ; ================================================================
     ; Pop all values in reverse order
-    ; Stack layout at this point (RSP → item[0]):
+    ; Stack layout at this point (RSP -> item[0]):
     ;   [rsp+0]   RAX      (item[0])
     ;   [rsp+8]   RFLAGS   (item[1])
     ;   [rsp+16]  RBX      (item[2])
@@ -198,8 +164,7 @@ context_switch:
     ; ================================================================
 
     ; Use RDI and RSI as scratch — they are NOT restored from the new
-    ; context (original code skips offsets 32 and 40).  Save RAX and
-    ; RFLAGS here so they survive the pops that restore R14 and R15.
+    ; context.  Save RAX and RFLAGS here so they survive the pops.
     pop rdi             ; RDI = RAX (restored at the very end)
     pop rsi             ; RSI = RFLAGS (restored via popfq)
 
@@ -227,43 +192,74 @@ context_switch:
     pop rax
     mov gs, ax
 
-    ; Pop RIP_new into a temp, then RSP_new into RSP
+    ; Pop RIP_new into rdx, then RSP_new into rsp
     pop rdx             ; RDX = RIP_new
-    pop rsp             ; RSP = RSP_new  (changes stack!)
+    pop rsp             ; RSP = RSP_new
 
-    ; Push RIP_new onto the new stack
-    push rdx
+    ; ================================================================
+    ; Determine kernel vs user task based on saved CS selector.
+    ; ================================================================
 
-    ; Restore RFLAGS and RAX
+    cmp qword [rel cs_new], 0x23
+    je .user_iretq
+
+    ; ── KERNEL TASK: ring-0 -> ring-0 ──────────────────────────────
+    ; No iretq needed.  Restore RFLAGS and jump to entry point.
+
+    ; Ensure IF (bit 9) is set in RFLAGS so the task receives interrupts.
+    or rsi, 0x200
     push rsi
     popfq
+
+    ; Restore RAX (new task's RAX, held in RDI as scratch)
     mov rax, rdi
 
-    ; Clear GS_BASE MSR (0xC0000101) to prevent swapgs leakage
-    ; User tasks run with GS_BASE = 0; without this, a context switch
-    ; during syscall_entry (after swapgs) would leak the kernel save-area
-    ; address into the next task's GS_BASE, causing gs:0 to write to the
-    ; kernel save area (or to NULL if KERNEL_GS_BASE is uninitialized).
-    push rax
+    ; Jump to the task's entry point (RIP, held in RDX as scratch)
+    jmp rdx
+
+.user_iretq:
+    ; ── USER TASK: ring-0 -> ring-3 ────────────────────────────────
+    ; Ensure IF (bit 9) is set in RFLAGS
+    or rsi, 0x200
+
+    ; Build 5-qword iretq frame on the user stack.
+    ; iretq atomically restores RIP, CS, RFLAGS, RSP, SS —
+    ; the CPL change to ring 3 is atomic with the RSP restore.
+    ;
+    ; Frame layout (RSP points to RIP after all pushes):
+    ;   [RSP+32] SS
+    ;   [RSP+24] RSP  (user stack top, BEFORE frame was pushed)
+    ;   [RSP+16] RFLAGS
+    ;   [RSP+8]  CS
+    ;   [RSP+0]  RIP
+    mov rax, rsp        ; RAX = user stack top (value for iretq RSP field)
+    push qword 0x1B     ; SS  = user data segment
+    push rax            ; RSP = original user stack top (before pushes)
+    push rsi            ; RFLAGS
+    push qword 0x23     ; CS  = user code segment
+    push rdx            ; RIP = entry point
+
+    ; Set GS_BASE MSR (0xC0000101) = 0 to prevent swapgs leakage.
     xor eax, eax
     xor edx, edx
     mov ecx, 0xC0000101
     wrmsr
-    pop rax
 
-    ; Write FS_BASE MSR (0xC0000100) — enables TLS via fs: segment
-    ; FS_BASE was pre-read from new_ctx before CR3 switch into fs_base_new.
-    push rax
+    ; Set FS_BASE MSR (0xC0000100) — enables TLS via fs: segment.
     mov rax, [rel fs_base_new]
     xor edx, edx
     mov ecx, 0xC0000100       ; MSR_FS_BASE
     wrmsr
-    pop rax
 
-    ret
+    ; Restore RAX (new task's RAX) — must happen after wrmsr clobbers eax
+    mov rax, rdi
+
+    ; Atomic ring-3 transition
+    iretq
 
 .done:
     ret
 
 section .data
 fs_base_new: dq 0
+cs_new:      dq 0

@@ -324,7 +324,7 @@ int pipe2(int pipefd[2], int flags) {
         "syscall"
         : "=a" (ret)
         : "a" (10), "D" ((long)pipefd), "S" (0), "d" (0)
-        : "rcx", "r11", "memory"
+        : "rcx", "r11", "r9", "memory"
     );
     return (int)ret;
 }

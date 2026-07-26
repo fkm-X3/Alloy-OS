@@ -34,6 +34,7 @@ struct cpu_context {
     uint64_t ss;
     uint64_t rflags;
     uint64_t cr3;
+    uint64_t fs_base;   // FS_BASE MSR (0xC0000100) — TLS base
 };
 #elif defined(ARCH_AARCH64)
 // ARM64 (aarch64) context

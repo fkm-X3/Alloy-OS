@@ -18,7 +18,7 @@ static inline long alloy_syscall(long n, long a1, long a2, long a3,
         : "=a" (ret)
         : "a" (n), "D" (a1), "S" (a2), "d" (a3),
           "r" (r10), "r" (r8)
-        : "rcx", "r11", "memory"
+        : "rcx", "r11", "r9", "memory"
     );
     return ret;
 }

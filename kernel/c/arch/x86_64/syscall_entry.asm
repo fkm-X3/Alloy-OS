@@ -24,13 +24,18 @@ section .text
 syscall_entry:
     swapgs                          ; GS.base ↔ KernelGS.base
 
-    ; Save original user RSP before any pushes
-    mov gs:0, rsp
+    ; Save original user RSP and syscall number in GS-relative area.
+    ; We MUST NOT push to the user stack and then read it back after
+    ; switching CR3 — the kernel page tables identity-map 0xC00000 as
+    ; a 2MB page, but the user stack was freshly allocated with new
+    ; physical frames, so reading via kernel CR3 gets wrong data.
+    mov gs:0, rsp                   ; [gs+0]  = user RSP
+    mov gs:8, rax                   ; [gs+8]  = syscall number
 
-    ; Save syscall number on user stack, then user CR3
-    push rax                        ; [user_rsp-8] = syscall number
+    ; Save user CR3 in GS-relative area (cannot read from user stack after
+    ; CR3 switch — same identity-map mismatch as the syscall number).
     mov rax, cr3
-    push rax                        ; [user_rsp-16] = user CR3
+    mov gs:16, rax                  ; [gs+16] = user CR3
 
     ; Load kernel CR3
     mov rax, [kernel_pml4_phys]
@@ -41,8 +46,7 @@ syscall_entry:
 
     ; Build saved context: original RSP, user CR3, RIP (RCX), RFLAGS (R11)
     push qword [gs:0]               ; original user RSP
-    mov rax, [gs:0]                 ; RAX = original user RSP
-    push qword [rax - 16]           ; user CR3 (at original RSP - 16, pushed second)
+    push qword [gs:16]              ; user CR3 (from GS-relative storage)
     push rcx                        ; return RIP
     push r11                        ; saved RFLAGS
 
@@ -79,8 +83,7 @@ syscall_entry:
     mov rcx, rdx                    ; arg2
     mov rdx, rsi                    ; arg1
     mov rsi, rdi                    ; arg0
-    mov rax, [gs:0]                 ; RAX = original user RSP
-    mov rdi, [rax - 8]             ; syscall_no from user stack (pushed first)
+    mov edi, [gs:8]                 ; syscall_no from GS-relative storage (zero-extended)
 
     ; 10 pushes = 80 bytes = 5*16, already 16-byte aligned.
     ; call pushes 8 bytes, so callee gets RSP ≡ 8 (mod 16) ✓
@@ -101,7 +104,7 @@ syscall_entry:
     mov cr3, rax
     pop rsp                         ; original user RSP
 
-    ; (syscall number and CR3 copy remain on user stack below RSP, harmless)
+    ; (CR3 copy remains on user stack below RSP, harmless)
 
     swapgs
     o64 sysret

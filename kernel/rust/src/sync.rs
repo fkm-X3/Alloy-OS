@@ -173,6 +173,14 @@ impl<'a, T> SpinlockIRQGuard<'a, T> {
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.lock.data.get() }
     }
+
+    /// Release the lock without restoring interrupt state.
+    /// Caller must ensure interrupts are in the desired state (e.g. disabled via cli).
+    pub fn release_no_irq_restore(self) {
+        fence(Ordering::Release);
+        self.lock.locked.store(false, Ordering::Release);
+        core::mem::forget(self);
+    }
 }
 
 impl<'a, T> Deref for SpinlockIRQGuard<'a, T> {

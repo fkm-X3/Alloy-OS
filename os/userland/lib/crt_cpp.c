@@ -16,7 +16,7 @@ static inline void debug_write(char c) {
     asm volatile(
         "syscall"
         : : "a"((long)SYS_WRITE), "D"((long)1), "S"(buf), "d"((long)1), "r"(r10), "r"(r8)
-        : "rcx", "r11", "memory"
+        : "rcx", "r11", "r9", "memory"
     );
 }
 

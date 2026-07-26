@@ -121,7 +121,9 @@ uint32_t syscall_dispatcher(uint32_t syscall_no,
             result = rust_sys_kill(arg0, arg1);
             break;
         default:
-            serial_print("[Syscall] Unknown syscall number\n");
+            serial_print("[Syscall] Unknown syscall number: 0x");
+            serial_print_hex(syscall_no);
+            serial_print("\n");
             result = (uint32_t)-1;
             break;
     }
@@ -145,8 +147,11 @@ extern uint64_t kernel_stack_bottom;
 extern uint64_t kernel_stack_top_alias;
 extern uint64_t kernel_stack_top;
 
-// Per-CPU save area for syscall entry RSP (used by syscall_entry.asm via swapgs / gs:0)
-__attribute__((aligned(16))) static uint64_t syscall_gs_save_area = 0;
+// Per-CPU save area for syscall entry (used by syscall_entry.asm via swapgs):
+//   gs+0  = user RSP
+//   gs+8  = syscall number
+//   gs+16 = user CR3
+__attribute__((aligned(16))) static uint64_t syscall_gs_save_area[3] = {0, 0, 0};
 
 void syscall_init() {
     serial_print("[Syscall] Initializing x86_64 syscall interface\n");

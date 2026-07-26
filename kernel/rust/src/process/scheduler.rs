@@ -111,7 +111,8 @@ impl Scheduler {
                 ffi::serial_print(c"[Scheduler] Preparing context switch\n".as_ptr() as *const u8);
             }
 
-            drop(scheduler_lock);
+            unsafe { core::arch::asm!("cli"); }
+            scheduler_lock.release_no_irq_restore();
 
             if let Some(mut old_box) = old_box_opt {
                 let old_ctx_ptr: *mut crate::process::task::CpuContext = old_box.context_mut() as *mut _;
@@ -127,7 +128,6 @@ impl Scheduler {
                     ffi::serial_print(c" rip=0x".as_ptr() as *const u8);
                     ffi::serial_print_hex64((*new_ctx_ptr).rip);
                     ffi::serial_print(c"\n".as_ptr() as *const u8);
-                    core::arch::asm!("cli");
                     ffi::context_switch(old_ctx_ptr, new_ctx_ptr);
                     ffi::serial_print(c"[Scheduler] Returned from context_switch (old context)\n".as_ptr() as *const u8);
                 }

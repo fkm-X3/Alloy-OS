@@ -203,9 +203,64 @@ extern bool paging_demand_map_kernel_page(uint64_t fault_addr, uint64_t user_cr3
 extern uintptr_t paging_get_kernel_directory_phys();
 extern uint64_t g_saved_user_cr3;
 
+extern uint32_t g_ctx_switch_diag;
+
+/* ISR diagnostic globals (written by idt_stubs.asm before CR3 switch) */
+volatile uint64_t g_isr_diag_rsp = 0;
+volatile uint64_t g_isr_diag_cr3 = 0;
+volatile uint64_t g_isr_diag_int_no = 0;
+volatile uint64_t g_isr_diag_rip = 0;
+volatile uint64_t g_isr_diag_cs = 0;
+volatile uint64_t g_isr_diag_err_code = 0;
+volatile uint64_t g_isr_diag_cr2 = 0;
+
 void exception_handler(struct interrupt_frame* frame) {
     uint64_t int_no = frame->int_no;
     uint64_t err_code = frame->err_code;
+
+    /* Print context_switch diagnostic checkpoint (last checkpoint reached) */
+    {
+        uint32_t diag = g_ctx_switch_diag;
+        if (diag != 0) {
+            serial_print("\n[CTX_DIAG] Last checkpoint: 0x");
+            serial_print_hex(diag);
+            serial_print(" (");
+            {
+                const char chars[5] = {
+                    (char)((diag >> 24) & 0xFF),
+                    (char)((diag >> 16) & 0xFF),
+                    (char)((diag >> 8) & 0xFF),
+                    (char)(diag & 0xFF),
+                    0
+                };
+                serial_print(chars);
+            }
+            serial_print(")\n");
+            /* One-shot: clear after printing so next crash shows fresh value */
+            g_ctx_switch_diag = 0;
+        }
+    }
+
+    /* Print ISR diagnostic (saved BEFORE CR3 switch, so frame is valid) */
+    {
+        uint64_t isr_rsp = g_isr_diag_rsp;
+        uint64_t isr_cr3 = g_isr_diag_cr3;
+        uint64_t isr_int_no = g_isr_diag_int_no;
+        uint64_t isr_rip = g_isr_diag_rip;
+        uint64_t isr_cs = g_isr_diag_cs;
+        uint64_t isr_err = g_isr_diag_err_code;
+        uint64_t isr_cr2 = g_isr_diag_cr2;
+        if (isr_rsp != 0 || isr_cr3 != 0) {
+            serial_print("[ISR_DIAG] RSP=0x"); serial_print_hex64(isr_rsp);
+            serial_print(" CR3=0x"); serial_print_hex64(isr_cr3);
+            serial_print(" INT=0x"); serial_print_hex((uint32_t)isr_int_no);
+            serial_print(" ERR=0x"); serial_print_hex((uint32_t)isr_err);
+            serial_print(" RIP=0x"); serial_print_hex64(isr_rip);
+            serial_print(" CS=0x"); serial_print_hex64(isr_cs);
+            serial_print(" CR2=0x"); serial_print_hex64(isr_cr2);
+            serial_print("\n");
+        }
+    }
 
     if (int_no == 14) {
         uint64_t fault_addr;

@@ -69,13 +69,6 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
             addr += 4096u64;
         }
         unsafe { core::arch::asm!("sti"); }
-        unsafe {
-            ffi::serial_print(c"[spawn] stack mapped at 0x".as_ptr() as *const u8);
-            ffi::serial_print_hex64(STACK_BASE);
-            ffi::serial_print(c" size=0x".as_ptr() as *const u8);
-            ffi::serial_print_hex64(STACK_SIZE);
-            ffi::serial_print(c"\n".as_ptr() as *const u8);
-        }
     }
 
     // ── Load ELF segments into pd_phys (kernel PD stays active) ──────
@@ -98,15 +91,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
     let fs_base: u64 = match find_tls_info(image) {
         Some((vaddr, memsz)) => {
             let tp = vaddr + memsz;
-            unsafe {
-                ffi::serial_print(c"[spawn] TLS vaddr=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(vaddr);
-                ffi::serial_print(c" memsz=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(memsz);
-                ffi::serial_print(c" fs_base=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(tp);
-                ffi::serial_print(c"\n".as_ptr() as *const u8);
-            }
+            // TLS details logged internally
             tp
         }
         None => 0,
@@ -209,7 +194,6 @@ fn map_elf_segment(
     let alloc_size = aligned_end - aligned_start;
     let npages = alloc_size / page_size;
     unsafe {
-        ffi::serial_print(c"[spawn] seg v=0x".as_ptr() as *const u8);
         ffi::serial_print_hex64(vaddr as u64);
         ffi::serial_print(c" pages=0x".as_ptr() as *const u8);
         ffi::serial_print_hex64(npages as u64);
@@ -226,7 +210,6 @@ fn map_elf_segment(
     unsafe { core::arch::asm!("cli"); }
 
     while page_addr < aligned_start + alloc_size {
-        unsafe { ffi::serial_print(c"a".as_ptr() as *const u8); }
         let phys = unsafe { ffi::pmm_alloc_frame() };
         if phys.is_null() {
             unsafe {
@@ -239,7 +222,6 @@ fn map_elf_segment(
         }
         let phys_addr = phys as usize;
 
-        unsafe { ffi::serial_print(c"b".as_ptr() as *const u8); }
         let temp = unsafe { ffi::paging_temp_map_frame(phys_addr) };
         let page_off = page_addr.saturating_sub(vaddr);
         if page_off < filesz {
@@ -251,9 +233,7 @@ fn map_elf_segment(
         }
         unsafe { ffi::paging_temp_unmap_frame(); }
 
-        unsafe { ffi::serial_print(c"c".as_ptr() as *const u8); }
         let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr, phys_addr, page_flags) };
-        unsafe { ffi::serial_print(c"d".as_ptr() as *const u8); }
         if !ok {
             unsafe {
                 ffi::serial_print(c"[spawn] MAP FAIL page_addr=0x".as_ptr() as *const u8);
@@ -267,7 +247,6 @@ fn map_elf_segment(
         count += 1;
         if (count & 0xFF) == 0 {
             unsafe {
-                ffi::serial_print(c"[spawn] progress count=0x".as_ptr() as *const u8);
                 ffi::serial_print_hex64(count);
                 ffi::serial_print(c" page_addr=0x".as_ptr() as *const u8);
                 ffi::serial_print_hex64(page_addr as u64);
@@ -278,7 +257,6 @@ fn map_elf_segment(
 
     unsafe { core::arch::asm!("sti"); }
     unsafe {
-        ffi::serial_print(c"[spawn] seg done v=0x".as_ptr() as *const u8);
         ffi::serial_print_hex64(vaddr as u64);
         ffi::serial_print(c"\n".as_ptr() as *const u8);
     }

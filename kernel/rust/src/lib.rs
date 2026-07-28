@@ -27,18 +27,56 @@ pub mod shm_alloc;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;
+use crate::graphics::Display;
 
 extern "C" fn display_server_entry() {
-    if let Some(display) = graphics::PlatformDisplay::new() {
-        #[cfg(feature = "x86_64")]
-        unsafe {
-            ffi::serial_print(c"[Spawn] VESA ready, booting display server task\n".as_ptr() as *const u8);
+    // Disable interrupts during init so the timer can't preempt us.
+    // The scheduler leaks any task that is preempted before it voluntarily
+    // yields or exits (old_box_opt is never re-enqueued).
+    unsafe { core::arch::asm!("cli"); }
+
+    unsafe {
+        ffi::serial_print(c"[DisplayServer] Entry reached\n".as_ptr() as *const u8);
+    }
+
+    match graphics::PlatformDisplay::new() {
+        None => {
+            unsafe {
+                ffi::serial_print(c"[DisplayServer] FATAL: PlatformDisplay::new() returned None\n".as_ptr() as *const u8);
+            }
+            unsafe { core::arch::asm!("sti"); }
+            loop {
+                #[cfg(feature = "x86_64")]
+                unsafe { core::arch::asm!("hlt"); }
+                #[cfg(feature = "aarch64")]
+                unsafe { core::arch::asm!("wfi"); }
+            }
         }
-        #[cfg(feature = "aarch64")]
-        unsafe {
-            ffi::serial_print(c"[Spawn] PL110 ready, booting display server task\n".as_ptr() as *const u8);
+        Some(mut display) => {
+            // Set background to #0f0f1a immediately (requirement 4.6.1)
+            display.clear(0xFF0F0F1A);
+            display.swap_buffer();
+
+            #[cfg(feature = "x86_64")]
+            unsafe {
+                ffi::serial_print(c"[Spawn] VESA ready, booting display server task\n".as_ptr() as *const u8);
+            }
+            #[cfg(feature = "aarch64")]
+            unsafe {
+                ffi::serial_print(c"[Spawn] PL110 ready, booting display server task\n".as_ptr() as *const u8);
+            }
+            unsafe { core::arch::asm!("sti"); }
+            let _ = display_server::run(display);
+            unsafe {
+                ffi::serial_print(c"[DisplayServer] run() returned, halting\n".as_ptr() as *const u8);
+            }
+            loop {
+                #[cfg(feature = "x86_64")]
+                unsafe { core::arch::asm!("hlt"); }
+                #[cfg(feature = "aarch64")]
+                unsafe { core::arch::asm!("wfi"); }
+            }
         }
-        let _ = display_server::run(display);
     }
 }
 

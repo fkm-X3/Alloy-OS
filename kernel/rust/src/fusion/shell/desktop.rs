@@ -39,7 +39,7 @@ impl LxqtDesktop {
             None => return,
         };
 
-        renderer.clear(Color::from_rgb(30, 34, 46));
+        renderer.clear(Color::from_rgb(15, 15, 26));
 
         let accent = Color::from_rgb(55, 68, 92);
         let stripe_h = (self.height / 16).max(8);

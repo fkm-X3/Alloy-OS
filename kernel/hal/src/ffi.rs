@@ -50,6 +50,8 @@ extern "C" {
 
     // --- Context switching ---
     pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
+    pub fn save_context(ctx: *mut CpuContext);
+    pub fn load_context(ctx: *mut CpuContext);
 
     // --- Sockets ---
     pub fn socket(domain: i32, socket_type: i32, protocol: i32) -> i32;

@@ -153,6 +153,12 @@ extern uint64_t kernel_stack_top;
 //   gs+16 = user CR3
 __attribute__((aligned(16))) static uint64_t syscall_gs_save_area[3] = {0, 0, 0};
 
+// Kernel GS base exported for context_switch.asm (MSR 0xC0000102 must be
+// preserved across context switches so that sysret → swapgs gives the
+// correct kernel per-CPU pointer).  context_switch.asm sets MSR_GS_BASE=0
+// before iretq; it restores MSR_KERNEL_GS_BASE from this variable.
+uint64_t g_kernel_gs_base = 0;
+
 void syscall_init() {
     serial_print("[Syscall] Initializing x86_64 syscall interface\n");
 
@@ -200,6 +206,9 @@ void syscall_init() {
     uint32_t kgs_low = (uint32_t)(gs_base & 0xFFFFFFFF);
     uint32_t kgs_high = (uint32_t)((gs_base >> 32) & 0xFFFFFFFF);
     asm volatile("wrmsr" : : "c"(0xC0000102), "a"(kgs_low), "d"(kgs_high));
+
+    // Export for context_switch.asm — see g_kernel_gs_base declaration.
+    g_kernel_gs_base = gs_base;
 
     serial_print("[Syscall] x86_64 syscall MSRs configured\n");
 }

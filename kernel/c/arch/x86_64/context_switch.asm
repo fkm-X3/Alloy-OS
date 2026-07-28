@@ -1,18 +1,295 @@
 ; x86_64 context switching implementation
 ; void context_switch(cpu_context* old_ctx, cpu_context* new_ctx)
-; x86_64 calling convention: RDI = old_ctx, RSI = new_ctx
+; void save_context(cpu_context* ctx)
+; void load_context(cpu_context* ctx)
+; x86_64 calling convention: RDI = first arg
+;
+; save_context: save current CPU state into ctx, return normally.
+; load_context: load CPU state from ctx, jump to saved RIP, never returns.
+; context_switch: save into old_ctx, load from new_ctx, never returns.
 
 [BITS 64]
 
 global context_switch
+global save_context
+global load_context
 extern g_current_user_cr3
+extern g_saved_user_cr3
+extern g_kernel_gs_base
+
+; ── Diagnostic macros ──────────────────────────────────────────────
+; SERIAL_PUTC: output AL to COM1, waiting for THRE. Preserves RAX.
+%macro SERIAL_PUTC 0
+    push rax
+    push rdx
+    mov dx, 0x3F8
+    add dx, 5          ; LSR = base + 5
+%%wait:
+    in al, dx          ; read LSR (clobbers AL)
+    test al, 0x20      ; THRE (bit 5)?
+    jz %%wait          ; if not empty, wait
+    sub dx, 5          ; back to data register
+    mov al, [rsp + 8]  ; restore AL from saved RAX low byte
+    out dx, al         ; write char
+    pop rdx
+    pop rax
+%endmacro
+
+; DIAG_CHAR: output a single byte to COM1 (0x3F8). Clobbers AX and DX.
+%macro DIAG_CHAR 1
+    push rax
+    push rdx
+    mov al, %1
+    SERIAL_PUTC
+    pop rdx
+    pop rax
+%endmacro
+
+; SERIAL_PUTC_IMM: output an immediate byte to COM1. Clobbers AX and DX.
+%macro SERIAL_PUTC_IMM 1
+    push rax
+    mov al, %1
+    SERIAL_PUTC
+    pop rax
+%endmacro
+
+; SERIAL_HEX64: print RAX as 8 hex digits to COM1. Saves/restores RAX,RCX,RDX.
+%macro SERIAL_HEX64 0
+    push rax
+    push rcx
+    push rdx
+    mov rcx, 8
+%%loop:
+        rol rax, 4
+        mov dl, al
+        and dl, 0x0F
+        cmp dl, 10
+        jb %%digit
+        add dl, 'A'-10
+        jmp %%out
+%%digit:
+        add dl, '0'
+%%out:
+        mov al, dl
+        SERIAL_PUTC
+        dec rcx
+        jnz %%loop
+    pop rdx
+    pop rcx
+    pop rax
+%endmacro
+
+; SET_DIAG: write a 32-bit checkpoint tag to g_ctx_switch_diag (persistent).
+%macro SET_DIAG 1
+    mov dword [g_ctx_switch_diag], %1
+%endmacro
 
 section .text
 
+; ================================================================
+; save_context(cpu_context* ctx)
+; Save current CPU registers into ctx and return normally.
+; The saved RIP points to the instruction after the `call save_context`.
+; When load_context later restores this context, execution resumes
+; at that instruction.
+; ================================================================
+save_context:
+    test rdi, rdi
+    jz .save_done
+
+    ; Save general purpose registers
+    mov [rdi + 0],  rax
+    mov [rdi + 8],  rbx
+    mov [rdi + 16], rcx
+    mov [rdi + 24], rdx
+    mov [rdi + 32], rsi
+    mov [rdi + 40], rdi
+    mov [rdi + 48], rbp
+    mov [rdi + 56], rsp
+
+    mov [rdi + 64], r8
+    mov [rdi + 72], r9
+    mov [rdi + 80], r10
+    mov [rdi + 88], r11
+    mov [rdi + 96], r12
+    mov [rdi + 104], r13
+    mov [rdi + 112], r14
+    mov [rdi + 120], r15
+
+    ; Save return address as RIP (address after the `call save_context`)
+    mov rax, [rsp]
+    mov [rdi + 128], rax
+
+    ; Save segment registers
+    mov rax, cs
+    mov [rdi + 136], rax
+    mov rax, ds
+    mov [rdi + 144], rax
+    mov rax, es
+    mov [rdi + 152], rax
+    mov rax, fs
+    mov [rdi + 160], rax
+    mov rax, gs
+    mov [rdi + 168], rax
+    mov rax, ss
+    mov [rdi + 176], rax
+
+    ; Save RFLAGS
+    pushfq
+    pop rax
+    mov [rdi + 184], rax
+
+    ; Save CR3 (page directory)
+    mov rax, cr3
+    mov [rdi + 192], rax
+
+    ; Save FS_BASE MSR (0xC0000100)
+    mov ecx, 0xC0000100
+    rdmsr
+    mov [rdi + 200], rax
+
+.save_done:
+    ret
+
+; ================================================================
+; load_context(cpu_context* ctx)
+; Load all CPU registers from ctx and jump to the saved RIP.
+; Never returns (or "returns" to wherever ctx was saved).
+; ================================================================
+load_context:
+    cli
+
+    ; Pre-read ALL values from ctx before switching CR3.
+    ; After CR3 switch, ctx (in kernel heap) may not be accessible.
+    ; Push everything onto the current stack.
+    push qword [rdi + 56]     ; RSP_new
+    push qword [rdi + 128]    ; RIP_new
+
+    ; Segment registers
+    push qword [rdi + 168]    ; GS
+    push qword [rdi + 160]    ; FS
+    push qword [rdi + 152]    ; ES
+    push qword [rdi + 144]    ; DS
+
+    ; General-purpose registers
+    push qword [rdi + 120]    ; R15
+    push qword [rdi + 112]    ; R14
+    push qword [rdi + 104]    ; R13
+    push qword [rdi + 96]     ; R12
+    push qword [rdi + 88]     ; R11
+    push qword [rdi + 80]     ; R10
+    push qword [rdi + 72]     ; R9
+    push qword [rdi + 64]     ; R8
+    push qword [rdi + 48]     ; RBP
+    push qword [rdi + 24]     ; RDX
+    push qword [rdi + 16]     ; RCX
+    push qword [rdi + 8]      ; RBX
+
+    push qword [rdi + 184]    ; RFLAGS
+    push qword [rdi + 0]      ; RAX
+
+    ; Pre-read new FS_BASE and CS before CR3 switch
+    mov rax, [rdi + 200]      ; FS_BASE
+    mov [rel fs_base_new], rax
+    movzx eax, word [rdi + 136]  ; CS (16-bit selector)
+    mov [rel cs_new], rax
+
+    ; Switch CR3
+    mov rax, [rdi + 192]
+    mov cr3, rax
+    mov [g_current_user_cr3], rax
+    mov [g_saved_user_cr3], rax
+
+    ; Pop all values in reverse order
+    ; RDI and RSI used as scratch — saved RAX and RFLAGS first
+    pop rdi             ; RDI = RAX (restored at the very end)
+    pop rsi             ; RSI = RFLAGS (restored via popfq)
+
+    ; Pop general-purpose registers
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rbp
+    pop r8
+    pop r9
+    pop r10
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+
+    ; Set segment registers
+    pop rax
+    mov ds, ax
+    pop rax
+    mov es, ax
+    pop rax
+    mov fs, ax
+    pop rax
+    mov gs, ax
+
+    ; Pop RIP_new into rdx, then RSP_new into rsp
+    pop rdx             ; RDX = RIP_new
+    pop rsp             ; RSP = RSP_new
+
+    ; Check if kernel or user task
+    cmp qword [rel cs_new], 0x23
+    je .load_user_iretq
+
+    ; ── KERNEL TASK ──────────────────────────────────────────────
+    or rsi, 0x200           ; Ensure IF set
+    push rsi
+    popfq
+    mov rax, rdi            ; Restore RAX
+    jmp rdx                 ; Jump to entry point
+
+.load_user_iretq:
+    ; ── USER TASK via iretq ──────────────────────────────────────
+    or rsi, 0x200
+    mov rax, rsp
+    push qword 0x1B         ; SS
+    push rax                ; RSP (user stack)
+    push rsi                ; RFLAGS
+    push qword 0x23         ; CS
+    push rdx                ; RIP
+
+    ; GS_BASE = 0, KERNEL_GS_BASE = g_kernel_gs_base, FS_BASE = fs_base_new
+    xor eax, eax
+    xor edx, edx
+    mov ecx, 0xC0000101
+    wrmsr
+
+    mov rax, [g_kernel_gs_base]
+    xor edx, edx
+    mov ecx, 0xC0000102
+    wrmsr
+
+    mov rax, [rel fs_base_new]
+    xor edx, edx
+    mov ecx, 0xC0000100
+    wrmsr
+
+    mov rax, rdi            ; Restore RAX
+    iretq
+
+; ================================================================
+; context_switch(cpu_context* old_ctx, cpu_context* new_ctx)
+; Save current CPU context into old_ctx, load new context from new_ctx.
+; The saved RIP points to the instruction after the `call context_switch`.
+; When context_switch later restores this context, execution resumes
+; at that instruction with the stack intact.
+;
+; Never returns to the caller — it "returns" to the old task when
+; that task is later restored via another context_switch call.
+; ================================================================
 context_switch:
+    DIAG_CHAR '!'
     ; Save current context to old_ctx (in RDI)
     test rdi, rdi
     jz .load_only
+
+    DIAG_CHAR 'A'
 
     ; Save general purpose registers
     mov [rdi + 0],  rax       ; RAX
@@ -72,35 +349,9 @@ context_switch:
 
     cli
 
-    ; ================================================================
-    ; Pre-read ALL new_ctx values BEFORE CR3 switch.
-    ; new_ctx is in kernel heap (above 32 MB), which is NOT mapped in
-    ; the user page table.  After CR3 switch we cannot dereference
-    ; RSI, so we push everything onto the kernel stack now.
-    ;
-    ; Push order (last in = first out):
-    ;   [19] RSP_new    — popped last, sets RSP
-    ;   [18] RIP_new    — popped 2nd-last, stored in RDX
-    ;   [17] GS
-    ;   [16] FS
-    ;   [15] ES
-    ;   [14] DS
-    ;   [13] R15
-    ;   [12] R14
-    ;   [11] R13
-    ;   [10] R12
-    ;   [9]  R11
-    ;   [8]  R10
-    ;   [7]  R9
-    ;   [6]  R8
-    ;   [5]  RBP
-    ;   [4]  RDX
-    ;   [3]  RCX
-    ;   [2]  RBX
-    ;   [1]  RFLAGS
-    ;   [0]  RAX         — popped first
-    ; ================================================================
+    DIAG_CHAR 'B'
 
+    ; Pre-read ALL new_ctx values BEFORE CR3 switch
     push qword [rsi + 56]     ; RSP_new
     push qword [rsi + 128]    ; RIP_new
 
@@ -133,42 +384,67 @@ context_switch:
     movzx eax, word [rsi + 136]  ; CS from new_ctx (16-bit selector)
     mov [rel cs_new], rax
 
-    ; Switch CR3 (must happen after all pre-reads)
+    DIAG_CHAR 'C'
+
+    ; Dump new CR3
+    push rsi
+    mov rsi, [rsi + 192]
+    mov rax, rsi
+    SERIAL_HEX64
+    mov al, ' '
+    SERIAL_PUTC
+    pop rsi
+
+    ; Dump new CS
+    push rax
+    movzx eax, word [rsi + 136]
+    SERIAL_HEX64
+    mov al, ' '
+    SERIAL_PUTC
+    pop rax
+
+    ; Dump new RIP
+    push rax
+    push rsi
+    mov rax, [rsi + 128]
+    SERIAL_HEX64
+    mov al, ' '
+    SERIAL_PUTC
+    pop rsi
+    pop rax
+
+    ; Dump new RSP
+    push rax
+    push rsi
+    mov rax, [rsi + 56]
+    SERIAL_HEX64
+    mov al, 0x0A
+    SERIAL_PUTC
+    pop rsi
+    pop rax
+
+    ; Switch CR3
     mov rax, [rsi + 192]
     mov cr3, rax
     mov [g_current_user_cr3], rax
+    mov [g_saved_user_cr3], rax
 
-    ; ================================================================
+    DIAG_CHAR 'D'
+
+    ; Dump actual CR3
+    push rax
+    mov rax, cr3
+    SERIAL_HEX64
+    mov al, ' '
+    SERIAL_PUTC
+    pop rax
+
+    DIAG_CHAR 'E'
+
     ; Pop all values in reverse order
-    ; Stack layout at this point (RSP -> item[0]):
-    ;   [rsp+0]   RAX      (item[0])
-    ;   [rsp+8]   RFLAGS   (item[1])
-    ;   [rsp+16]  RBX      (item[2])
-    ;   [rsp+24]  RCX      (item[3])
-    ;   [rsp+32]  RDX      (item[4])
-    ;   [rsp+40]  RBP      (item[5])
-    ;   [rsp+48]  R8       (item[6])
-    ;   [rsp+56]  R9       (item[7])
-    ;   [rsp+64]  R10      (item[8])
-    ;   [rsp+72]  R11      (item[9])
-    ;   [rsp+80]  R12      (item[10])
-    ;   [rsp+88]  R13      (item[11])
-    ;   [rsp+96]  R14      (item[12])
-    ;   [rsp+104] R15      (item[13])
-    ;   [rsp+112] DS       (item[14])
-    ;   [rsp+120] ES       (item[15])
-    ;   [rsp+128] FS       (item[16])
-    ;   [rsp+136] GS       (item[17])
-    ;   [rsp+144] RIP_new  (item[18])
-    ;   [rsp+152] RSP_new  (item[19])
-    ; ================================================================
-
-    ; Use RDI and RSI as scratch — they are NOT restored from the new
-    ; context.  Save RAX and RFLAGS here so they survive the pops.
     pop rdi             ; RDI = RAX (restored at the very end)
     pop rsi             ; RSI = RFLAGS (restored via popfq)
 
-    ; Pop general-purpose registers
     pop rbx
     pop rcx
     pop rdx
@@ -181,6 +457,8 @@ context_switch:
     pop r13
     pop r14
     pop r15
+
+    DIAG_CHAR 'F'
 
     ; Set segment registers
     pop rax
@@ -196,65 +474,62 @@ context_switch:
     pop rdx             ; RDX = RIP_new
     pop rsp             ; RSP = RSP_new
 
-    ; ================================================================
-    ; Determine kernel vs user task based on saved CS selector.
-    ; ================================================================
+    DIAG_CHAR 'G'
 
     cmp qword [rel cs_new], 0x23
     je .user_iretq
 
     ; ── KERNEL TASK: ring-0 -> ring-0 ──────────────────────────────
-    ; No iretq needed.  Restore RFLAGS and jump to entry point.
-
-    ; Ensure IF (bit 9) is set in RFLAGS so the task receives interrupts.
     or rsi, 0x200
     push rsi
     popfq
 
-    ; Restore RAX (new task's RAX, held in RDI as scratch)
     mov rax, rdi
 
-    ; Jump to the task's entry point (RIP, held in RDX as scratch)
+    DIAG_CHAR 'K'
+
     jmp rdx
 
 .user_iretq:
-    ; ── USER TASK: ring-0 -> ring-3 ────────────────────────────────
-    ; Ensure IF (bit 9) is set in RFLAGS
+    DIAG_CHAR 'H'
+
     or rsi, 0x200
 
-    ; Build 5-qword iretq frame on the user stack.
-    ; iretq atomically restores RIP, CS, RFLAGS, RSP, SS —
-    ; the CPL change to ring 3 is atomic with the RSP restore.
-    ;
-    ; Frame layout (RSP points to RIP after all pushes):
-    ;   [RSP+32] SS
-    ;   [RSP+24] RSP  (user stack top, BEFORE frame was pushed)
-    ;   [RSP+16] RFLAGS
-    ;   [RSP+8]  CS
-    ;   [RSP+0]  RIP
-    mov rax, rsp        ; RAX = user stack top (value for iretq RSP field)
-    push qword 0x1B     ; SS  = user data segment
-    push rax            ; RSP = original user stack top (before pushes)
+    mov rax, rsp
+    push qword 0x1B     ; SS
+    push rax            ; RSP
     push rsi            ; RFLAGS
-    push qword 0x23     ; CS  = user code segment
-    push rdx            ; RIP = entry point
+    push qword 0x23     ; CS
+    push rdx            ; RIP
 
-    ; Set GS_BASE MSR (0xC0000101) = 0 to prevent swapgs leakage.
+    DIAG_CHAR 'I'
+
     xor eax, eax
     xor edx, edx
     mov ecx, 0xC0000101
     wrmsr
 
-    ; Set FS_BASE MSR (0xC0000100) — enables TLS via fs: segment.
-    mov rax, [rel fs_base_new]
+    mov rax, [g_kernel_gs_base]
     xor edx, edx
-    mov ecx, 0xC0000100       ; MSR_FS_BASE
+    mov ecx, 0xC0000102
     wrmsr
 
-    ; Restore RAX (new task's RAX) — must happen after wrmsr clobbers eax
+    mov rax, [rel fs_base_new]
+    xor edx, edx
+    mov ecx, 0xC0000100
+    wrmsr
+
     mov rax, rdi
 
-    ; Atomic ring-3 transition
+    DIAG_CHAR 'J'
+
+    push rax
+    mov rax, rsp
+    SERIAL_HEX64
+    mov al, ' '
+    SERIAL_PUTC
+    pop rax
+
     iretq
 
 .done:
@@ -263,3 +538,5 @@ context_switch:
 section .data
 fs_base_new: dq 0
 cs_new:      dq 0
+global g_ctx_switch_diag
+g_ctx_switch_diag: dd 0

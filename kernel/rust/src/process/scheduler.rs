@@ -3,9 +3,10 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
+use core::sync::atomic::{AtomicU32, Ordering};
 use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
-use crate::sync::{SpinLock, SpinlockIRQ};
+use crate::sync::SpinlockIRQ;
 use crate::ffi;
 
 /// Global scheduler instance — must use SpinlockIRQ because timer interrupts
@@ -15,6 +16,11 @@ static SCHEDULER: SpinlockIRQ<Option<Scheduler>> = SpinlockIRQ::new(None);
 const NUM_PRIORITIES: usize = 4;
 const QUANTA: [u32; NUM_PRIORITIES] = [5, 10, 20, 40];
 const BOOST_INTERVAL: u64 = 100;
+
+/// Depth counter for save_context resume detection.
+/// Incremented before save_context, checked after.
+/// Zeroed after each complete schedule cycle.
+static SCHEDULE_DEPTH: AtomicU32 = AtomicU32::new(0);
 
 /// Wait queue for keyboard input — tasks block here waiting for keypresses.
 pub static KEYBOARD_WAIT: WaitQueue = WaitQueue::new();
@@ -41,9 +47,7 @@ impl Default for Scheduler {
 
 impl Scheduler {
     pub fn new() -> Self {
-        unsafe {
-            ffi::serial_print(c"[Scheduler] Initializing MLFQ scheduler\n".as_ptr() as *const u8);
-        }
+        // Initializing MLFQ scheduler
 
         let mut ready_queues = Vec::with_capacity(NUM_PRIORITIES);
         for _ in 0..NUM_PRIORITIES {
@@ -68,9 +72,6 @@ impl Scheduler {
     pub fn add_task(task: Box<Task>) {
         let mut scheduler = SCHEDULER.lock();
         if let Some(ref mut sched) = *scheduler {
-            unsafe {
-                ffi::serial_print(c"[Scheduler] Adding task to ready queue\n".as_ptr() as *const u8);
-            }
             sched.ready_queues[0].push_back(task);
         }
     }
@@ -107,35 +108,38 @@ impl Scheduler {
 
             let old_box_opt = old_opt;
 
-            unsafe {
-                ffi::serial_print(c"[Scheduler] Preparing context switch\n".as_ptr() as *const u8);
-            }
-
-            unsafe { core::arch::asm!("cli"); }
+            // Release scheduler lock (IRQs stay disabled — lock() did cli)
             scheduler_lock.release_no_irq_restore();
 
-            if let Some(mut old_box) = old_box_opt {
-                let old_ctx_ptr: *mut crate::process::task::CpuContext = old_box.context_mut() as *mut _;
+            // Depth counter: incremented before save_context, checked after.
+            // On the initial path, depth+1 == SCHEDULE_DEPTH because we just
+            // incremented it.  On the resume path (via load_context), the
+            // saved context has the old depth, but SCHEDULE_DEPTH was reset
+            // to 0 by the initial path, so the check fails.
+            let depth = SCHEDULE_DEPTH.fetch_add(1, Ordering::Relaxed);
 
-                unsafe {
-                    ffi::serial_print(c"[Scheduler] Calling context_switch\n".as_ptr() as *const u8);
-                    ffi::serial_print(c"  new_ctx_ptr=0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64(new_ctx_ptr as u64);
-                    ffi::serial_print(c" cr3=0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64((*new_ctx_ptr).cr3);
-                    ffi::serial_print(c" rsp=0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64((*new_ctx_ptr).rsp);
-                    ffi::serial_print(c" rip=0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64((*new_ctx_ptr).rip);
-                    ffi::serial_print(c"\n".as_ptr() as *const u8);
-                    ffi::context_switch(old_ctx_ptr, new_ctx_ptr);
-                    ffi::serial_print(c"[Scheduler] Returned from context_switch (old context)\n".as_ptr() as *const u8);
+            match old_box_opt {
+                None => {
+                    // No old task to save — just load the new one
+                    SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
+                    unsafe { ffi::load_context(new_ctx_ptr); }
                 }
+                Some(mut old_box) => {
+                    let old_ctx_ptr = old_box.context_mut() as *mut _;
 
-                let mut scheduler_lock = SCHEDULER.lock();
-                if let Some(ref mut sched) = *scheduler_lock {
-                    match old_box.state() {
-                        TaskState::Running | TaskState::Ready => {
+                    // Step 1: Save old context — returns normally
+                    unsafe { ffi::save_context(old_ctx_ptr); }
+
+                    // Step 2: Check if this is the initial path or a resume
+                    let current_depth = SCHEDULE_DEPTH.load(Ordering::Relaxed);
+
+                    if current_depth == depth + 1 {
+                        // ── Initial path ─────────────────────────────────
+                        // The SCHEDULER lock was released above, but IRQs
+                        // remain disabled.  Re-acquire long enough to push
+                        // the old task back into the ready queue.
+                        let mut re_lock = SCHEDULER.lock();
+                        if let Some(ref mut re_sched) = *re_lock {
                             let had_full_quantum =
                                 old_box.ticks_used() >= QUANTA[old_box.priority() as usize];
                             if had_full_quantum {
@@ -148,29 +152,33 @@ impl Scheduler {
                             }
                             old_box.reset_ticks_used();
                             old_box.set_state(TaskState::Ready);
-                            sched.ready_queues[old_box.priority() as usize].push_back(old_box);
+                            re_sched.ready_queues[old_box.priority() as usize].push_back(old_box);
                         }
-                        TaskState::Terminated => {
-                            unsafe { ffi::serial_print(c"[Scheduler] Old task terminated after switch\n".as_ptr() as *const u8); }
-                            drop(old_box);
-                        }
-                        _ => {
-                            old_box.reset_ticks_used();
-                            old_box.set_state(TaskState::Ready);
-                            sched.ready_queues[0].push_back(old_box);
-                        }
+                        // re_lock drops here → lock released, IRQs stay
+                        // disabled (original RFLAGS had IF=0 from the outer
+                        // lock() that saved IF=0 after fetch_add).
+
+                        // Reset depth and load new context — never returns
+                        SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
+                        unsafe { ffi::load_context(new_ctx_ptr); }
+                    } else {
+                        // ── Resume path ─────────────────────────────────
+                        // Task was already re-enqueued on the initial path.
+                        // old_box is a stale pointer — forget it to prevent
+                        // double-free (the real Box is in the ready queue).
+                        SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
+                        core::mem::forget(old_box);
+                        // Re-enable interrupts before returning so that the
+                        // IRQ handler (which will iretq back to the task)
+                        // runs with correct IF state.
+                        unsafe { core::arch::asm!("sti"); }
                     }
                 }
-            } else {
-                unsafe { ffi::serial_print(c"[Scheduler] No old task, initial run\n".as_ptr() as *const u8); }
             }
         }
     }
 
     pub fn yield_cpu() {
-        unsafe {
-            ffi::serial_print(c"[Task] Yielding CPU\n".as_ptr() as *const u8);
-        }
         Self::schedule();
     }
 
@@ -487,43 +495,11 @@ impl Scheduler {
     }
 
     pub fn start() -> ! {
-        unsafe {
-            ffi::serial_print(c"[Scheduler] Starting scheduler\n".as_ptr() as *const u8);
-            #[cfg(feature = "x86_64")]
-            ffi::vga_println(c"\nStarting multitasking...\n".as_ptr() as *const u8);
-        }
-
+        // First schedule picks the highest-priority task and saves it as
+        // the current task.  Then load_context switches to it permanently.
         Self::schedule();
 
-        let mut scheduler = SCHEDULER.lock();
-        if let Some(ref mut sched) = *scheduler {
-            if let Some(ref mut task) = sched.current_task {
-                let mut kernel_ctx = crate::process::task::CpuContext::new();
-
-                let new_ctx_ptr: *mut crate::process::task::CpuContext = task.context_mut() as *mut _;
-
-                drop(scheduler);
-
-                unsafe {
-                    ffi::serial_print(c"[Scheduler] Performing initial context_switch to first task\n".as_ptr() as *const u8);
-                    ffi::context_switch(&mut kernel_ctx as *mut _, new_ctx_ptr);
-                    ffi::serial_print(c"[Scheduler] Returned from initial context_switch\n".as_ptr() as *const u8);
-                }
-
-                let mut scheduler = SCHEDULER.lock();
-                if let Some(ref mut sched) = *scheduler {
-                    if let Some(mut current) = sched.current_task.take() {
-                        current.set_state(TaskState::Terminated);
-                        drop(current);
-                    }
-                    Self::schedule();
-                }
-            }
-        }
-
-        unsafe {
-            ffi::serial_print(c"[Scheduler] ERROR: Scheduler returned!\n".as_ptr() as *const u8);
-        }
+        // If schedule() returns, no task was available — halt.
         loop {
             #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("hlt"); }

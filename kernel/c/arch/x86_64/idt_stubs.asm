@@ -16,6 +16,13 @@ idt_flush:
 extern exception_handler
 extern g_saved_user_cr3
 extern kernel_pml4_phys
+extern g_isr_diag_rsp
+extern g_isr_diag_cr3
+extern g_isr_diag_int_no
+extern g_isr_diag_rip
+extern g_isr_diag_cs
+extern g_isr_diag_err_code
+extern g_isr_diag_cr2
 isr_common_stub:
     ; Save all general purpose registers
     push rax
@@ -55,6 +62,22 @@ isr_common_stub:
     ; Kernel pages are ring-0-only (no PAGE_USER in user PDs).  The C
     ; handler (timer, page fault, etc.) needs access to the full kernel
     ; address space, so we must switch to kernel CR3 first.
+
+    ; ── Diagnostic: save frame values BEFORE CR3 switch ──
+    mov [g_isr_diag_rsp], rsp
+    mov rax, cr3
+    mov [g_isr_diag_cr3], rax
+    mov rax, [rsp + 152]
+    mov [g_isr_diag_int_no], rax
+    mov rax, [rsp + 168]
+    mov [g_isr_diag_rip], rax
+    mov rax, [rsp + 176]
+    mov [g_isr_diag_cs], rax
+    mov rax, [rsp + 160]
+    mov [g_isr_diag_err_code], rax
+    mov rax, cr2
+    mov [g_isr_diag_cr2], rax
+
     mov rax, cr3
     mov [g_saved_user_cr3], rax
     mov rax, [kernel_pml4_phys]

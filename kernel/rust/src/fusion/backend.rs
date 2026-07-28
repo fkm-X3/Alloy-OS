@@ -17,7 +17,7 @@ type PlatformDisplay = VesaDisplay;
 #[cfg(feature = "aarch64")]
 type PlatformDisplay = Pl110Display;
 
-const COMPOSITOR_CLEAR_COLOR: u32 = 0x0011141C;
+const COMPOSITOR_CLEAR_COLOR: u32 = 0xFF0F0F1A;
 
 /// Error type for Fusion display operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

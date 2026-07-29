@@ -125,6 +125,12 @@ pub struct SurfaceState {
     pub parent_id: Option<SurfaceId>,
     /// Child surface IDs (subsurfaces)
     pub children: Vec<SurfaceId>,
+    /// Z-order for compositing (higher = on top)
+    pub z_order: u32,
+    /// Screen position X
+    pub screen_x: i32,
+    /// Screen position Y
+    pub screen_y: i32,
 }
 
 impl SurfaceState {
@@ -138,6 +144,9 @@ impl SurfaceState {
             version,
             parent_id: None,
             children: Vec::new(),
+            z_order: 0,
+            screen_x: 0,
+            screen_y: 0,
         }
     }
 

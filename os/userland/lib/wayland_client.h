@@ -29,6 +29,8 @@ struct wl_wire_header {
 #define WL_SURFACE_DAMAGE 0
 #define WL_SURFACE_ATTACH 1
 #define WL_SURFACE_COMMIT 2
+#define WL_SURFACE_SET_POSITION 3
+#define WL_SURFACE_SET_ZORDER 4
 
 #define WL_SEAT_GET_POINTER  0
 #define WL_SEAT_GET_KEYBOARD 1
@@ -137,6 +139,8 @@ int wl_surface_attach(int fd, unsigned int surface_id, unsigned int buffer,
 int wl_surface_damage(int fd, unsigned int surface_id,
                        int x, int y, int width, int height);
 int wl_surface_commit(int fd, unsigned int surface_id);
+int wl_surface_set_position(int fd, unsigned int surface_id, int x, int y);
+int wl_surface_set_zorder(int fd, unsigned int surface_id, unsigned int z_order);
 
 unsigned int wl_seat_bind(struct wl_registry *reg, unsigned int seat_name,
                            unsigned int version);

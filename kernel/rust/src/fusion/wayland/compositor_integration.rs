@@ -5,11 +5,16 @@
 //! and frame timing callbacks. This is the critical bridge between the
 //! Wayland protocol layer and the Fusion display backend.
 
+use alloc::vec::Vec;
 use super::surface::SurfaceState;
 use super::shm::{ShmBuffer, ShmFormat, ShmManager};
 use super::damage::DamageRect;
 use crate::fusion::backend::FusionDisplayBackend;
+use crate::graphics::Display;
 use crate::graphics::PlatformDisplay;
+
+const PANEL_HEIGHT: u32 = 48;
+const PANEL_COLOR: u32 = 0xFF1A1A2E;
 
 /// Compositor integration interface
 ///
@@ -54,7 +59,7 @@ impl CompositorIntegration {
 
     /// Composite a single frame from all visible surfaces
     ///
-    /// Iterates through surfaces in Z-order, reads pixel data from SHM buffers,
+    /// Iterates through surfaces sorted by Z-order, reads pixel data from SHM buffers,
     /// and composites onto the framebuffer. Only damaged regions are updated.
 pub fn composite_frame(
          backend: &mut FusionDisplayBackend,
@@ -63,7 +68,11 @@ pub fn composite_frame(
      ) {
         backend.clear_framebuffer();
 
-        for (_z_order, surface) in surfaces {
+        // Sort surfaces by z_order so higher z surfaces render on top
+        let mut sorted: Vec<&(u32, &SurfaceState)> = surfaces.iter().collect();
+        sorted.sort_by_key(|(_, s)| s.z_order);
+
+        for (_z_order, surface) in sorted {
             let surface = *surface;
 
             // Skip surfaces without buffers
@@ -83,16 +92,32 @@ pub fn composite_frame(
                 None => continue,
             };
 
-// Composite this surface
+            // Use screen position from the surface (set via alloy_set_position)
+            // Fall back to buffer_offset if position is (0,0) and buffer_offset differs
+            let pos_x = surface.screen_x;
+            let pos_y = surface.screen_y;
+
+            // Composite this surface
             let _ = CompositorIntegration::composite_surface(
                 backend,
                 buffer,
                 &surface.current.damage,
-                surface.pending.buffer_offset.0,
-                surface.pending.buffer_offset.1,
+                pos_x,
+                pos_y,
                 surface.current.width,
                 surface.current.height,
             );
+        }
+
+        // Draw the panel bar at the bottom of the screen
+        let fb_w = backend.framebuffer_width();
+        let fb_h = backend.framebuffer_height();
+        let panel_y = if fb_h >= PANEL_HEIGHT { fb_h - PANEL_HEIGHT } else { 0 };
+        let display = backend.display_mut();
+        for row in panel_y..fb_h {
+            for col in 0..fb_w {
+                display.pixel_put(col, row, PANEL_COLOR);
+            }
         }
     }
 

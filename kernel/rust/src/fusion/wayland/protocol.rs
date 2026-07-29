@@ -231,7 +231,9 @@ impl ProtocolHandler {
                     Ok(SurfaceResponse::DamageRecorded)
                     | Ok(SurfaceResponse::BufferAttached)
                     | Ok(SurfaceResponse::Committed)
-                    | Ok(SurfaceResponse::Destroyed) => {
+                    | Ok(SurfaceResponse::Destroyed)
+                    | Ok(SurfaceResponse::PositionSet)
+                    | Ok(SurfaceResponse::ZOrderSet) => {
                         self.handle_surface_response(message.object_id.0, surface_result.unwrap());
                     }
                     Err(WaylandError::ProtocolViolation) | Err(WaylandError::ObjectNotFound) => {

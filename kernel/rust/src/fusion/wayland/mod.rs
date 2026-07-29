@@ -562,7 +562,7 @@ impl WaylandServer {
     pub fn composite_frame(&mut self) {
         let surfaces: Vec<(u32, &SurfaceState)> = self.compositor_handler
             .iter_surfaces()
-            .map(|(id, surface)| (id.0, surface))
+            .map(|(_id, surface)| (surface.z_order, surface))
             .collect();
 
         if let Some(backend) = self.framebuffer.as_mut() {

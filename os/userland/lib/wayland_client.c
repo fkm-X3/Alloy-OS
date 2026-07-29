@@ -268,6 +268,17 @@ int wl_surface_commit(int fd, unsigned int surface_id) {
     return wl_message_send(fd, surface_id, WL_SURFACE_COMMIT, NULL, 0);
 }
 
+int wl_surface_set_position(int fd, unsigned int surface_id, int x, int y) {
+    unsigned char payload[8];
+    mymemcpy(payload, &x, 4);
+    mymemcpy(payload + 4, &y, 4);
+    return wl_message_send(fd, surface_id, WL_SURFACE_SET_POSITION, payload, 8);
+}
+
+int wl_surface_set_zorder(int fd, unsigned int surface_id, unsigned int z_order) {
+    return wl_message_send(fd, surface_id, WL_SURFACE_SET_ZORDER, &z_order, 4);
+}
+
 unsigned int wl_seat_bind(struct wl_registry *reg, unsigned int seat_name,
                            unsigned int version) {
     unsigned int seat_id = reg->display->next_id++;

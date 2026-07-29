@@ -39,8 +39,12 @@ pub enum SurfaceRequest {
     Attach = 1,
     /// commit()
     Commit = 2,
+    /// alloy_set_position(x: i32, y: i32) — Alloy-specific
+    AlloySetPosition = 3,
+    /// alloy_set_zorder(z_order: u32) — Alloy-specific
+    AlloySetZOrder = 4,
     /// destroy()
-    Destroy = 3,
+    Destroy = 5,
 }
 
 impl TryFrom<u16> for SurfaceRequest {
@@ -51,7 +55,9 @@ impl TryFrom<u16> for SurfaceRequest {
             0 => Ok(SurfaceRequest::Damage),
             1 => Ok(SurfaceRequest::Attach),
             2 => Ok(SurfaceRequest::Commit),
-            3 => Ok(SurfaceRequest::Destroy),
+            3 => Ok(SurfaceRequest::AlloySetPosition),
+            4 => Ok(SurfaceRequest::AlloySetZOrder),
+            5 => Ok(SurfaceRequest::Destroy),
             _ => Err(WaylandError::ProtocolViolation),
         }
     }
@@ -118,6 +124,8 @@ impl CompositorHandler {
             SurfaceRequest::Damage => self.handle_damage(surface_id, payload),
             SurfaceRequest::Attach => self.handle_attach(surface_id, payload),
             SurfaceRequest::Commit => self.handle_commit(surface_id, payload),
+            SurfaceRequest::AlloySetPosition => self.handle_set_position(surface_id, payload),
+            SurfaceRequest::AlloySetZOrder => self.handle_set_zorder(surface_id, payload),
             SurfaceRequest::Destroy => self.handle_destroy(surface_id),
         }
     }
@@ -253,6 +261,50 @@ impl CompositorHandler {
         Ok(SurfaceResponse::Destroyed)
     }
 
+    /// Handle alloy_set_position request
+    fn handle_set_position(
+        &mut self,
+        surface_id: SurfaceId,
+        payload: &[u8],
+    ) -> WaylandResult<SurfaceResponse> {
+        if payload.len() < 8 {
+            return Err(WaylandError::ProtocolViolation);
+        }
+
+        let x_bytes = [payload[0], payload[1], payload[2], payload[3]];
+        let x = i32::from_le_bytes(x_bytes);
+
+        let y_bytes = [payload[4], payload[5], payload[6], payload[7]];
+        let y = i32::from_le_bytes(y_bytes);
+
+        if let Some(surface) = self.surfaces.get_mut(&surface_id) {
+            surface.screen_x = x;
+            surface.screen_y = y;
+        }
+
+        Ok(SurfaceResponse::PositionSet)
+    }
+
+    /// Handle alloy_set_zorder request
+    fn handle_set_zorder(
+        &mut self,
+        surface_id: SurfaceId,
+        payload: &[u8],
+    ) -> WaylandResult<SurfaceResponse> {
+        if payload.len() < 4 {
+            return Err(WaylandError::ProtocolViolation);
+        }
+
+        let z_bytes = [payload[0], payload[1], payload[2], payload[3]];
+        let z_order = u32::from_le_bytes(z_bytes);
+
+        if let Some(surface) = self.surfaces.get_mut(&surface_id) {
+            surface.z_order = z_order;
+        }
+
+        Ok(SurfaceResponse::ZOrderSet)
+    }
+
     /// Remove all surfaces belonging to a client (called on disconnect)
     pub fn clear_surface_for_client(&mut self, client_id: ClientId) {
         if let Some(surface_ids) = self.client_surfaces.remove(&client_id) {
@@ -318,6 +370,10 @@ pub enum SurfaceResponse {
     Committed,
     /// Surface destroyed
     Destroyed,
+    /// Surface position set
+    PositionSet,
+    /// Surface z-order set
+    ZOrderSet,
 }
 
 #[cfg(test)]

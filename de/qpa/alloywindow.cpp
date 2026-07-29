@@ -1,6 +1,10 @@
 #include "alloywindow.h"
 #include "alloyplatform.h"
 
+extern "C" {
+#include "wayland_client.h"
+}
+
 QT_BEGIN_NAMESPACE
 
 QAlloyWindow::QAlloyWindow(QWindow *window, unsigned int surfaceId)
@@ -20,6 +24,20 @@ QAlloyWindow::~QAlloyWindow()
 void QAlloyWindow::setGeometry(const QRect &rect)
 {
     QPlatformWindow::setGeometry(rect);
+
+    // Send position to compositor via Alloy-specific protocol
+    QAlloyIntegration *integration = QAlloyIntegration::instance();
+    if (integration) {
+        struct wl_display *d = static_cast<struct wl_display *>(integration->display());
+        if (d) {
+            wl_surface_set_position(d->fd, m_surfaceId, rect.x(), rect.y());
+
+            // Heuristic: if window is 48px tall and at bottom, it's a panel (z=1)
+            // Otherwise it's a background window (z=0)
+            unsigned int z = (rect.height() == 48) ? 1 : 0;
+            wl_surface_set_zorder(d->fd, m_surfaceId, z);
+        }
+    }
 }
 
 void QAlloyWindow::setVisible(bool visible)

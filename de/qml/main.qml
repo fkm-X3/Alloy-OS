@@ -12,13 +12,6 @@ Window {
         anchors.fill: parent
     }
 
-    Panel {
-        id: panel
-        width: parent.width
-        height: 48
-        anchors.bottom: parent.bottom
-    }
-
     AppLauncher {
         id: launcher
         anchors.fill: parent
@@ -36,7 +29,7 @@ Window {
             top: parent.top
             left: parent.left
             right: parent.right
-            bottom: panel.top
+            bottom: parent.bottom
             margins: 16
         }
         visible: false

@@ -13,7 +13,7 @@
 Kernel boot, Fusion display, Wayland support, and desktop runtime in one repo. Boots the Rust display server in Iced-primary software-rendered mode with Fusion as the compositor/backend layer.
 
 > [!NOTE]
-> Once Alloy-OS has a stable release the main C drivers will be replaced with zig code, wayland compositor, and the C++ backend of the QT DE (might) be rewritten in rust.
+> Once Alloy-OS has a stable release the main C drivers will be replaced with rust drivers. The Wayland compositor, and the C++ backend of the QT DE (might) be rewritten in rust eventually .
 > PS: It doesn't matter if arm64 fails on builds. x86_64 is the main focus rn but arm64 will be equal with x86_64 before 1.0.
 
 ## Quick start

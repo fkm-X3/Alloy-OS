@@ -10,7 +10,7 @@
   <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml/badge.svg" alt="Quick Check"></a>
 </p>
 
-> [!IMPORTENT]
+> [!IMPORTANT]
 > Alloy-OS is being rewritten entirely in RUST (I FUCKING HATE C AND C++), Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch "Rust-Rewrite"
 
 ## Quick start

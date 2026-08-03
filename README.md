@@ -1,6 +1,6 @@
 <div align="center">
   <h1>Alloy OS</h1>
-  <p><strong>An operating system built in Rust, C/C++, and Assembly.</strong></p>
+  <p><strong>An operating system built in Rust and Assembly.</strong></p>
   <img src="assets/alloy-os-light.svg" alt="Alloy OS light logo" width="300" />
   <img src="assets/alloy-os-dark.svg" alt="Alloy OS dark logo" width="300" />
 </div>
@@ -10,11 +10,8 @@
   <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml/badge.svg" alt="Quick Check"></a>
 </p>
 
-Kernel boot, Fusion display, Wayland support, and desktop runtime in one repo. Boots the Rust display server in Iced-primary software-rendered mode with Fusion as the compositor/backend layer.
-
-> [!NOTE]
-> Once Alloy-OS has a stable release the main C drivers will be replaced with rust drivers. The Wayland compositor, and the C++ backend of the QT DE (might) be rewritten in rust eventually .
-> PS: It doesn't matter if arm64 fails on builds. x86_64 is the main focus rn but arm64 will be equal with x86_64 before 1.0.
+> [!IMPORTENT]
+> Alloy-OS is being rewritten entirely in RUST (I FUCKING HATE C AND C++), Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch "Rust-Rewrite"
 
 ## Quick start
 

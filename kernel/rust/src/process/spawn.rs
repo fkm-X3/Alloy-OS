@@ -41,7 +41,7 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
     // map them with PAGE_USER | PAGE_WRITE so the stack works.
     {
         let stack_flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
-        unsafe { core::arch::asm!("cli"); }
+        crate::sync::irq_disable();
         let mut addr = STACK_BASE;
         while addr < STACK_BASE + STACK_SIZE {
             let phys = unsafe { ffi::pmm_alloc_frame() };
@@ -50,8 +50,8 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
                     ffi::serial_print(c"[spawn] OOM mapping stack page at 0x".as_ptr() as *const u8);
                     ffi::serial_print_hex64(addr);
                     ffi::serial_print(c"\n".as_ptr() as *const u8);
-                    core::arch::asm!("sti");
                 }
+                crate::sync::irq_enable();
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
             }
@@ -61,14 +61,14 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
                     ffi::serial_print(c"[spawn] FAIL mapping stack page at 0x".as_ptr() as *const u8);
                     ffi::serial_print_hex64(addr);
                     ffi::serial_print(c"\n".as_ptr() as *const u8);
-                    core::arch::asm!("sti");
                 }
+                crate::sync::irq_enable();
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
             }
             addr += 4096u64;
         }
-        unsafe { core::arch::asm!("sti"); }
+        crate::sync::irq_enable();
     }
 
     // ── Load ELF segments into pd_phys (kernel PD stays active) ──────
@@ -207,7 +207,7 @@ fn map_elf_segment(
     // context switches from clobbering the shared window slot (PT_TEMP_IDX)
     // used by win_map/win_unmap inside paging_map_page_in_pd and
     // paging_temp_map_frame.  Serial I/O is polled so it works without ints.
-    unsafe { core::arch::asm!("cli"); }
+    crate::sync::irq_disable();
 
     while page_addr < aligned_start + alloc_size {
         let phys = unsafe { ffi::pmm_alloc_frame() };
@@ -216,8 +216,8 @@ fn map_elf_segment(
                 ffi::serial_print(c"[spawn] OOM at page_addr=0x".as_ptr() as *const u8);
                 ffi::serial_print_hex64(page_addr as u64);
                 ffi::serial_print(c"\n".as_ptr() as *const u8);
-                core::arch::asm!("sti");
             }
+            crate::sync::irq_enable();
             return false;
         }
         let phys_addr = phys as usize;
@@ -239,8 +239,8 @@ fn map_elf_segment(
                 ffi::serial_print(c"[spawn] MAP FAIL page_addr=0x".as_ptr() as *const u8);
                 ffi::serial_print_hex64(page_addr as u64);
                 ffi::serial_print(c"\n".as_ptr() as *const u8);
-                core::arch::asm!("sti");
             }
+            crate::sync::irq_enable();
             return false;
         }
         page_addr += page_size;
@@ -255,7 +255,7 @@ fn map_elf_segment(
         }
     }
 
-    unsafe { core::arch::asm!("sti"); }
+    crate::sync::irq_enable();
     unsafe {
         ffi::serial_print_hex64(vaddr as u64);
         ffi::serial_print(c"\n".as_ptr() as *const u8);

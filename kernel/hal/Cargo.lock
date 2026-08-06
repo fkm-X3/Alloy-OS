@@ -5,3 +5,10 @@ version = 4
 [[package]]
 name = "alloy-kernel-hal"
 version = "0.1.0"
+dependencies = [
+ "alloy-kernel-unsafe-core",
+]
+
+[[package]]
+name = "alloy-kernel-unsafe-core"
+version = "0.1.0"

@@ -171,7 +171,7 @@ impl Scheduler {
                         // Re-enable interrupts before returning so that the
                         // IRQ handler (which will iretq back to the task)
                         // runs with correct IF state.
-                        unsafe { core::arch::asm!("sti"); }
+                        crate::sync::irq_enable();
                     }
                 }
             }

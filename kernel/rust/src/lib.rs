@@ -33,6 +33,7 @@ extern "C" fn display_server_entry() {
     // Disable interrupts during init so the timer can't preempt us.
     // The scheduler leaks any task that is preempted before it voluntarily
     // yields or exits (old_box_opt is never re-enqueued).
+    #[cfg(feature = "x86_64")]
     unsafe { core::arch::asm!("cli"); }
 
     unsafe {
@@ -44,6 +45,7 @@ extern "C" fn display_server_entry() {
             unsafe {
                 ffi::serial_print(c"[DisplayServer] FATAL: PlatformDisplay::new() returned None\n".as_ptr() as *const u8);
             }
+            #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("sti"); }
             loop {
                 #[cfg(feature = "x86_64")]
@@ -65,6 +67,7 @@ extern "C" fn display_server_entry() {
             unsafe {
                 ffi::serial_print(c"[Spawn] PL110 ready, booting display server task\n".as_ptr() as *const u8);
             }
+            #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("sti"); }
             let _ = display_server::run(display);
             unsafe {

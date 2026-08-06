@@ -9,6 +9,7 @@ extern void (*__fini_array_end[])(void);
 
 #define SYS_WRITE 6
 
+#if defined(__x86_64__)
 static inline void debug_write(char c) {
     char buf[1] = {c};
     register long r10 asm("r10") = 0;
@@ -19,6 +20,24 @@ static inline void debug_write(char c) {
         : "rcx", "r11", "r9", "memory"
     );
 }
+#elif defined(__aarch64__)
+static inline void debug_write(char c) {
+    char buf[1] = {c};
+    register long x0 asm("x0");
+    register long x8 asm("x8") = SYS_WRITE;
+    register long x1 asm("x1") = 1;
+    register long x2 asm("x2") = (long)buf;
+    register long x3 asm("x3") = 1;
+    asm volatile(
+        "svc #0"
+        : "=r" (x0)
+        : "r" (x8), "r" (x1), "r" (x2), "r" (x3)
+        : "memory"
+    );
+}
+#else
+#error "crt_cpp.c: unsupported architecture"
+#endif
 
 void __alloy_init_cpp(void) {
     debug_write('P');

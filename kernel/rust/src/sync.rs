@@ -213,3 +213,24 @@ impl<'a, T> Drop for SpinlockIRQGuard<'a, T> {
 // Safety: SpinlockIRQ can be shared between threads (we disable IRQs)
 unsafe impl<T> Sync for SpinlockIRQ<T> where T: Send {}
 unsafe impl<T> Send for SpinlockIRQ<T> where T: Send {}
+
+/// Disable interrupts (mask IRQ) — arch-specific.
+///
+/// x86_64: `cli`. aarch64: mask IRQ via DAIF (bit 1), matching the IRQ-only
+/// masking used by [`SpinlockIRQ`].
+#[inline]
+pub fn irq_disable() {
+    #[cfg(feature = "x86_64")]
+    unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+    #[cfg(feature = "aarch64")]
+    unsafe { core::arch::asm!("msr daifset, #2"); }
+}
+
+/// Re-enable interrupts (unmask IRQ) — arch-specific.
+#[inline]
+pub fn irq_enable() {
+    #[cfg(feature = "x86_64")]
+    unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+    #[cfg(feature = "aarch64")]
+    unsafe { core::arch::asm!("msr daifclr, #2"); }
+}

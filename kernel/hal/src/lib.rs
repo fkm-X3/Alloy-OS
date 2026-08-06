@@ -4,24 +4,19 @@
 //!
 //! This crate provides a unified interface to architecture-specific hardware operations,
 //! enabling the kernel to support multiple CPU architectures (x86_64, aarch64).
+//!
+//! Since Phase 1 this crate no longer owns any implementation code. All trait
+//! definitions, impls, inline-asm shims, and FFI declarations live in
+//! `alloy-kernel-unsafe-core`; this crate re-exports the safe public boundary
+//! (`unsafe_core::api`) so the kernel crate keeps a single dependency edge.
 
-pub mod arch;
+pub use alloy_kernel_unsafe_core::api::*;
+
+/// Raw C FFI declarations, re-exported from `unsafe_core::raw::ffi`.
 pub mod ffi;
-pub mod interrupt;
-pub mod io;
-pub mod memory;
-pub mod platform;
-pub mod serial;
-pub mod time;
 
-pub use arch::{Arch, CpuContext, CpuInfo};
-pub use interrupt::{InterruptController, IrqHandler};
-#[cfg(feature = "x86_64")]
-pub use io::IoPort;
-pub use io::Mmio;
-pub use memory::{MemoryManager, PageFlags};
-pub use serial::SerialPort;
-pub use time::Timer;
+/// Global hardware platform initialization and access.
+pub mod platform;
 
 /// Architecture-specific initialization
 pub trait HalPlatform {

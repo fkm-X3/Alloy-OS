@@ -60,6 +60,11 @@ el1_entry:
     ldr x0, =_stack_top
     mov sp, x0
 
+    /* Enable FP/SIMD for EL1 and EL0 (CPACR_EL1.FPEN = 0b11) */
+    mov x0, #(3 << 20)
+    msr cpacr_el1, x0
+    isb
+
     /* Save boot arguments (none from QEMU, but we'll pass 0 for magic) */
     mov x0, #0                   /* magic = 0 (no multiboot on ARM) */
     mov x1, #0                   /* info = 0 */
@@ -234,10 +239,46 @@ inst_abort_cur:
     b hang
 
 irq_cur_elx:
-    /* IRQ at current EL - dispatch to C handler */
-    stp x29, x30, [sp, #-16]!
+    /* IRQ at current EL - dispatch to C handler.
+     * Save ALL GPRs + DAIF: the C handler chain (irq_handler_el1 ->
+     * timer_handler -> rust_timer_tick) clobbers caller-saved x0-x18 of the
+     * interrupted context, and must not be re-entered while running. */
+    mrs x16, daif
+    msr daifset, #2             /* mask IRQs during the handler */
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x4, x5, [sp, #-16]!
+    stp x6, x7, [sp, #-16]!
+    stp x8, x9, [sp, #-16]!
+    stp x10, x11, [sp, #-16]!
+    stp x12, x13, [sp, #-16]!
+    stp x14, x15, [sp, #-16]!
+    stp x16, x17, [sp, #-16]!
+    stp x18, x19, [sp, #-16]!
+    stp x20, x21, [sp, #-16]!
+    stp x22, x23, [sp, #-16]!
+    stp x24, x25, [sp, #-16]!
+    stp x26, x27, [sp, #-16]!
+    stp x28, x29, [sp, #-16]!
+    str x30, [sp, #-16]!
     bl irq_handler_el1
-    ldp x29, x30, [sp], #16
+    ldr x30, [sp], #16
+    ldp x28, x29, [sp], #16
+    ldp x26, x27, [sp], #16
+    ldp x24, x25, [sp], #16
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x18, x19, [sp], #16
+    ldp x16, x17, [sp], #16
+    ldp x14, x15, [sp], #16
+    ldp x12, x13, [sp], #16
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    msr daif, x16
     eret
 
 fiq_cur_elx:
@@ -259,9 +300,42 @@ sync_lower_64:
     eret
 
 irq_lower_64:
-    stp x29, x30, [sp, #-16]!
+    mrs x16, daif
+    msr daifset, #2             /* mask IRQs during the handler */
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x4, x5, [sp, #-16]!
+    stp x6, x7, [sp, #-16]!
+    stp x8, x9, [sp, #-16]!
+    stp x10, x11, [sp, #-16]!
+    stp x12, x13, [sp, #-16]!
+    stp x14, x15, [sp, #-16]!
+    stp x16, x17, [sp, #-16]!
+    stp x18, x19, [sp, #-16]!
+    stp x20, x21, [sp, #-16]!
+    stp x22, x23, [sp, #-16]!
+    stp x24, x25, [sp, #-16]!
+    stp x26, x27, [sp, #-16]!
+    stp x28, x29, [sp, #-16]!
+    str x30, [sp, #-16]!
     bl irq_handler_el1
-    ldp x29, x30, [sp], #16
+    ldr x30, [sp], #16
+    ldp x28, x29, [sp], #16
+    ldp x26, x27, [sp], #16
+    ldp x24, x25, [sp], #16
+    ldp x22, x23, [sp], #16
+    ldp x20, x21, [sp], #16
+    ldp x18, x19, [sp], #16
+    ldp x16, x17, [sp], #16
+    ldp x14, x15, [sp], #16
+    ldp x12, x13, [sp], #16
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    msr daif, x16
     eret
 
 fiq_lower_64:

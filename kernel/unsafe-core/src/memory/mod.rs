@@ -1,6 +1,11 @@
 //! Memory management abstraction
+//!
+//! Moved from `hal/src/memory/mod.rs` in Phase 1; the HAL re-exports this
+//! module.
 
 use core::ffi::c_void;
+
+use crate::raw::ffi;
 
 /// Page flags for memory mapping
 #[repr(C)]
@@ -139,10 +144,6 @@ impl Pmm {
         }
     }
 }
-
-// C FFI functions used by the memory manager.
-// Declarations are consolidated in crate::ffi.
-use crate::ffi;
 
 fn flags_to_raw(flags: PageFlags) -> u32 {
     let mut raw = 0u32;

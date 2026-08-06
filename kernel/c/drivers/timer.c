@@ -54,11 +54,11 @@ static inline uint64_t read_cntpct_el0() {
 }
 
 static inline void write_cntp_cval_el1(uint64_t val) {
-    asm volatile("msr S3_0_C14_C2_0, %0" : : "r"(val));
+    asm volatile("msr S3_3_C14_C2_2, %0" : : "r"(val));
 }
 
 static inline void write_cntp_ctl_el1(uint64_t val) {
-    asm volatile("msr S3_0_C14_C2_1, %0" : : "r"(val));
+    asm volatile("msr S3_3_C14_C2_1, %0" : : "r"(val));
 }
 
 // GICv2 MMIO base for QEMU virt
@@ -123,16 +123,18 @@ void timer_init_ffi(uint32_t frequency) {
 }
 
 void timer_handler() {
-    g_timer_ticks++;
-    rust_timer_tick();
-
-    // Acknowledge interrupt (write GICC_EOIR with interrupt ID)
+    // Acknowledge interrupt FIRST (write GICC_EOIR with interrupt ID).
+    // Doing this before any work prevents the IRQ line staying asserted and
+    // re-entering the handler while we run (e.g. while a lock is held).
     GICC_BASE[GICC_EOIR / 4] = GIC_PPI_PHYS_TIMER;
 
     // Reload timer for next period
     uint64_t period = g_timer_freq_hz / g_timer_frequency;
     uint64_t now = read_cntpct_el0();
     write_cntp_cval_el1(now + period);
+
+    g_timer_ticks++;
+    rust_timer_tick();
 }
 #else
 #error "Unsupported architecture for timer"

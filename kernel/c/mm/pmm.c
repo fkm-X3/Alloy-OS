@@ -69,7 +69,10 @@ void pmm_init(uint32_t multiboot_addr) {
         g_pmm.total_memory = 128 * 1024 * 1024;
         g_pmm.available_memory = 128 * 1024 * 1024;
         /* QEMU virt: RAM at 0x40000000, 128MB */
-        uint32_t ram_start_frame = 0x40000000 / PAGE_SIZE;
+        /* Reserve everything from RAM base through the kernel image so the
+         * first free frame is just past the kernel (.data/.bss end), keeping
+         * vmm regions physically contiguous. */
+        uint32_t ram_start_frame = ((uint32_t)&_kernel_end + PAGE_SIZE - 1) / PAGE_SIZE;
         uint32_t ram_end_frame = 0x48000000 / PAGE_SIZE;
         g_pmm.total_frames = ram_end_frame;
         for (uint32_t i = ram_start_frame; i < ram_end_frame; i++) {

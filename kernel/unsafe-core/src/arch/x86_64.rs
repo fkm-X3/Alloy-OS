@@ -1,6 +1,9 @@
 //! x86_64 architecture implementation
 //!
 //! Full 64-bit x86 architecture support.
+//! Moved from `hal/src/arch/x86_64/mod.rs` in Phase 1.
+
+use crate::raw::asm::x86_64;
 
 use super::{Arch, CpuContext};
 
@@ -17,82 +20,31 @@ impl Arch for X86_64Arch {
     }
 
     fn halt() {
-        unsafe {
-            core::arch::asm!("cli; hlt", options(nomem, nostack));
-        }
+        x86_64::halt();
     }
 
     fn disable_interrupts() {
-        unsafe {
-            core::arch::asm!("cli", options(nomem, nostack));
-        }
+        x86_64::cli();
     }
 
     fn enable_interrupts() {
-        unsafe {
-            core::arch::asm!("sti", options(nomem, nostack));
-        }
+        x86_64::sti();
     }
 
     fn get_vendor(buffer: &mut [u8]) {
-        let ebx: u32;
-        let edx: u32;
-        let ecx: u32;
-
-        unsafe {
-            core::arch::asm!(
-                "push rbx",
-                "cpuid",
-                "mov {0:e}, ebx",
-                "pop rbx",
-                out(reg) ebx,
-                in("eax") 0,
-                out("ecx") ecx,
-                out("edx") edx,
-            );
-        }
-
-        let vendor_bytes: [u8; 12] = [
-            ebx as u8, (ebx >> 8) as u8, (ebx >> 16) as u8, (ebx >> 24) as u8,
-            edx as u8, (edx >> 8) as u8, (edx >> 16) as u8, (edx >> 24) as u8,
-            ecx as u8, (ecx >> 8) as u8, (ecx >> 16) as u8, (ecx >> 24) as u8,
-        ];
+        let vendor_bytes: [u8; 12] = x86_64::cpuid_vendor();
 
         let len = core::cmp::min(vendor_bytes.len(), buffer.len());
         buffer[..len].copy_from_slice(&vendor_bytes[..len]);
     }
 
     fn get_features() -> u32 {
-        let edx: u32;
-        unsafe {
-            core::arch::asm!(
-                "push rbx",
-                "cpuid",
-                "pop rbx",
-                in("eax") 1,
-                in("ecx") 0,
-                lateout("edx") edx,
-                lateout("eax") _,
-                lateout("ecx") _,
-            );
-        }
-        edx
+        x86_64::cpuid_features()
     }
 
     fn get_model_info() -> (u32, u32, u32) {
-        let eax: u32;
-        unsafe {
-            core::arch::asm!(
-                "push rbx",
-                "cpuid",
-                "pop rbx",
-                in("eax") 1,
-                in("ecx") 0,
-                lateout("eax") eax,
-                lateout("ecx") _,
-                lateout("edx") _,
-            );
-        }
+        let eax = x86_64::cpuid_model_info();
+
         let base_family = (eax >> 8) & 0xF;
         let ext_family = (eax >> 20) & 0xFF;
         let family = if base_family == 0xF { base_family + ext_family } else { base_family };
@@ -125,19 +77,15 @@ impl Arch for X86_64Arch {
     }
 
     fn get_fault_address() -> usize {
-        let cr2: u64;
-        unsafe {
-            core::arch::asm!("mov {}, cr2", out(reg) cr2);
-        }
-        cr2 as usize
+        x86_64::read_cr2() as usize
     }
 
     unsafe fn invalidate_tlb_entry(virt_addr: usize) {
-        core::arch::asm!("invlpg [{}]", in(reg) virt_addr as u64, options(nostack));
+        x86_64::invlpg(virt_addr);
     }
 
     unsafe fn switch_page_directory(pd_phys: usize) {
-        core::arch::asm!("mov cr3, {}", in(reg) pd_phys as u64, options(nostack));
+        x86_64::write_cr3(pd_phys as u64);
     }
 }
 
@@ -196,7 +144,7 @@ pub mod segments {
 impl super::CpuContext {
     /// Create a new CPU context with sensible defaults.
     pub fn new() -> Self {
-        let kernel_cr3 = unsafe { crate::ffi::paging_get_kernel_directory_phys() };
+        let kernel_cr3 = unsafe { crate::raw::ffi::paging_get_kernel_directory_phys() };
         Self {
             rax: 0, rbx: 0, rcx: 0, rdx: 0,
             rsi: 0, rdi: 0, rbp: 0, rsp: 0,

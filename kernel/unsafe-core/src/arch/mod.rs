@@ -1,4 +1,7 @@
 //! Architecture-specific implementations
+//!
+//! Moved from `hal/src/arch/mod.rs` in Phase 1; the HAL re-exports this
+//! module.
 
 #[cfg(feature = "x86_64")]
 pub mod x86_64;

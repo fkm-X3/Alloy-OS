@@ -214,6 +214,47 @@ impl<'a, T> Drop for SpinlockIRQGuard<'a, T> {
 unsafe impl<T> Sync for SpinlockIRQ<T> where T: Send {}
 unsafe impl<T> Send for SpinlockIRQ<T> where T: Send {}
 
+/// Save the current interrupt state and mask IRQs, returning the previous
+/// state so the caller can later restore it with [`irq_restore`].
+///
+/// Unlike [`irq_disable`], this preserves the prior mask state, so it is safe
+/// to use from contexts where IRQs are already masked (e.g. inside an IRQ
+/// handler).
+#[inline]
+pub fn irq_save() -> u64 {
+    #[cfg(feature = "x86_64")]
+    {
+        let flags: u64;
+        unsafe {
+            core::arch::asm!("pushfq", "pop {0}", out(reg) flags, options(preserves_flags));
+            core::arch::asm!("cli", options(nomem, nostack));
+        }
+        flags
+    }
+    #[cfg(feature = "aarch64")]
+    {
+        let flags: u64;
+        unsafe {
+            core::arch::asm!("mrs {}, daif", out(reg) flags);
+            core::arch::asm!("msr daifset, #2");
+        }
+        flags
+    }
+}
+
+/// Restore a previously saved interrupt state (see [`irq_save`]).
+#[inline]
+pub fn irq_restore(flags: u64) {
+    #[cfg(feature = "x86_64")]
+    unsafe {
+        core::arch::asm!("push {0}", "popfq", in(reg) flags, options(nomem, nostack));
+    }
+    #[cfg(feature = "aarch64")]
+    unsafe {
+        core::arch::asm!("msr daif, {}", in(reg) flags);
+    }
+}
+
 /// Disable interrupts (mask IRQ) — arch-specific.
 ///
 /// x86_64: `cli`. aarch64: mask IRQ via DAIF (bit 1), matching the IRQ-only

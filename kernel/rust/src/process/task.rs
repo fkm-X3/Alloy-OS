@@ -90,6 +90,17 @@ impl Task {
             context.rbp = stack_top as u64;
             context.rip = entry as usize as u64;
         }
+        #[cfg(feature = "aarch64")]
+        {
+            // context_switch does eret with SP = ctx.sp, ELR = ctx.elr.
+            // Run at EL1h with IRQs unmasked so the timer can preempt us.
+            context.sp = (stack_top & !15) as u64;
+            context.fp = context.sp;
+            context.elr = entry as usize as u64;
+            context.lr = entry as usize as u64;
+            context.spsr = 0x5; // M[3:0]=EL1h, DAIF F/I/A/D all unmasked
+            context.ttbr0 = unsafe { ffi::paging_get_kernel_directory_phys() } as u64;
+        }
         unsafe {
             ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);
             // Print simple message without trying to print the name (causes issues)

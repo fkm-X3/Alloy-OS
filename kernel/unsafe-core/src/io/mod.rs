@@ -1,6 +1,10 @@
 //! I/O abstraction layer
 //!
 //! Provides unified interface for port I/O (x86) and MMIO (ARM).
+//! Moved from `hal/src/io/mod.rs` in Phase 1; the HAL re-exports this module.
+
+#[cfg(feature = "x86_64")]
+use crate::raw::asm;
 
 /// Port I/O trait for architectures that support it (x86)
 #[cfg(feature = "x86_64")]
@@ -21,38 +25,32 @@ pub struct X86IoPort;
 impl IoPort for X86IoPort {
     #[inline]
     unsafe fn outb(port: u16, value: u8) {
-        core::arch::asm!("outb %al, %dx", in("al") value, in("dx") port);
+        asm::x86_64::outb(port, value);
     }
 
     #[inline]
     unsafe fn outw(port: u16, value: u16) {
-        core::arch::asm!("outw %ax, %dx", in("ax") value, in("dx") port);
+        asm::x86_64::outw(port, value);
     }
 
     #[inline]
     unsafe fn outl(port: u16, value: u32) {
-        core::arch::asm!("outl %eax, %dx", in("eax") value, in("dx") port);
+        asm::x86_64::outl(port, value);
     }
 
     #[inline]
     unsafe fn inb(port: u16) -> u8 {
-        let value: u8;
-        core::arch::asm!("inb %dx, %al", in("dx") port, out("al") value);
-        value
+        asm::x86_64::inb(port)
     }
 
     #[inline]
     unsafe fn inw(port: u16) -> u16 {
-        let value: u16;
-        core::arch::asm!("inw %dx, %ax", in("dx") port, out("ax") value);
-        value
+        asm::x86_64::inw(port)
     }
 
     #[inline]
     unsafe fn inl(port: u16) -> u32 {
-        let value: u32;
-        core::arch::asm!("inl %dx, %eax", in("dx") port, out("eax") value);
-        value
+        asm::x86_64::inl(port)
     }
 }
 

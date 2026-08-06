@@ -1,4 +1,7 @@
 //! Serial port abstraction
+//!
+//! Moved from `hal/src/serial/mod.rs` in Phase 1; the HAL re-exports this
+//! module.
 
 #[cfg(feature = "x86_64")]
 use crate::io::{IoPort, X86IoPort};

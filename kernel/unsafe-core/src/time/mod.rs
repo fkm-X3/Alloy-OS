@@ -1,7 +1,16 @@
 //! Timer abstraction
+//!
+//! Moved from `hal/src/time/mod.rs` in Phase 1; the HAL re-exports this
+//! module.
 
 #[cfg(feature = "x86_64")]
 use crate::io::{IoPort, X86IoPort};
+
+#[cfg(feature = "x86_64")]
+use crate::raw::asm::x86_64::hlt;
+
+#[cfg(feature = "aarch64")]
+use crate::raw::asm::aarch64::{wfi, write_timer_ctl, write_timer_cval};
 
 /// Timer trait
 pub trait Timer {
@@ -80,10 +89,7 @@ impl Timer for Pit {
         let target_ticks = (ms * self.frequency as u64) / 1000;
         let start_ticks = self.ticks;
         while self.ticks - start_ticks < target_ticks {
-            #[cfg(feature = "x86_64")]
-            unsafe {
-                core::arch::asm!("hlt");
-            }
+            hlt();
         }
     }
 }
@@ -105,19 +111,11 @@ impl ArmGenericTimer {
 impl Timer for ArmGenericTimer {
     fn init(&mut self, _frequency: u32) {
         // Read counter frequency from CNTFRQ_EL0
-        let freq: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, S3_3_C14_C0_0", out(reg) freq);
-        }
-        self.frequency = freq as u32;
+        self.frequency = crate::raw::asm::aarch64::read_cntfrq_el0() as u32;
     }
 
     fn ticks(&self) -> u64 {
-        let count: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, S3_3_C14_C0_1", out(reg) count);
-        }
-        count
+        crate::raw::asm::aarch64::read_cntpct_el0()
     }
 
     fn uptime_ms(&self) -> u64 {
@@ -133,17 +131,15 @@ impl Timer for ArmGenericTimer {
         let start_ticks = self.ticks();
         let compare = start_ticks + target_ticks;
 
-        unsafe {
-            // Set compare value and enable timer
-            core::arch::asm!("msr S3_3_C14_C2_0, {}", in(reg) target_ticks);
-            core::arch::asm!("msr S3_3_C14_C2_1, {}", in(reg) 1);
+        // Set compare value and enable timer
+        write_timer_cval(target_ticks);
+        write_timer_ctl(1);
 
-            // Wait until timer fires
-            while self.ticks() < compare {
-                core::arch::asm!("wfi");
-            }
-
-            core::arch::asm!("msr S3_3_C14_C2_1, {}", in(reg) 0);
+        // Wait until timer fires
+        while self.ticks() < compare {
+            wfi();
         }
+
+        write_timer_ctl(0);
     }
 }

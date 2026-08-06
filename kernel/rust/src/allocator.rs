@@ -20,7 +20,12 @@ impl<T> AllocCell<T> {
     }
 }
 
-/// Global lock for allocator (simple spinlock)
+/// Global lock for allocator.
+///
+/// Must mask IRQs while held: the timer IRQ handler can allocate (the
+/// scheduler re-enqueues the preempted task, growing the ready queue), so a
+/// plain spinlock would deadlock if an IRQ fired mid-allocation. `lock()`
+/// returns the saved interrupt state, which `unlock()` restores.
 static ALLOC_LOCK: AtomicBool = AtomicBool::new(false);
 
 /// Slab allocator for small objects
@@ -29,20 +34,24 @@ static SLAB_ALLOCATOR: AllocCell<SlabAllocator> = AllocCell(UnsafeCell::new(Slab
 /// Heap allocator for larger objects
 static HEAP_ALLOCATOR: AllocCell<HeapAllocator> = AllocCell(UnsafeCell::new(HeapAllocator::new()));
 
-/// Acquire allocator lock with memory barriers
-fn lock() {
+/// Acquire allocator lock with memory barriers, masking IRQs while held.
+/// Returns the previous interrupt state for [`unlock`].
+fn lock() -> u64 {
+    let flags = crate::sync::irq_save();
     while ALLOC_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
         core::hint::spin_loop();
     }
     // Ensure all previous writes are visible
     fence(Ordering::Acquire);
+    flags
 }
 
-/// Release allocator lock with memory barriers
-fn unlock() {
+/// Release allocator lock with memory barriers, restoring the saved IRQ state.
+fn unlock(flags: u64) {
     // Ensure all our writes complete before releasing
     fence(Ordering::Release);
     ALLOC_LOCK.store(false, Ordering::Release);
+    crate::sync::irq_restore(flags);
 }
 
 /// Alloy kernel allocator with slab and heap tiers
@@ -50,7 +59,7 @@ pub struct AllocatorVMM;
 
 unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        lock();
+        let flags = lock();
         
         let result = if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
             // Use slab allocator for small objects
@@ -60,12 +69,12 @@ unsafe impl GlobalAlloc for AllocatorVMM {
             unsafe { (*HEAP_ALLOCATOR.get()).alloc(layout) }
         };
         
-        unlock();
+        unlock(flags);
         result
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        lock();
+        let flags = lock();
         
         if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
             unsafe { (*SLAB_ALLOCATOR.get()).free(ptr, layout.size(), layout.align()); }
@@ -73,7 +82,7 @@ unsafe impl GlobalAlloc for AllocatorVMM {
             unsafe { (*HEAP_ALLOCATOR.get()).dealloc(ptr, layout); }
         }
         
-        unlock();
+        unlock(flags);
     }
 }
 
@@ -91,10 +100,10 @@ fn alloc_error_handler(layout: Layout) -> ! {
 /// Get allocation statistics
 pub fn get_stats() -> ((usize, usize), (usize, usize)) {
     unsafe {
-        lock();
+        let flags = lock();
         let slab_stats = (*SLAB_ALLOCATOR.get()).stats();
         let heap_stats = (*HEAP_ALLOCATOR.get()).stats();
-        unlock();
+        unlock(flags);
         (slab_stats, heap_stats)
     }
 }

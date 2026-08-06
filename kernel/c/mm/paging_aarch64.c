@@ -9,6 +9,10 @@
 
 static uintptr_t kernel_page_dir_phys = 0;
 
+// Tracks the currently-active user address space root (TTBR0_EL1),
+// mirroring x86's g_current_user_cr3 so the Rust kernel can read/write it.
+uint64_t g_current_user_cr3 = 0;
+
 // 4KB aligned page for first-level translation table (L0)
 static uint64_t kernel_tt_l0[512] __attribute__((aligned(4096)));
 
@@ -29,6 +33,7 @@ void paging_init() {
     }
 
     kernel_page_dir_phys = (uintptr_t)&kernel_tt_l0[0];
+    g_current_user_cr3 = kernel_page_dir_phys;
 }
 
 void paging_enable() {

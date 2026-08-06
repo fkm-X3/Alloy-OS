@@ -2,114 +2,11 @@
 //!
 //! Basic working support for ARM64 architecture.
 //! Suitable for QEMU virt machine emulation.
+//! Moved from `hal/src/arch/aarch64/mod.rs` in Phase 1.
+
+use crate::raw::asm::aarch64 as sysregs;
 
 use super::{Arch, CpuContext};
-
-/// ARM64 system register helpers
-mod sysregs {
-    #[inline]
-    pub fn read_midr_el1() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, midr_el1", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub fn read_cntfrq_el0() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, S3_3_C14_C0_0", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub fn read_cntpct_el0() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, S3_3_C14_C0_1", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub fn read_far_el1() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, far_el1", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub fn read_ttbr0_el1() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, ttbr0_el1", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub unsafe fn write_ttbr0_el1(val: u64) {
-        core::arch::asm!("msr ttbr0_el1, {}", in(reg) val);
-    }
-
-    #[inline]
-    pub unsafe fn write_tcr_el1(val: u64) {
-        core::arch::asm!("msr tcr_el1, {}", in(reg) val);
-    }
-
-    #[inline]
-    pub unsafe fn write_mair_el1(val: u64) {
-        core::arch::asm!("msr mair_el1, {}", in(reg) val);
-    }
-
-    #[inline]
-    pub unsafe fn write_sctlr_el1(val: u64) {
-        core::arch::asm!("msr sctlr_el1, {}", in(reg) val);
-    }
-
-    #[inline]
-    pub fn read_sctlr_el1() -> u64 {
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, sctlr_el1", out(reg) val);
-        }
-        val
-    }
-
-    #[inline]
-    pub unsafe fn write_vbar_el1(val: u64) {
-        core::arch::asm!("msr vbar_el1, {}", in(reg) val);
-    }
-
-    #[inline]
-    pub unsafe fn tlbi_vmalle1() {
-        core::arch::asm!("tlbi vmalle1");
-        core::arch::asm!("dsb sy");
-        core::arch::asm!("isb");
-    }
-
-    #[inline]
-    pub unsafe fn tlbi_vae1(virt: u64) {
-        core::arch::asm!("tlbi vae1, {}", in(reg) virt >> 12);
-        core::arch::asm!("dsb sy");
-        core::arch::asm!("isb");
-    }
-
-    #[inline]
-    pub unsafe fn dsb_sy() {
-        core::arch::asm!("dsb sy");
-    }
-
-    #[inline]
-    pub unsafe fn isb() {
-        core::arch::asm!("isb");
-    }
-}
 
 pub struct Aarch64Arch;
 
@@ -121,49 +18,41 @@ impl Arch for Aarch64Arch {
     fn init() {
         // Basic aarch64 initialization
         // Set up MAIR for memory attributes
-        unsafe {
-            // MAIR_EL1: Normal cacheable (index 0), Device-nGnRE (index 1)
-            let mair = (0xFFu64) | ((0x04u64) << 8);
-            sysregs::write_mair_el1(mair);
+        // MAIR_EL1: Normal cacheable (index 0), Device-nGnRE (index 1)
+        let mair = (0xFFu64) | ((0x04u64) << 8);
+        sysregs::write_mair_el1(mair);
 
-            // TCR_EL1: 4KB granule, 48-bit VA, 48-bit PA
-            // T0SZ = 64 - 48 = 16, IRGN0 = 1 (Normal WB RA WA), ORGN0 = 1, SH0 = 3 (Inner shareable)
-            // IPS = 0 (32-bit PA for simplicity), TG0 = 0 (4KB), T0SZ = 16
-            let tcr = (16u64)          // T0SZ = 16 (48-bit VA)
-                | (1u64 << 8)          // IRGN0 = Normal WB RA WA
-                | (1u64 << 10)         // ORGN0 = Normal WB RA WA
-                | (3u64 << 12)         // SH0 = Inner shareable
-                | (0u64 << 14)         // TG0 = 4KB
-                | (0u64 << 32);        // IPS = 32-bit PA
-            sysregs::write_tcr_el1(tcr);
+        // TCR_EL1: 4KB granule, 48-bit VA, 48-bit PA
+        // T0SZ = 64 - 48 = 16, IRGN0 = 1 (Normal WB RA WA), ORGN0 = 1, SH0 = 3 (Inner shareable)
+        // IPS = 0 (32-bit PA for simplicity), TG0 = 0 (4KB), T0SZ = 16
+        let tcr = (16u64)          // T0SZ = 16 (48-bit VA)
+            | (1u64 << 8)          // IRGN0 = Normal WB RA WA
+            | (1u64 << 10)         // ORGN0 = Normal WB RA WA
+            | (3u64 << 12)         // SH0 = Inner shareable
+            | (0u64 << 14)         // TG0 = 4KB
+            | (0u64 << 32);        // IPS = 32-bit PA
+        sysregs::write_tcr_el1(tcr);
 
-            // Enable MMU: M=1, C=1, I=1
-            let sctlr = sysregs::read_sctlr_el1();
-            sysregs::write_sctlr_el1(sctlr | 1 | (1 << 2) | (1 << 12));
+        // Enable MMU: M=1, C=1, I=1
+        let sctlr = sysregs::read_sctlr_el1();
+        sysregs::write_sctlr_el1(sctlr | 1 | (1 << 2) | (1 << 12));
 
-            sysregs::dsb_sy();
-            sysregs::isb();
-        }
+        sysregs::dsb_sy();
+        sysregs::isb();
     }
 
     fn halt() {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        sysregs::wfi();
     }
 
     fn disable_interrupts() {
-        unsafe {
-            // Disable IRQ and FIQ (DAIF register)
-            core::arch::asm!("msr daifset, #0b0011");
-        }
+        // Disable IRQ and FIQ (DAIF register)
+        sysregs::daifset();
     }
 
     fn enable_interrupts() {
-        unsafe {
-            // Enable IRQ and FIQ (DAIF register)
-            core::arch::asm!("msr daifclr, #0b0011");
-        }
+        // Enable IRQ and FIQ (DAIF register)
+        sysregs::daifclr();
     }
 
     fn get_vendor(buffer: &mut [u8]) {
@@ -186,11 +75,7 @@ impl Arch for Aarch64Arch {
 
     fn get_features() -> u32 {
         // Read ID_AA64ISAR0_EL1 for feature info
-        let val: u64;
-        unsafe {
-            core::arch::asm!("mrs {}, id_aa64isar0_el1", out(reg) val);
-        }
-        val as u32
+        sysregs::read_id_aa64isar0_el1() as u32
     }
 
     fn get_model_info() -> (u32, u32, u32) {
@@ -219,10 +104,8 @@ impl Arch for Aarch64Arch {
         extern "C" {
             static _exception_vectors: u8;
         }
-        unsafe {
-            let vbar = &_exception_vectors as *const u8 as u64;
-            sysregs::write_vbar_el1(vbar);
-        }
+        let vbar = unsafe { &_exception_vectors as *const u8 as u64 };
+        sysregs::write_vbar_el1(vbar);
     }
 
     fn get_fault_address() -> usize {

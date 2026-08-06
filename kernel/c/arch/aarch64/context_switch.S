@@ -3,6 +3,24 @@
 /* x0 = old_ctx, x1 = new_ctx */
 
 .section .text
+
+/* void save_context(cpu_context* ctx) */
+/* Save current context into ctx and return normally (new_ctx = NULL). */
+.global save_context
+.type save_context, @function
+save_context:
+    mov x1, xzr              /* new_ctx = NULL -> save only */
+    b context_switch
+
+/* void load_context(cpu_context* ctx) */
+/* Restore ctx and never return (old_ctx = NULL). */
+.global load_context
+.type load_context, @function
+load_context:
+    mov x1, x0              /* new_ctx = ctx (C arg arrives in x0) */
+    mov x0, xzr             /* old_ctx = NULL -> load only */
+    b context_switch
+
 .global context_switch
 .type context_switch, @function
 

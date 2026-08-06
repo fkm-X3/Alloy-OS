@@ -28,3 +28,32 @@ pub mod raw;
 /// Raw pointers never cross this boundary; addresses are `usize`; buffers
 /// are slices. Filled in as driver/arch/mem ports land (Phases 1-6).
 pub mod api;
+
+// ============================================================================
+// Implementation modules (moved verbatim from the HAL in Phase 1).
+//
+// These hold the trait definitions, their impls, and the arch/driver data
+// types the HAL used to own. The HAL no longer writes any implementation
+// code here; it only re-exports this crate's public surface via [`api`].
+// ============================================================================
+
+/// Architecture implementations (Arch impls, CpuContext, CpuInfo, paging
+/// structs, segment/exceptions/gic constants).
+pub mod arch;
+
+/// Port I/O + MMIO traits and impls (IoPort, X86IoPort, Mmio, DefaultMmio,
+/// MmioReg).
+pub mod io;
+
+/// Interrupt controller abstractions (InterruptController trait, Pic8259,
+/// Gic).
+pub mod interrupt;
+
+/// Memory management abstractions (MemoryManager trait, PageFlags, Pmm).
+pub mod memory;
+
+/// Serial port abstractions (SerialPort trait, Uart16550, Pl011Uart).
+pub mod serial;
+
+/// Timer abstractions (Timer trait, Pit, ArmGenericTimer).
+pub mod time;

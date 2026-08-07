@@ -11,7 +11,7 @@
 </p>
 
 > [!IMPORTANT]
-> Alloy-OS is being rewritten entirely in RUST (I FUCKING HATE C AND C++ (for there memory pointers when in projects like this)), Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch "Rust-Rewrite"
+> Alloy-OS is being rewritten entirely in RUST, Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch "Rust-Rewrite"
 
 ## Quick start
 

@@ -1,7 +1,7 @@
 //! x86_64 architecture implementation
 //!
 //! Full 64-bit x86 architecture support.
-//! Moved from `hal/src/arch/x86_64/mod.rs` in Phase 1.
+//! Moved from `hal/src/arch/x86_64/mod.rs`.
 
 use crate::raw::asm::x86_64;
 

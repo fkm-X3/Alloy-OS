@@ -4,13 +4,12 @@
 //! Every item here must be callable from safe code with no UB possible; raw
 //! pointers never cross this boundary.
 //!
-//! In Phase 1 this module re-exports the moved HAL trait definitions,
-//! impls, and data types verbatim so `alloy-kernel-hal` can keep exposing
-//! its existing public API (`Arch`, `MemoryManager`, `InterruptController`,
-//! `SerialPort`, `Timer`, `IoPort`, `Mmio`, ...) without writing any code
-//! that contains `unsafe`. As the driver/arch/mem ports land (Phases 2-6)
-//! the raw impls retreat behind safe wrappers and this module becomes the
-//! documented safe API.
+//! This module re-exports the moved HAL trait definitions, impls, and data
+//! types verbatim so `alloy-kernel-hal` can keep exposing its existing
+//! public API (`Arch`, `MemoryManager`, `InterruptController`, `SerialPort`,
+//! `Timer`, `IoPort`, `Mmio`, ...) without writing any code that contains
+//! `unsafe`. As the driver/arch/mem ports land, the raw impls retreat behind
+//! safe wrappers and this module becomes the documented safe API.
 //!
 //! Submodules: io, mem, interrupt, serial, time, drivers, alloc, sync,
 //! arch, callback.

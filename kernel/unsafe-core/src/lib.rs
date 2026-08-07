@@ -18,19 +18,25 @@
 
 /// Raw, unsafe-only primitives (extern "C" decls, asm shims, symbols).
 ///
-/// Populated in Phase 1 (moved verbatim from `hal/src/ffi.rs` and the
-/// inline-asm helpers currently scattered through the HAL).
+/// Populated with extern "C" decls moved verbatim from `hal/src/ffi.rs` and
+/// the inline-asm helpers previously scattered through the HAL.
 pub mod raw;
+
+/// C2Rust bulk translation of `kernel/c/`. Gated behind the
+/// `ported` feature so the crate baseline still builds without it; the
+/// Makefile swap turns the feature on when the C is removed from the build.
+#[cfg(feature = "ported")]
+pub mod ported;
 
 /// The safe public boundary of this crate.
 ///
 /// Every item here must be callable from safe code with no UB possible.
 /// Raw pointers never cross this boundary; addresses are `usize`; buffers
-/// are slices. Filled in as driver/arch/mem ports land (Phases 1-6).
+/// are slices. Filled in as driver/arch/mem ports land.
 pub mod api;
 
 // ============================================================================
-// Implementation modules (moved verbatim from the HAL in Phase 1).
+// Implementation modules (moved verbatim from the HAL).
 //
 // These hold the trait definitions, their impls, and the arch/driver data
 // types the HAL used to own. The HAL no longer writes any implementation

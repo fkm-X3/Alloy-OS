@@ -4,7 +4,7 @@
 //! in the Alloy OS kernel. Both the HAL crate and the kernel crate should
 //! use these declarations instead of duplicating them.
 //!
-//! Moved verbatim from `hal/src/ffi.rs` in Phase 1. The HAL re-exports this
+//! Moved verbatim from `hal/src/ffi.rs`. The HAL re-exports this
 //! module so `crate::ffi::*` still resolves unchanged.
 
 use core::ffi::c_void;

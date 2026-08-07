@@ -1,7 +1,7 @@
 //! I/O abstraction layer
 //!
 //! Provides unified interface for port I/O (x86) and MMIO (ARM).
-//! Moved from `hal/src/io/mod.rs` in Phase 1; the HAL re-exports this module.
+//! Moved from `hal/src/io/mod.rs`; the HAL re-exports this module.
 
 #[cfg(feature = "x86_64")]
 use crate::raw::asm;

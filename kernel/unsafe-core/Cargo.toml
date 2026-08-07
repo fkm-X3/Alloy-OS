@@ -11,3 +11,9 @@ path = "src/lib.rs"
 default = ["x86_64"]
 x86_64 = []
 aarch64 = []
+# Enable the C2Rust-translated `kernel/c/` tree. Off by default so
+# the crate baseline builds without the machine output.
+ported = []
+
+[dependencies]
+c2rust-bitfields = { version = "0.22.1", default-features = false, features = ["no_std"] }

@@ -1,6 +1,6 @@
 //! Memory management abstraction
 //!
-//! Moved from `hal/src/memory/mod.rs` in Phase 1; the HAL re-exports this
+//! Moved from `hal/src/memory/mod.rs`; the HAL re-exports this
 //! module.
 
 use core::ffi::c_void;

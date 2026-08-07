@@ -2,7 +2,7 @@
 //!
 //! Basic working support for ARM64 architecture.
 //! Suitable for QEMU virt machine emulation.
-//! Moved from `hal/src/arch/aarch64/mod.rs` in Phase 1.
+//! Moved from `hal/src/arch/aarch64/mod.rs`.
 
 use crate::raw::asm::aarch64 as sysregs;
 

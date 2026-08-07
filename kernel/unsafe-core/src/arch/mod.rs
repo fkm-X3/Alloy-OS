@@ -1,6 +1,6 @@
 //! Architecture-specific implementations
 //!
-//! Moved from `hal/src/arch/mod.rs` in Phase 1; the HAL re-exports this
+//! Moved from `hal/src/arch/mod.rs`; the HAL re-exports this
 //! module.
 
 #[cfg(feature = "x86_64")]

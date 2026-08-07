@@ -1,7 +1,7 @@
 //! Inline-asm helpers, feature-gated per architecture.
 //!
 //! Moved from the inline `core::arch::asm!` snippets that were scattered
-//! through the HAL in Phase 1. These are the only inline-asm shims the
+//! through the HAL. These are the only inline-asm shims the
 //! kernel uses; everything above them (drivers, arch impls, IoPort/Mmio)
 //! calls through these helpers.
 
@@ -41,37 +41,37 @@ pub mod x86_64 {
 
     #[inline]
     pub fn outb(port: u16, value: u8) {
-        unsafe { core::arch::asm!("outb %al, %dx", in("al") value, in("dx") port); }
+        unsafe { core::arch::asm!("out dx, al", in("al") value, in("dx") port); }
     }
 
     #[inline]
     pub fn outw(port: u16, value: u16) {
-        unsafe { core::arch::asm!("outw %ax, %dx", in("ax") value, in("dx") port); }
+        unsafe { core::arch::asm!("out dx, ax", in("ax") value, in("dx") port); }
     }
 
     #[inline]
     pub fn outl(port: u16, value: u32) {
-        unsafe { core::arch::asm!("outl %eax, %dx", in("eax") value, in("dx") port); }
+        unsafe { core::arch::asm!("out dx, eax", in("eax") value, in("dx") port); }
     }
 
     #[inline]
     pub fn inb(port: u16) -> u8 {
         let value: u8;
-        unsafe { core::arch::asm!("inb %dx, %al", in("dx") port, out("al") value); }
+        unsafe { core::arch::asm!("in al, dx", in("dx") port, out("al") value); }
         value
     }
 
     #[inline]
     pub fn inw(port: u16) -> u16 {
         let value: u16;
-        unsafe { core::arch::asm!("inw %dx, %ax", in("dx") port, out("ax") value); }
+        unsafe { core::arch::asm!("in ax, dx", in("dx") port, out("ax") value); }
         value
     }
 
     #[inline]
     pub fn inl(port: u16) -> u32 {
         let value: u32;
-        unsafe { core::arch::asm!("inl %dx, %eax", in("dx") port, out("eax") value); }
+        unsafe { core::arch::asm!("in eax, dx", in("dx") port, out("eax") value); }
         value
     }
 

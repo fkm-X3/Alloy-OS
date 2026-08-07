@@ -1,6 +1,6 @@
 //! Serial port abstraction
 //!
-//! Moved from `hal/src/serial/mod.rs` in Phase 1; the HAL re-exports this
+//! Moved from `hal/src/serial/mod.rs`; the HAL re-exports this
 //! module.
 
 #[cfg(feature = "x86_64")]

@@ -5,7 +5,7 @@
 //! This crate provides a unified interface to architecture-specific hardware operations,
 //! enabling the kernel to support multiple CPU architectures (x86_64, aarch64).
 //!
-//! Since Phase 1 this crate no longer owns any implementation code. All trait
+//! This crate no longer owns any implementation code. All trait
 //! definitions, impls, inline-asm shims, and FFI declarations live in
 //! `alloy-kernel-unsafe-core`; this crate re-exports the safe public boundary
 //! (`unsafe_core::api`) so the kernel crate keeps a single dependency edge.

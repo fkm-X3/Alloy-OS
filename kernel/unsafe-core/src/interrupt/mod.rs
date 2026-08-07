@@ -1,6 +1,6 @@
 //! Interrupt controller abstraction
 //!
-//! Moved from `hal/src/interrupt/mod.rs` in Phase 1; the HAL re-exports this
+//! Moved from `hal/src/interrupt/mod.rs`; the HAL re-exports this
 //! module.
 
 #[cfg(feature = "x86_64")]

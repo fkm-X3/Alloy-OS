@@ -12,7 +12,10 @@ pub const false_0: ::core::ffi::c_int = 0 as ::core::ffi::c_int;
 static mut kernel_page_dir_phys: uintptr_t = 0 as uintptr_t;
 #[no_mangle]
 pub static mut g_current_user_cr3: uint64_t = 0 as uint64_t;
-static mut kernel_tt_l0: [uint64_t; 512] = [0; 512];
+#[derive(Copy, Clone)]
+#[repr(C, align(4096))]
+pub struct kernel_tt_l0_T(pub [uint64_t; 512]);
+static mut kernel_tt_l0: kernel_tt_l0_T = kernel_tt_l0_T([0 as uint64_t; 512]);
 #[no_mangle]
 pub unsafe extern "C" fn paging_init() {
     serial_print(
@@ -21,16 +24,16 @@ pub unsafe extern "C" fn paging_init() {
     );
     let mut i: ::core::ffi::c_int = 0 as ::core::ffi::c_int;
     while i < 512 as ::core::ffi::c_int {
-        kernel_tt_l0[i as usize] = 0 as uint64_t;
+        kernel_tt_l0.0[i as usize] = 0 as uint64_t;
         i += 1;
     }
     let mut i_0: ::core::ffi::c_int = 0 as ::core::ffi::c_int;
     while i_0 < 2 as ::core::ffi::c_int {
         let mut block_addr: uint64_t = (i_0 as uint64_t) << 30 as ::core::ffi::c_int;
-        kernel_tt_l0[i_0 as usize] = block_addr | 0xc01 as uint64_t;
+        kernel_tt_l0.0[i_0 as usize] = block_addr | 0xc01 as uint64_t;
         i_0 += 1;
     }
-    kernel_page_dir_phys = (&raw mut kernel_tt_l0 as *mut uint64_t)
+    kernel_page_dir_phys = (&raw mut kernel_tt_l0.0 as *mut uint64_t)
         .offset(0 as ::core::ffi::c_int as isize) as *mut uint64_t
         as uintptr_t;
     g_current_user_cr3 = kernel_page_dir_phys as uint64_t;
@@ -38,7 +41,7 @@ pub unsafe extern "C" fn paging_init() {
 #[no_mangle]
 pub unsafe extern "C" fn paging_enable() {
     serial_print(b"Paging: Enabling MMU\n\0" as *const u8 as *const ::core::ffi::c_char);
-    let mut ttbr0: uint64_t = &raw mut kernel_tt_l0 as *mut uint64_t as uintptr_t as uint64_t;
+    let mut ttbr0: uint64_t = &raw mut kernel_tt_l0.0 as *mut uint64_t as uintptr_t as uint64_t;
     asm!("msr ttbr0_el1, {0}\n", inlateout(reg) ttbr0 => _, options(preserves_flags));
     asm!("isb\n", options(preserves_flags));
 }

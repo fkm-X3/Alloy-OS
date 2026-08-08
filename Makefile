@@ -182,33 +182,48 @@ $(DISK_IMG):
 	@mkdir -p $(BUILD_DIR)
 	qemu-img create -f raw $@ $(DISK_SIZE_MB)M 2>/dev/null || dd if=/dev/zero of=$@ bs=1M count=$(DISK_SIZE_MB) 2>/dev/null
 
-# Boot via ISO (x86: GRUB on ISO; aarch64: ISO + UEFI firmware)
-run: $(KERNEL_ISO) $(DISK_IMG)
+# Boot via ISO (x86: GRUB on ISO) or bare ELF via -kernel (aarch64: QEMU
+# virt has no BIOS/IDE; the kernel is loaded at 0x40080000 by the -kernel path)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+run: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log
 else
+run: $(KERNEL_ISO) $(DISK_IMG)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 endif
 
 run-ahci: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
 
-output: $(KERNEL_ISO) $(DISK_IMG)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+output: $(KERNEL_ELF)
+	$(QEMU) -kernel $(KERNEL_ELF) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
 else
+output: $(KERNEL_ISO) $(DISK_IMG)
 	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 endif
 
 output-ahci: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
 
-# Boot kernel ELF directly (no ISO/GRUB) – works for all arches
+# Boot kernel ELF directly (no ISO/GRUB) – works for all arches.
+# aarch64: no UEFI firmware (aarch64 boot asm drops EL2->EL1 itself) and no
+# IDE drive (QEMU virt has no IDE controller).
+ifeq ($(ARCH),aarch64)
+run-elf: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log
+else
 run-elf: $(KERNEL_ELF) $(DISK_IMG)
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+endif
 
+ifeq ($(ARCH),aarch64)
+output-elf: $(KERNEL_ELF)
+	$(QEMU) -kernel $(KERNEL_ELF) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
+else
 output-elf: $(KERNEL_ELF) $(DISK_IMG)
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -display none -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -display none -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+endif
 
 # Boot headless and auto-capture desktop shell screenshot (PNG).
 # NOTE: --bios '$(QEMU_FW)' expands to '' on x86_64 (undefined var), which the
@@ -233,15 +248,21 @@ mouse-screenshot: $(KERNEL_ISO)
 	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
 
 # Run in QEMU with debugging
-debug: $(KERNEL_ISO)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) $(QEMU_FW) -s -S
+debug: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -s -S
 else
+debug: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -s -S
 endif
 
+ifeq ($(ARCH),aarch64)
+debug-elf: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -s -S
+else
 debug-elf: $(KERNEL_ELF)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -s -S
+endif
 
 # Clean build artifacts
 clean:

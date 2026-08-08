@@ -10,6 +10,7 @@ crate-type = ["staticlib"]
 default = ["x86_64"]
 x86_64 = ["alloy-kernel-hal/x86_64"]
 aarch64 = ["alloy-kernel-hal/aarch64"]
+ported = ["alloy-kernel-hal/ported"]
 debug-alloc = []
 
 [dependencies]

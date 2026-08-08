@@ -14,3 +14,4 @@ alloy-kernel-unsafe-core = { path = "../unsafe-core", default-features = false }
 default = ["x86_64"]
 x86_64 = ["alloy-kernel-unsafe-core/x86_64"]
 aarch64 = ["alloy-kernel-unsafe-core/aarch64"]
+ported = ["alloy-kernel-unsafe-core/ported"]

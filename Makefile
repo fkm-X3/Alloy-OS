@@ -16,7 +16,7 @@ ifeq ($(ARCH),x86_64)
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = x86_64-alloy.json
-    RUST_FEATURES = --no-default-features --features x86_64
+    RUST_FEATURES = --no-default-features --features x86_64,ported
     LINKER = kernel/linker_x86_64.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
@@ -40,7 +40,7 @@ else ifeq ($(ARCH),aarch64)
             if [ -f "$$f" ]; then echo "-bios $$f"; break; fi; \
         done)
     RUST_TARGET = aarch64-alloy.json
-    RUST_FEATURES = --no-default-features --features aarch64
+    RUST_FEATURES = --no-default-features --features aarch64,ported
     LINKER = kernel/linker_aarch64.ld
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
     ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
@@ -67,32 +67,11 @@ MM_DIR = $(KERNEL_C_DIR)/mm
 # Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
-C_SOURCES = $(KERNEL_C_DIR)/arch/cpu.c \
-            $(KERNEL_C_DIR)/arch/syscall.c \
-            $(ARCH_DIR)/gdt.c \
-            $(ARCH_DIR)/idt.c \
-            $(MM_DIR)/pmm.c \
-            $(MM_DIR)/vmm.c \
-            $(DRIVERS_DIR)/serial.c \
-            $(DRIVERS_DIR)/timer.c
-
-# Architecture-specific C sources
-ifeq ($(ARCH),aarch64)
-C_SOURCES += $(DRIVERS_DIR)/pl110.c \
-             $(MM_DIR)/paging_aarch64.c \
-             $(KERNEL_C_DIR)/boot/main_aarch64.c
-else
-C_SOURCES += $(KERNEL_C_DIR)/boot/main.c \
-             $(MM_DIR)/paging.c \
-             $(DRIVERS_DIR)/vga.c \
-             $(DRIVERS_DIR)/vesa.c \
-             $(DRIVERS_DIR)/keyboard.c \
-             $(DRIVERS_DIR)/mouse.c \
-             $(DRIVERS_DIR)/ata.c \
-             $(DRIVERS_DIR)/pci.c \
-             $(DRIVERS_DIR)/ahci.c \
-             $(DRIVERS_DIR)/initrd.c
-endif
+# Session 1.2 — the swap: zero C. The entire kernel C tree now lives as
+# translated Rust in alloy-kernel-unsafe-core (the `ported` feature, enabled
+# via RUST_FEATURES below). The asm objects resolve kernel_main/g_pmm/... from
+# the ported #[no_mangle] symbols inside the Rust staticlib.
+C_SOURCES =
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
@@ -231,37 +210,27 @@ run-elf: $(KERNEL_ELF) $(DISK_IMG)
 output-elf: $(KERNEL_ELF) $(DISK_IMG)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -display none -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 
-# Boot headless and auto-capture desktop shell screenshot (PNG)
+# Boot headless and auto-capture desktop shell screenshot (PNG).
+# NOTE: --bios '$(QEMU_FW)' expands to '' on x86_64 (undefined var), which the
+# harness treats as "no firmware" and skips aarch64 auto-detection.
 screenshot: $(KERNEL_ISO)
-ifeq ($(ARCH),aarch64)
-	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
-else
-	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
-endif
+	python3 os/userland/tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
 
 # Boot headless with kernel ELF and capture screenshot (works for all arches)
 screenshot-elf: $(KERNEL_ELF)
-	python3 tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+	python3 os/userland/tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
 
 # Boot headless and run scripted mouse interactions (no screenshot)
 mouse-smoke: $(KERNEL_ISO)
-ifeq ($(ARCH),aarch64)
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
-else
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
-endif
+	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
 
 # Boot headless with kernel ELF and run scripted mouse interactions
 mouse-smoke-elf: $(KERNEL_ELF)
-	python3 tools/mouse_smoke.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
+	python3 os/userland/tools/mouse_smoke.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
 
 # Run scripted mouse interactions and capture a screenshot artifact
 mouse-screenshot: $(KERNEL_ISO)
-ifeq ($(ARCH),aarch64)
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
-else
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
-endif
+	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
 
 # Run in QEMU with debugging
 debug: $(KERNEL_ISO)

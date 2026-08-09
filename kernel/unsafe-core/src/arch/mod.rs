@@ -115,6 +115,7 @@ pub struct CpuContext {
     pub elr: u64,
     pub spsr: u64,
     pub ttbr0: u64,
+    pub sp0: u64,
 }
 
 /// Common CPU info structure

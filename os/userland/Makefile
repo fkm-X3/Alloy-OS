@@ -14,7 +14,7 @@ else ifeq ($(ARCH),aarch64)
     LD = aarch64-linux-gnu-ld
     CFLAGS = -march=armv8-a -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ilib
     CXXFLAGS = -march=armv8-a -std=c++17 -ffreestanding -nostdlib -fno-builtin -fno-exceptions -fno-rtti -Wall -Wextra -O2 -Ilib
-    LDFLAGS = -m aarch64elf -T userland.ld -static -nostdlib
+    LDFLAGS = -m aarch64elf -T userland_aarch64.ld -static -nostdlib
 else
     $(error Unsupported architecture: $(ARCH). Use x86_64 or aarch64)
 endif

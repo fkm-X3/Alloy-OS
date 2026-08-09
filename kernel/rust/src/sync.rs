@@ -143,10 +143,10 @@ impl<T> SpinlockIRQ<T> {
         let flags: u64;
         unsafe {
             core::arch::asm!("mrs {}, daif", out(reg) flags);
-            core::arch::asm!("msr daifset, #2"); // Mask IRQ (DAIF bit 1)
+            core::arch::asm!("msr daifset, #2"); // Mask IRQ (DAIF immediate bit 1 = I)
         }
-        // Return DAIF state: bit 1 = IRQ mask
-        ((flags >> 1) & 1) as u32
+        // Return previous IRQ mask state: DAIF bit 7 = I (PSR_I_BIT)
+        ((flags >> 7) & 1) as u32
     }
 
     #[cfg(feature = "aarch64")]

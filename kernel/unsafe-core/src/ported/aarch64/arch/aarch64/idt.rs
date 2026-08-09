@@ -32,7 +32,7 @@ pub unsafe extern "C" fn svc_handler(
     mut arg2: uint64_t,
     mut arg3: uint64_t,
     mut arg4: uint64_t,
-) {
+) -> uint32_t {
     extern "C" {
         #[link_name = "syscall_dispatcher"]
         fn syscall_dispatcher_0(
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn svc_handler(
             frame: *mut uint32_t,
         ) -> uint32_t;
     }
-    syscall_dispatcher_0(
+    return syscall_dispatcher_0(
         num as uint32_t,
         arg0 as uint32_t,
         arg1 as uint32_t,

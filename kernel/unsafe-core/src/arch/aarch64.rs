@@ -230,7 +230,7 @@ impl super::CpuContext {
             x19: 0, x20: 0, x21: 0, x22: 0,
             x23: 0, x24: 0, x25: 0, x26: 0,
             x27: 0, x28: 0, fp: 0, lr: 0,
-            sp: 0, elr: 0, spsr: 0, ttbr0: 0,
+            sp: 0, elr: 0, spsr: 0, ttbr0: 0, sp0: 0,
         }
     }
 }

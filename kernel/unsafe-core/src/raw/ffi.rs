@@ -54,7 +54,11 @@ extern "C" {
     // --- Context switching ---
     pub fn context_switch(old_ctx: *mut CpuContext, new_ctx: *mut CpuContext);
     pub fn save_context(ctx: *mut CpuContext);
-    pub fn load_context(ctx: *mut CpuContext);
+    /// Diverging: restores `ctx` and never returns (jumps to the saved RIP /
+    /// LR, or erets to the saved ELR for a fresh task). Declared `-> !` so the
+    /// compiler emits any guard drops (e.g. the scheduler's re_lock) BEFORE the
+    /// switch rather than after an (assumed-returning) call.
+    pub fn load_context(ctx: *mut CpuContext) -> !;
 
     // --- Sockets ---
     pub fn socket(domain: i32, socket_type: i32, protocol: i32) -> i32;

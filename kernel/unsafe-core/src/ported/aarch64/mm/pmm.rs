@@ -139,8 +139,11 @@ pub unsafe extern "C" fn pmm_init(mut multiboot_addr: uint32_t) {
             .wrapping_add(PAGE_SIZE as uint32_t)
             .wrapping_sub(1 as uint32_t)
             .wrapping_div(PAGE_SIZE as uint32_t);
+        // Reserve the top 3 MiB of the 128 MiB low RAM for the PL110
+        // framebuffer (1024x768@16bpp = 1.5 MiB): the old 0x48000000 sits just
+        // past RAM in QEMU virt and faults on access.
         let mut ram_end_frame: uint32_t =
-            (0x48000000 as ::core::ffi::c_int / PAGE_SIZE) as uint32_t;
+            (0x47D00000 as ::core::ffi::c_int / PAGE_SIZE) as uint32_t;
         g_pmm.total_frames = ram_end_frame;
         let mut i_0: uint32_t = ram_start_frame;
         while i_0 < ram_end_frame {
@@ -310,6 +313,21 @@ pub unsafe extern "C" fn pmm_init(mut multiboot_addr: uint32_t) {
             g_pmm.used_frames = g_pmm.used_frames.wrapping_add(1);
         }
         frame_0 = frame_0.wrapping_add(1);
+    }
+    // Reserve the aarch64 userland region: the MMU is disabled (identity),
+    // so userland runs at fixed physical addresses.  The region is relinked
+    // via os/userland/userland_aarch64.ld and loaded by spawn_user_elf.
+    // Keeping it out of the PMM bitmap guarantees the heap can never hand
+    // out a frame that the running user program occupies.
+    let userland_reserve_base: uint32_t = 0x47A00000;
+    let userland_reserve_end: uint32_t = 0x47C00000;
+    let mut frame_1: uint32_t = userland_reserve_base / (PAGE_SIZE as uint32_t);
+    while frame_1 < userland_reserve_end / (PAGE_SIZE as uint32_t) {
+        if !test_frame(frame_1) {
+            set_frame(frame_1);
+            g_pmm.used_frames = g_pmm.used_frames.wrapping_add(1);
+        }
+        frame_1 = frame_1.wrapping_add(1);
     }
     serial_print(b"PMM: Initialization complete\n\0" as *const u8 as *const ::core::ffi::c_char);
     serial_print(b"  Total memory: \0" as *const u8 as *const ::core::ffi::c_char);

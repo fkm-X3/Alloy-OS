@@ -151,6 +151,26 @@ pub extern "C" fn rust_main() {
     let display_task = Box::new(process::task::Task::new(display_server_entry, "display-server"));
     process::Scheduler::add_task(display_task);
 
+    // aarch64: no DE (x86_64-only), so exercise the EL0 svc syscall path
+    // with the hello binary (identity-mapped, fixed physical base).
+    #[cfg(feature = "aarch64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/hello", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    unsafe {
+                        ffi::serial_print(c"[Spawn] Loading hello (EL0 svc syscall test)\n".as_ptr() as *const u8);
+                    }
+                    if process::spawn_user_elf(&image) {
+                        unsafe {
+                            ffi::serial_print(c"[Spawn] hello task created\n".as_ptr() as *const u8);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Spawn test_wl_client (Wayland client protocol test)
     #[cfg(feature = "x86_64")]
     {

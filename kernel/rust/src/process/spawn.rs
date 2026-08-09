@@ -1,13 +1,21 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::ptr;
-use crate::process::task::{Task, CpuContext};
+use crate::process::task::{Task, CpuContext, KERNEL_STACK_SIZE};
 use crate::process::Scheduler;
 use crate::ffi;
 use crate::elf::{Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr, find_tls_info};
 
 const STACK_BASE: u64 = 0x00C00000;
 const STACK_SIZE: u64 = 0x4000;
+
+// aarch64 runs with the MMU disabled (identity), so there is no per-process
+// virtual address space: userland is relinked at a fixed physical base
+// (os/userland/userland_aarch64.ld) and loaded directly.  USER_STACK_TOP is
+// the EL0 stack pointer, inside the region reserved from the PMM in pmm_init
+// ([0x47A00000, 0x47C00000)).
+#[cfg(feature = "aarch64")]
+const USER_STACK_TOP: u64 = 0x47B80000;
 
 const PT_LOAD: u32 = 1;
 const PT_TLS: u32 = 7;
@@ -28,6 +36,16 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         None => return false,
     };
 
+    // aarch64: identity-mapped userland, no per-process page tables.  The
+    // page-directory machinery below is x86-only.
+    #[cfg(feature = "aarch64")]
+    {
+        return spawn_user_elf_aarch64(image, entry as u64);
+    }
+
+    // x86_64: per-process page directory + user stack mapping.
+    #[cfg(not(feature = "aarch64"))]
+    {
     // Allocate a fresh page directory for the new process
     let pd_phys = unsafe { ffi::paging_create_directory_phys() };
     if pd_phys == 0 {
@@ -133,6 +151,12 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
 
     Scheduler::add_task(task);
     true
+    }
+
+    #[cfg(feature = "aarch64")]
+    {
+        unreachable!()
+    }
 }
 
 fn load_elf32(image: &[u8], pd_phys: usize, page_flags: u32, page_size: usize) -> bool {
@@ -261,4 +285,98 @@ fn map_elf_segment(
         ffi::serial_print(c"\n".as_ptr() as *const u8);
     }
     true
+}
+
+/// aarch64 spawn: the MMU is disabled (identity), so load each PT_LOAD
+/// segment directly to its linked physical address (the relinked base
+/// 0x47A00000 region reserved from the PMM).  Returns true on success.
+#[cfg(feature = "aarch64")]
+fn spawn_user_elf_aarch64(image: &[u8], entry: u64) -> bool {
+    if !load_elf_direct(image) {
+        unsafe {
+            ffi::serial_print(c"[spawn] aarch64 ELF segment load failed\n".as_ptr() as *const u8);
+        }
+        return false;
+    }
+
+    // Per-task kernel stack (SP_EL1).  Exceptions from EL0 push onto SP_EL1,
+    // which must not collide with the user stack in the reserved region.
+    let mut stack = Box::new([0u8; KERNEL_STACK_SIZE]);
+    let stack_top = (stack.as_mut_ptr() as usize + KERNEL_STACK_SIZE) & !15;
+
+    let ctx = Box::new(CpuContext {
+        x19: 0, x20: 0, x21: 0, x22: 0,
+        x23: 0, x24: 0, x25: 0, x26: 0,
+        x27: 0, x28: 0,
+        fp: 0,
+        lr: 0,                        // fresh-task sentinel -> load_context ERETs
+        sp: stack_top as u64,         // SP_EL1 (kernel stack)
+        elr: entry,                   // ELF entry in physical RAM
+        spsr: 0,                      // EL0t
+        ttbr0: unsafe { ffi::paging_get_kernel_directory_phys() } as u64,
+        sp0: USER_STACK_TOP,          // SP_EL0 (user stack, reserved region)
+    });
+
+    let task = Box::new(Task::from_parts(
+        ctx,
+        Some(stack),
+        String::from("hello"),
+        [None; 32],
+        0x01000000,
+        None,
+    ));
+
+    Scheduler::add_task(task);
+    true
+}
+
+/// Copy each PT_LOAD segment of `image` to its linked virtual address,
+/// which is the physical address under the disabled-MMU identity map.
+#[cfg(feature = "aarch64")]
+fn load_elf_direct(image: &[u8]) -> bool {
+    if image.len() < 16 { return false; }
+    match image[4] {
+        1 => {
+            let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
+            for i in 0..hdr.e_phnum as usize {
+                let phdr_off = hdr.e_phoff as usize + i * hdr.e_phentsize as usize;
+                if phdr_off + core::mem::size_of::<Elf32Phdr>() > image.len() {
+                    return false;
+                }
+                let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf32Phdr) };
+                if ph.p_type != PT_LOAD { continue; }
+                copy_segment_direct(image, ph.p_offset as usize, ph.p_filesz as usize, ph.p_memsz as usize, ph.p_vaddr as usize);
+            }
+            true
+        }
+        2 => {
+            if image.len() < core::mem::size_of::<Elf64Ehdr>() { return false; }
+            let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
+            for i in 0..hdr.e_phnum as usize {
+                let phdr_off = hdr.e_phoff as usize + i * hdr.e_phentsize as usize;
+                if phdr_off + core::mem::size_of::<Elf64Phdr>() > image.len() {
+                    return false;
+                }
+                let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf64Phdr) };
+                if ph.p_type != PT_LOAD { continue; }
+                copy_segment_direct(image, ph.p_offset as usize, ph.p_filesz as usize, ph.p_memsz as usize, ph.p_vaddr as usize);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+#[cfg(feature = "aarch64")]
+fn copy_segment_direct(image: &[u8], offset: usize, filesz: usize, memsz: usize, vaddr: usize) {
+    if filesz > 0 {
+        unsafe {
+            ptr::copy_nonoverlapping(image.as_ptr().add(offset), vaddr as *mut u8, filesz);
+        }
+    }
+    if memsz > filesz {
+        unsafe {
+            ptr::write_bytes((vaddr + filesz) as *mut u8, 0, memsz - filesz);
+        }
+    }
 }

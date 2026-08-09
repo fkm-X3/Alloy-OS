@@ -232,8 +232,15 @@ screenshot: $(KERNEL_ISO)
 	python3 os/userland/tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
 
 # Boot headless with kernel ELF and capture screenshot (works for all arches)
+# aarch64: boot_aarch64.S drops EL2->EL1 itself, so no UEFI firmware is needed
+# (--bios '').  The script needs the aarch64 QEMU binary plus machine flags.
+ifeq ($(ARCH),aarch64)
+screenshot-elf: $(KERNEL_ELF)
+	python3 os/userland/tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '' --qemu-binary qemu-system-aarch64 --qemu-extra '-machine virt -cpu cortex-a53 -m 128M' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+else
 screenshot-elf: $(KERNEL_ELF)
 	python3 os/userland/tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+endif
 
 # Boot headless and run scripted mouse interactions (no screenshot)
 mouse-smoke: $(KERNEL_ISO)

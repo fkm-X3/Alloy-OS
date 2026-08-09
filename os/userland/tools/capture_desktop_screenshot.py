@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import socket
 import struct
 import subprocess
@@ -209,6 +210,11 @@ def run_capture(args: argparse.Namespace) -> None:
         str(qemu_log),
     ]
 
+    # Extra raw QEMU args (machine, CPU, memory, etc.) — required for
+    # non-default machines (e.g. aarch64: -machine virt -cpu cortex-a53).
+    if args.qemu_extra:
+        qemu_cmd.extend(shlex.split(args.qemu_extra))
+
     if kernel_path is not None:
         qemu_cmd.append("-kernel")
         qemu_cmd.append(str(kernel_path))
@@ -331,6 +337,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--qemu-binary",
         default="qemu-system-x86_64",
         help="QEMU executable name/path",
+    )
+    parser.add_argument(
+        "--qemu-extra",
+        default="",
+        help="Extra raw QEMU args (machine/CPU/memory), e.g. '-machine virt -cpu cortex-a53 -m 128M'",
     )
     parser.add_argument(
         "--keep-ppm",

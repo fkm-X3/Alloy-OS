@@ -15,7 +15,7 @@ extern "C" {
 }
 pub type uint16_t = u16;
 pub type uint32_t = u32;
-pub const PL110_FRAMEBUFFER: ::core::ffi::c_int = 0x48000000 as ::core::ffi::c_int;
+pub const PL110_FRAMEBUFFER: ::core::ffi::c_int = 0x47D00000 as ::core::ffi::c_int;
 pub const SCREEN_WIDTH: ::core::ffi::c_int = 1024 as ::core::ffi::c_int;
 pub const SCREEN_HEIGHT: ::core::ffi::c_int = 768 as ::core::ffi::c_int;
 unsafe extern "C" fn arch_halt() {

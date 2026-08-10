@@ -16,11 +16,6 @@ use crate::arch::CpuContext;
 // ============================================================================
 
 extern "C" {
-    // --- Serial ---
-    pub fn serial_print(s: *const u8);
-    pub fn serial_print_hex(value: u32);
-    pub fn serial_print_hex64(value: u64);
-
     // --- Virtual memory manager ---
     pub fn vmm_init();
     pub fn vmm_alloc_region(size: usize, flags: u32) -> *mut c_void;
@@ -83,12 +78,6 @@ extern "C" {
     pub fn paging_temp_unmap_frame();
     pub static mut g_current_user_cr3: u64;
     pub static kernel_pml4_phys: u64;
-
-    // --- Timer ---
-    pub fn timer_init_ffi(frequency: u32);
-    pub fn timer_get_ticks_ffi() -> u64;
-    pub fn timer_get_uptime_ms_ffi() -> u64;
-    pub fn timer_get_frequency_ffi() -> u32;
 }
 
 // ============================================================================
@@ -97,18 +86,6 @@ extern "C" {
 
 #[cfg(feature = "x86_64")]
 extern "C" {
-    // VGA text mode
-    pub fn vga_print(s: *const u8);
-    pub fn vga_println(s: *const u8);
-    pub fn vga_putchar(c: u8);
-    pub fn vga_set_color(fg: u8, bg: u8);
-    pub fn vga_clear();
-    pub fn vga_set_cursor(x: u8, y: u8);
-    pub fn vga_get_cursor_x() -> u8;
-    pub fn vga_get_cursor_y() -> u8;
-    pub fn vga_print_hex(value: u32);
-    pub fn vga_print_dec(value: u32);
-
     // PS/2 keyboard
     pub fn keyboard_has_data() -> bool;
     pub fn keyboard_get_char() -> i8;

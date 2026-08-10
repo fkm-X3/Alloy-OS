@@ -15,6 +15,20 @@ use history::CommandHistory;
 
 const PROMPT: &str = "Root:Root/> ";
 
+/// Print a NUL-terminated byte buffer to the VGA console (stops at the first
+/// NUL, mirroring the C `vga_print`).
+pub fn print_cstr(buf: &[u8]) {
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    crate::VgaText::print_bytes(&buf[..end]);
+}
+
+/// Print a NUL-terminated byte buffer to the VGA console followed by a
+/// newline.
+pub fn println_cstr(buf: &[u8]) {
+    print_cstr(buf);
+    crate::VgaText::putchar(b'\n');
+}
+
 pub struct Terminal {
     buffer: LineBuffer,
     commands: Option<CommandRegistry>,  // Make optional for lazy init
@@ -76,54 +90,54 @@ impl Terminal {
             let cursor_pos = self.buffer.cursor_pos();
             
             // Save current cursor position
-            let _save_x = ffi::vga_get_cursor_x();
-            let save_y = ffi::vga_get_cursor_y();
+            let _save_x = crate::VgaText::cursor_x();
+            let save_y = crate::VgaText::cursor_y();
             
             // Move to start position
-            ffi::vga_set_cursor(start_x, save_y);
+            crate::VgaText::set_cursor(start_x, save_y);
             
             // Print from cursor position to end
             for ch in line[cursor_pos..].chars() {
-                ffi::vga_putchar(ch as u8);
+                crate::VgaText::putchar(ch as u8);
             }
             
             // Clear to end of line (in case line got shorter)
-            let _current_x = ffi::vga_get_cursor_x();
-            while ffi::vga_get_cursor_x() < 80 {
-                ffi::vga_putchar(b' ');
+            let _current_x = crate::VgaText::cursor_x();
+            while crate::VgaText::cursor_x() < 80 {
+                crate::VgaText::putchar(b' ');
             }
             
             // Restore cursor to correct position
             let _final_x = start_x + (self.buffer.len() - cursor_pos) as u8;
-            ffi::vga_set_cursor(start_x + (cursor_pos as u8), save_y);
+            crate::VgaText::set_cursor(start_x + (cursor_pos as u8), save_y);
         }
     }
     
     /// Fully redraw the current line
     fn redraw_line(&self, prompt_len: usize) {
         unsafe {
-            let save_y = ffi::vga_get_cursor_y();
+            let save_y = crate::VgaText::cursor_y();
             
             // Move to start of line (after prompt)
-            ffi::vga_set_cursor(prompt_len as u8, save_y);
+            crate::VgaText::set_cursor(prompt_len as u8, save_y);
             
             // Clear the entire line from prompt onward
-            while ffi::vga_get_cursor_x() < 80 {
-                ffi::vga_putchar(b' ');
+            while crate::VgaText::cursor_x() < 80 {
+                crate::VgaText::putchar(b' ');
             }
             
             // Move back to prompt position
-            ffi::vga_set_cursor(prompt_len as u8, save_y);
+            crate::VgaText::set_cursor(prompt_len as u8, save_y);
             
             // Print the buffer
             let line = self.buffer.get_line();
             for ch in line.chars() {
-                ffi::vga_putchar(ch as u8);
+                crate::VgaText::putchar(ch as u8);
             }
             
             // Position cursor correctly
             let cursor_pos = self.buffer.cursor_pos();
-            ffi::vga_set_cursor(prompt_len as u8 + cursor_pos as u8, save_y);
+            crate::VgaText::set_cursor(prompt_len as u8 + cursor_pos as u8, save_y);
         }
     }
     
@@ -168,10 +182,10 @@ impl Terminal {
                 ffi::SPECIAL_KEY_LEFT => {
                     if self.buffer.cursor_left() {
                         unsafe {
-                            let x = ffi::vga_get_cursor_x();
-                            let y = ffi::vga_get_cursor_y();
+                            let x = crate::VgaText::cursor_x();
+                            let y = crate::VgaText::cursor_y();
                             if x > 0 {
-                                ffi::vga_set_cursor(x - 1, y);
+                                crate::VgaText::set_cursor(x - 1, y);
                             }
                         }
                     }
@@ -182,9 +196,9 @@ impl Terminal {
                 ffi::SPECIAL_KEY_RIGHT => {
                     if self.buffer.cursor_right() {
                         unsafe {
-                            let x = ffi::vga_get_cursor_x();
-                            let y = ffi::vga_get_cursor_y();
-                            ffi::vga_set_cursor(x + 1, y);
+                            let x = crate::VgaText::cursor_x();
+                            let y = crate::VgaText::cursor_y();
+                            crate::VgaText::set_cursor(x + 1, y);
                         }
                     }
                     return false;
@@ -194,8 +208,8 @@ impl Terminal {
                 ffi::SPECIAL_KEY_HOME => {
                     self.buffer.cursor_home();
                     unsafe {
-                        let y = ffi::vga_get_cursor_y();
-                        ffi::vga_set_cursor(PROMPT_LEN as u8, y);
+                        let y = crate::VgaText::cursor_y();
+                        crate::VgaText::set_cursor(PROMPT_LEN as u8, y);
                     }
                     return false;
                 }
@@ -204,9 +218,9 @@ impl Terminal {
                 ffi::SPECIAL_KEY_END => {
                     self.buffer.cursor_end();
                     unsafe {
-                        let y = ffi::vga_get_cursor_y();
+                        let y = crate::VgaText::cursor_y();
                         let pos = PROMPT_LEN + self.buffer.len();
-                        ffi::vga_set_cursor(pos as u8, y);
+                        crate::VgaText::set_cursor(pos as u8, y);
                     }
                     return false;
                 }
@@ -214,7 +228,7 @@ impl Terminal {
                 // Delete - remove character at cursor
                 ffi::SPECIAL_KEY_DELETE => {
                     if self.buffer.delete() {
-                        let cursor_x = unsafe { ffi::vga_get_cursor_x() };
+                        let cursor_x = unsafe { crate::VgaText::cursor_x() };
                         self.redraw_from_cursor(cursor_x);
                     }
                     return false;
@@ -241,12 +255,12 @@ impl Terminal {
                 // Backspace
                 if self.buffer.backspace() {
                     unsafe {
-                        let x = ffi::vga_get_cursor_x();
-                        let y = ffi::vga_get_cursor_y();
+                        let x = crate::VgaText::cursor_x();
+                        let y = crate::VgaText::cursor_y();
                         
                         if x > 0 {
                             // Move cursor back
-                            ffi::vga_set_cursor(x - 1, y);
+                            crate::VgaText::set_cursor(x - 1, y);
                             
                             // Redraw from new cursor position
                             self.redraw_from_cursor(x - 1);
@@ -264,17 +278,17 @@ impl Terminal {
                     if cursor_pos == line_len {
                         // At end of line - just print character
                         unsafe {
-                            ffi::vga_putchar(c as u8);
+                            crate::VgaText::putchar(c as u8);
                         }
                     } else {
                         // Middle of line - need to redraw from cursor
                         unsafe {
-                            let x = ffi::vga_get_cursor_x();
-                            ffi::vga_putchar(c as u8);
+                            let x = crate::VgaText::cursor_x();
+                            crate::VgaText::putchar(c as u8);
                             self.redraw_from_cursor(x + 1);
                             // Position cursor after inserted char
-                            let y = ffi::vga_get_cursor_y();
-                            ffi::vga_set_cursor(x + 1, y);
+                            let y = crate::VgaText::cursor_y();
+                            crate::VgaText::set_cursor(x + 1, y);
                         }
                     }
                 }
@@ -319,11 +333,9 @@ impl Terminal {
     
     pub fn run(&mut self) {
         colors::print_banner();
-        
-        unsafe {
-            ffi::vga_println(c"\n".as_ptr() as *const u8);
-        }
-        
+
+        crate::VgaText::putchar(b'\n');
+
         self.show_prompt();
         
         // Main terminal loop
@@ -333,7 +345,7 @@ impl Terminal {
                 if key != 0
                     && self.handle_input(key) {
                         // Show new prompt
-                        ffi::put_char('\n');
+                        crate::VgaText::putchar(b'\n');
                         self.show_prompt();
                     }
             } else {

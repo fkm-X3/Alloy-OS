@@ -5,14 +5,13 @@
 
 use core::panic::PanicInfo;
 use core::fmt::Write;
-use crate::ffi;
 
 /// Custom writer for serial output
 struct SerialWriter;
 
 impl Write for SerialWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        ffi::print_str(s);
+        crate::print!("{s}");
         Ok(())
     }
 }
@@ -71,13 +70,13 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     
     // Also print to VGA (x86 only)
     #[cfg(feature = "x86_64")]
-    unsafe {
-        ffi::vga_set_color(4, 0); // Red text
-        ffi::vga_println(c"\n!!! KERNEL PANIC !!!\n".as_ptr() as *const u8);
+    {
+        crate::VgaText::set_color(4, 0); // Red text
+        crate::VgaText::println_bytes(b"\n!!! KERNEL PANIC !!!\n");
         if let Some(_location) = info.location() {
-            ffi::vga_print(c"Location: ".as_ptr() as *const u8);
+            crate::VgaText::print_bytes(b"Location: ");
         }
-        ffi::vga_println(c"Check serial output for details.".as_ptr() as *const u8);
+        crate::VgaText::println_bytes(b"Check serial output for details.");
     }
     
     // Halt the system

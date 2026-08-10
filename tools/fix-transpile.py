@@ -3,7 +3,7 @@
 
 The C2Rust translation of `kernel/c/` does not compile as-is inside
 `alloy-kernel-unsafe-core`. This script applies the exact set of fixes from
-the bulk-port session, so a re-transpile can be re-fixed deterministically:
+the bulk-port, so a re-transpile can be re-fixed deterministically:
 
 1. `::libc::` -> `crate::raw::string::` and drop generated `use ::libc;`
    lines. Only `memcpy`, `memset`, and `size_t` are used; `raw::string`

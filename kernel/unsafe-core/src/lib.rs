@@ -35,6 +35,9 @@ pub mod ported;
 /// are slices. Filled in as driver/arch/mem ports land.
 pub mod api;
 
+/// Safe driver facades (Serial, SystemTimer, VgaText, Pl110).
+pub mod drivers;
+
 // ============================================================================
 // Implementation modules (moved verbatim from the HAL).
 //

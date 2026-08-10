@@ -24,16 +24,16 @@ struct FsState {
 
 impl FsState {
     fn new() -> Self {
-        unsafe { crate::ffi::serial_print(c"[VFS] FsState::new start\n".as_ptr() as *const u8); }
-        unsafe { crate::ffi::serial_print(c"[VFS] Creating BTreeMaps\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] FsState::new start"); }
+        unsafe { crate::println!("[VFS] Creating BTreeMaps"); }
         let path_id = BTreeMap::new();
         let dat = BTreeMap::new();
         let fat = BTreeMap::new();
         let devs = Vec::new();
-        unsafe { crate::ffi::serial_print(c"[VFS] Calling MountTable::new\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] Calling MountTable::new"); }
         let mt = mount::make_mount_table();
-        unsafe { crate::ffi::serial_print(c"[VFS] MountTable returned\n".as_ptr() as *const u8); }
-        unsafe { crate::ffi::serial_print(c"[VFS] Building FsState struct\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] MountTable returned"); }
+        unsafe { crate::println!("[VFS] Building FsState struct"); }
         let fs = FsState {
             next_id: 1,
             path_to_id: path_id,
@@ -42,7 +42,7 @@ impl FsState {
             block_devices: devs,
             fat32_filesystems: fat,
         };
-        unsafe { crate::ffi::serial_print(c"[VFS] FsState constructed\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] FsState constructed"); }
         fs
     }
 
@@ -50,13 +50,7 @@ impl FsState {
         let id = self.block_devices.len();
         let ns = dev.num_sectors();
         self.block_devices.push(Some(dev));
-        unsafe {
-            crate::ffi::serial_print(c"[VFS] Block device ".as_ptr() as *const u8);
-            crate::ffi::serial_print_hex(id as u32);
-            crate::ffi::serial_print(c": ".as_ptr() as *const u8);
-            crate::ffi::serial_print_hex(ns as u32);
-            crate::ffi::serial_print(c" sectors\n".as_ptr() as *const u8);
-        }
+        crate::println!("[VFS] Block device #{id:08X}: {ns:08X} sectors");
         id
     }
 
@@ -66,18 +60,11 @@ impl FsState {
         let key = 1000 + dev_id as u64;
 
         if let Ok(root_entries) = fs.root_entries(dev.as_mut()) {
-            unsafe {
-                crate::ffi::serial_print(c"[FAT32] Mounting at ".as_ptr() as *const u8);
-                crate::ffi::serial_print(mount_path.as_ptr());
-                crate::ffi::serial_print(c"\n".as_ptr() as *const u8);
-                for entry in &root_entries {
-                    let name_str = core::str::from_utf8(&entry.name[..entry.name_len]).unwrap_or("?");
-                    crate::ffi::serial_print(c"  ".as_ptr() as *const u8);
-                    if entry.is_dir { crate::ffi::serial_print(c"[DIR]  ".as_ptr() as *const u8); }
-                    else { crate::ffi::serial_print(c"[FILE] ".as_ptr() as *const u8); }
-                    crate::ffi::serial_print(name_str.as_ptr());
-                    crate::ffi::serial_print(c"\n".as_ptr() as *const u8);
-                }
+            crate::println!("[FAT32] Mounting at {mount_path}");
+            for entry in &root_entries {
+                let name_str = core::str::from_utf8(&entry.name[..entry.name_len]).unwrap_or("?");
+                if entry.is_dir { crate::println!("  [DIR]  {name_str}"); }
+                else { crate::println!("  [FILE] {name_str}"); }
             }
         }
 
@@ -117,29 +104,29 @@ fn normalize_path(path: &str) -> String {
 }
 
 pub fn vfs_init() {
-    unsafe { crate::ffi::serial_print(c"[VFS] vfs_init entered\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[VFS] vfs_init entered"); }
     
     // Test: simple integer on stack, no allocation
     let x: u64 = 42;
     let y = x + 1;
     if y > 0 {
-        unsafe { crate::ffi::serial_print(c"[VFS] Stack test ok\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] Stack test ok"); }
     }
 
     // Test: simplest lock acquire
     {
         let mut guard = VFS_STATE.lock();
-        unsafe { crate::ffi::serial_print(c"[VFS] Lock acquired\n".as_ptr() as *const u8); }
-        unsafe { crate::ffi::serial_print(c"[VFS] About to call FsState::new\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] Lock acquired"); }
+        unsafe { crate::println!("[VFS] About to call FsState::new"); }
         let new_state = FsState::new();
-        unsafe { crate::ffi::serial_print(c"[VFS] FsState::new returned, about to assign\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] FsState::new returned, about to assign"); }
         *guard = Some(new_state);
-        unsafe { crate::ffi::serial_print(c"[VFS] FsState created\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] FsState created"); }
     }
-    unsafe { crate::ffi::serial_print(c"[VFS] Lock released\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[VFS] Lock released"); }
 
     if let Ok(_id) = vfs_open("/dev/console", 0, 0) {
-        unsafe { crate::ffi::serial_print(c"[VFS] /dev/console created\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[VFS] /dev/console created"); }
     }
 
     let hello_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../hello"));
@@ -148,7 +135,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, hello_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /hello embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /hello embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/hello", 0, 0) {
@@ -165,7 +152,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, compositor_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /compositor embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /compositor embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/compositor", 0, 0) {
@@ -182,7 +169,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, test_wl_client_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /test_wl_client embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /test_wl_client embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/test_wl_client", 0, 0) {
@@ -199,7 +186,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, hello_cpp_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /hello_cpp embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /hello_cpp embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/hello_cpp", 0, 0) {
@@ -216,7 +203,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, test_window_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /test_window embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /test_window embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/test_window", 0, 0) {
@@ -233,7 +220,7 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, alloy_de_qml_bytes.to_vec());
-                unsafe { crate::ffi::serial_print(c"[VFS] /alloy_de_qml embedded into VFS\n".as_ptr() as *const u8); }
+                unsafe { crate::println!("[VFS] /alloy_de_qml embedded into VFS"); }
             }
         }
         if let Ok(id2) = vfs_open("/bin/alloy_de_qml", 0, 0) {
@@ -244,7 +231,7 @@ pub fn vfs_init() {
         }
     }
 
-    unsafe { crate::ffi::serial_print(c"[VFS] Initializing block devices...\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[VFS] Initializing block devices..."); }
 
     let devices = crate::block::init_block_devices();
     let mut guard = VFS_STATE.lock();
@@ -305,19 +292,16 @@ pub fn vfs_write(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usiz
     };
     if let Some(typ) = state.path_to_id.iter().find_map(|(p,&id)| if id==vnode_id { Some(p.clone()) } else { None }) {
         if typ == "/dev/console" {
-            let mut tmp = vec![0u8; len];
-            unsafe {
-                if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
-                    return -1;
+                let mut tmp = vec![0u8; len];
+                unsafe {
+                    if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
+                        return -1;
+                    }
                 }
-                let mut buf = [0u8; 512];
-                let cpy = core::cmp::min(len, 511);
-                buf[..cpy].copy_from_slice(&tmp[..cpy]);
-                buf[cpy] = 0;
-                crate::ffi::serial_print(buf.as_ptr());
+                let cpy = core::cmp::min(len, 512);
+                crate::Serial::write_bytes(&tmp[..cpy]);
                 *offset += len;
                 return len as isize;
-            }
         }
     }
     if let Some(vec) = state.data.get_mut(&vnode_id) {

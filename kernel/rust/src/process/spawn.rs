@@ -64,22 +64,14 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         while addr < STACK_BASE + STACK_SIZE {
             let phys = unsafe { ffi::pmm_alloc_frame() };
             if phys.is_null() {
-                unsafe {
-                    ffi::serial_print(c"[spawn] OOM mapping stack page at 0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64(addr);
-                    ffi::serial_print(c"\n".as_ptr() as *const u8);
-                }
+                crate::println!("[spawn] OOM mapping stack page at 0x{addr:016X}");
                 crate::sync::irq_enable();
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
             }
             let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, addr as usize, phys as usize, stack_flags) };
             if !ok {
-                unsafe {
-                    ffi::serial_print(c"[spawn] FAIL mapping stack page at 0x".as_ptr() as *const u8);
-                    ffi::serial_print_hex64(addr);
-                    ffi::serial_print(c"\n".as_ptr() as *const u8);
-                }
+                crate::println!("[spawn] FAIL mapping stack page at 0x{addr:016X}");
                 crate::sync::irq_enable();
                 unsafe { ffi::paging_destroy_directory(pd_phys); }
                 return false;
@@ -217,12 +209,7 @@ fn map_elf_segment(
     let aligned_end = (vaddr + memsz).div_ceil(page_size) * page_size;
     let alloc_size = aligned_end - aligned_start;
     let npages = alloc_size / page_size;
-    unsafe {
-        ffi::serial_print_hex64(vaddr as u64);
-        ffi::serial_print(c" pages=0x".as_ptr() as *const u8);
-        ffi::serial_print_hex64(npages as u64);
-        ffi::serial_print(c"\n".as_ptr() as *const u8);
-    }
+    crate::println!("[spawn] mapping vaddr=0x{vaddr:016X} pages=0x{npages:016X}");
 
     let mut page_addr = aligned_start;
     let mut count: u64 = 0;
@@ -236,11 +223,7 @@ fn map_elf_segment(
     while page_addr < aligned_start + alloc_size {
         let phys = unsafe { ffi::pmm_alloc_frame() };
         if phys.is_null() {
-            unsafe {
-                ffi::serial_print(c"[spawn] OOM at page_addr=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(page_addr as u64);
-                ffi::serial_print(c"\n".as_ptr() as *const u8);
-            }
+            crate::println!("[spawn] OOM at page_addr=0x{page_addr:016X}");
             crate::sync::irq_enable();
             return false;
         }
@@ -259,31 +242,19 @@ fn map_elf_segment(
 
         let ok = unsafe { ffi::paging_map_page_in_pd(pd_phys, page_addr, phys_addr, page_flags) };
         if !ok {
-            unsafe {
-                ffi::serial_print(c"[spawn] MAP FAIL page_addr=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(page_addr as u64);
-                ffi::serial_print(c"\n".as_ptr() as *const u8);
-            }
+            crate::println!("[spawn] MAP FAIL page_addr=0x{page_addr:016X}");
             crate::sync::irq_enable();
             return false;
         }
         page_addr += page_size;
         count += 1;
         if (count & 0xFF) == 0 {
-            unsafe {
-                ffi::serial_print_hex64(count);
-                ffi::serial_print(c" page_addr=0x".as_ptr() as *const u8);
-                ffi::serial_print_hex64(page_addr as u64);
-                ffi::serial_print(c"\n".as_ptr() as *const u8);
-            }
+            crate::println!("[spawn] mapped count=0x{count:016X} page_addr=0x{page_addr:016X}");
         }
     }
 
     crate::sync::irq_enable();
-    unsafe {
-        ffi::serial_print_hex64(vaddr as u64);
-        ffi::serial_print(c"\n".as_ptr() as *const u8);
-    }
+    crate::println!("[spawn] segment mapped vaddr=0x{vaddr:016X}");
     true
 }
 
@@ -294,7 +265,7 @@ fn map_elf_segment(
 fn spawn_user_elf_aarch64(image: &[u8], entry: u64) -> bool {
     if !load_elf_direct(image) {
         unsafe {
-            ffi::serial_print(c"[spawn] aarch64 ELF segment load failed\n".as_ptr() as *const u8);
+            crate::println!("[spawn] aarch64 ELF segment load failed");
         }
         return false;
     }

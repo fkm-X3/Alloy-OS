@@ -4,8 +4,6 @@
 //! at the standard Wayland socket path. Supports both direct kernel syscall
 //! and fallback modes for environments where syscalls aren't yet available.
 
-use crate::ffi;
-
 use super::WaylandError;
 
 /// Constants for Unix domain sockets
@@ -47,7 +45,7 @@ impl UnixSocket {
         match fd {
             Some(f) => {
                 unsafe {
-                    ffi::serial_print(c"[Wayland Socket] Created Unix domain socket via syscall\n".as_ptr() as *const u8);
+                    crate::println!("[Wayland Socket] Created Unix domain socket via syscall");
                 }
                 Ok(Self {
                     fd: Some(f),
@@ -58,7 +56,7 @@ impl UnixSocket {
             }
             None => {
                 unsafe {
-                    ffi::serial_print(c"[Wayland Socket] Falling back to placeholder socket\n".as_ptr() as *const u8);
+                    crate::println!("[Wayland Socket] Falling back to placeholder socket");
                 }
                 // Fallback for environments without full syscall support
                 Ok(Self {
@@ -96,7 +94,7 @@ impl UnixSocket {
 
         if result < 0 {
             unsafe {
-                ffi::serial_print(c"[Wayland Socket] bind() syscall failed, using fallback\n".as_ptr() as *const u8);
+                crate::println!("[Wayland Socket] bind() syscall failed, using fallback");
             }
             // Mark as bound anyway for fallback mode
         }
@@ -108,11 +106,7 @@ impl UnixSocket {
         stored_path[..path.len()].copy_from_slice(path.as_bytes());
         self.path = Some(stored_path);
 
-        unsafe {
-            ffi::serial_print(c"[Wayland Socket] Bound to ".as_ptr() as *const u8);
-            ffi::serial_print(path.as_ptr());
-            ffi::serial_print(c"\n".as_ptr() as *const u8);
-        }
+        crate::println!("[Wayland Socket] Bound to {path}");
 
         Ok(())
     }
@@ -132,14 +126,14 @@ impl UnixSocket {
 
         if result < 0 {
             unsafe {
-                ffi::serial_print(c"[Wayland Socket] listen() syscall failed, using fallback\n".as_ptr() as *const u8);
+                crate::println!("[Wayland Socket] listen() syscall failed, using fallback");
             }
         }
 
         self.listening = true;
 
         unsafe {
-            ffi::serial_print(c"[Wayland Socket] Listening for connections\n".as_ptr() as *const u8);
+            crate::println!("[Wayland Socket] Listening for connections");
         }
 
         Ok(())
@@ -163,7 +157,7 @@ impl UnixSocket {
         }
 
         unsafe {
-            ffi::serial_print(c"[Wayland Socket] Accepted connection on fd ".as_ptr() as *const u8);
+            crate::print!("[Wayland Socket] Accepted connection on fd ");
         }
 
         Ok(client_fd as u32)
@@ -231,7 +225,7 @@ impl Drop for UnixSocket {
         if let Some(fd) = self.fd {
             unsafe {
                 crate::syscall::rust_sys_close_socket(fd as i32);
-                ffi::serial_print(c"[Wayland Socket] Closed socket\n".as_ptr() as *const u8);
+                crate::println!("[Wayland Socket] Closed socket");
             }
         }
     }

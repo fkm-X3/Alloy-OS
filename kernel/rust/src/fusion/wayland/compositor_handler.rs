@@ -157,7 +157,7 @@ impl CompositorHandler {
         self.surface_to_client.insert(surface_id, client_id);
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland Compositor] Created surface\n".as_ptr() as *const u8);
+            crate::println!("[Wayland Compositor] Created surface");
         }
 
         Ok(CompositorResponse::SurfaceCreated {

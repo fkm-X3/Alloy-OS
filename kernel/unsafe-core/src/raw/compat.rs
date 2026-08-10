@@ -1,6 +1,6 @@
 //! Drop-in C-ABI compat shims.
 //!
-//! Session 1.2 (the swap): the C2Rust output in [`crate::ported`] already
+//! the swap: the C2Rust output in [`crate::ported`] already
 //! emits every externally-referenced symbol under its original C name —
 //! functions (`kernel_main`, `init_serial`, `serial_print`, `syscall_dispatcher`,
 //! `exception_handler`, `irq_handler`, ...) and globals (`g_pmm`, `g_vmm`,

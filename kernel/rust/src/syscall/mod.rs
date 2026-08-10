@@ -41,10 +41,7 @@ pub enum SyscallNumber {
 /// arg0: exit code
 #[no_mangle]
 pub extern "C" fn rust_sys_exit(code: u32) -> u32 {
-    unsafe {
-        ffi::serial_print(c"[Syscall] sys_exit called with code ".as_ptr() as *const u8);
-        ffi::serial_print(c"\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Syscall] sys_exit called with code {code}");
 
     Scheduler::terminate_current(code);
     code
@@ -53,9 +50,7 @@ pub extern "C" fn rust_sys_exit(code: u32) -> u32 {
 /// sys_yield - Voluntarily give up the CPU
 #[no_mangle]
 pub extern "C" fn rust_sys_yield() -> u32 {
-    unsafe {
-        ffi::serial_print(c"[Syscall] sys_yield called\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Syscall] sys_yield called");
     Scheduler::yield_cpu();
     0
 }
@@ -63,22 +58,18 @@ pub extern "C" fn rust_sys_yield() -> u32 {
 /// sys_getpid - Get the current task ID
 #[no_mangle]
 pub extern "C" fn rust_sys_getpid() -> u32 {
-    unsafe {
-        ffi::serial_print(c"[Syscall] sys_getpid called\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Syscall] sys_getpid called");
     Scheduler::with_current_task(|task| task.id().as_u32()).unwrap_or(1)
 }
 
 /// sys_sleep - Sleep for specified milliseconds
 #[no_mangle]
 pub extern "C" fn rust_sys_sleep(ms: u32) -> u32 {
-    unsafe {
-        ffi::serial_print(c"[Syscall] sys_sleep called\n".as_ptr() as *const u8);
-    }
-    let start = unsafe { ffi::timer_get_uptime_ms_ffi() };
+    crate::println!("[Syscall] sys_sleep called");
+    let start = crate::SystemTimer::uptime_ms();
     let target = start + ms as u64;
 
-    while unsafe { ffi::timer_get_uptime_ms_ffi() } < target {
+    while crate::SystemTimer::uptime_ms() < target {
         Scheduler::yield_cpu();
     }
     0
@@ -87,7 +78,7 @@ pub extern "C" fn rust_sys_sleep(ms: u32) -> u32 {
 /// Minimal open syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_open(path_ptr: u32, flags: u32, mode: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_open called\n".as_ptr() as *const u8); }
+    crate::println!("[Syscall] sys_open called");
     if path_ptr == 0 { return u32::MAX; }
     let mut buffer = [0u8; 256];
     unsafe {
@@ -113,7 +104,7 @@ pub extern "C" fn rust_sys_open(path_ptr: u32, flags: u32, mode: u32) -> u32 {
 /// Minimal read syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_read(fd: u32, buf_ptr: u32, len: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_read called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_read called"); }
     if let Some(result) = Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(fd) {
             let vnode_id = entry.0;
@@ -129,15 +120,7 @@ pub extern "C" fn rust_sys_read(fd: u32, buf_ptr: u32, len: u32) -> u32 {
 /// Minimal write syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
-    unsafe {
-        ffi::serial_print(c"[Syscall] sys_write fd=".as_ptr() as *const u8);
-        ffi::serial_print_hex(fd);
-        ffi::serial_print(c" buf=0x".as_ptr() as *const u8);
-        ffi::serial_print_hex64(buf_ptr as u64);
-        ffi::serial_print(c" len=".as_ptr() as *const u8);
-        ffi::serial_print_hex(len);
-        ffi::serial_print(c"\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Syscall] sys_write fd={fd:08X} buf=0x{buf_ptr:016X} len={len:08X}");
     if fd == 1 {
         let max = core::cmp::min(len as usize, 240usize);
         let mut buffer = [0u8; 241];
@@ -145,8 +128,7 @@ pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
         unsafe {
             match crate::utils::copy_from_user(buf_ptr, &mut buffer[..max]) {
                 Ok(copied) => {
-                    buffer[copied] = 0;
-                    ffi::serial_print(buffer.as_ptr());
+                    crate::Serial::write_bytes(&buffer[..copied]);
                     return copied as u32;
                 }
                 Err(_) => return u32::MAX,
@@ -168,7 +150,7 @@ pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
 /// Minimal close syscall
 #[no_mangle]
 pub extern "C" fn rust_sys_close(fd: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_close called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_close called"); }
     match Scheduler::with_current_task_mut(|task| task.close_fd(fd)) {
         Some(Ok(())) => 0,
         Some(Err(_)) => u32::MAX,
@@ -179,7 +161,7 @@ pub extern "C" fn rust_sys_close(fd: u32) -> u32 {
 /// Duplicate a file descriptor
 #[no_mangle]
 pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_dup called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_dup called"); }
     match Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(oldfd) {
             let vnode = entry.0;
@@ -204,7 +186,7 @@ pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
 /// If newfd is already open, it is closed first.
 #[no_mangle]
 pub extern "C" fn rust_sys_dup2(oldfd: u32, newfd: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_dup2 called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_dup2 called"); }
     if oldfd == newfd {
         return newfd;
     }
@@ -226,7 +208,7 @@ pub extern "C" fn rust_sys_dup2(oldfd: u32, newfd: u32) -> u32 {
 /// lseek
 #[no_mangle]
 pub extern "C" fn rust_sys_lseek(fd: u32, offset: u32, whence: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_lseek called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_lseek called"); }
     let off = offset as i32;
     match Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(fd) {
@@ -241,7 +223,7 @@ pub extern "C" fn rust_sys_lseek(fd: u32, offset: u32, whence: u32) -> u32 {
 /// pipe
 #[no_mangle]
 pub extern "C" fn rust_sys_pipe(pipefd_ptr: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_pipe called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_pipe called"); }
     match crate::fs::vfs_create_pipe() {
         Ok(vnode_id) => {
             match Scheduler::with_current_task_mut(|task| {
@@ -275,7 +257,7 @@ pub extern "C" fn rust_sys_pipe(pipefd_ptr: u32) -> u32 {
 /// execve
 #[no_mangle]
 pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
-    unsafe { ffi::serial_print(c"[Syscall] sys_execve called\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] sys_execve called"); }
     if path_ptr == 0 { return u32::MAX; }
     let mut buf = [0u8; 256];
     unsafe {
@@ -286,28 +268,28 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
         Ok(s) => s,
         Err(_) => return u32::MAX,
     };
-    unsafe { ffi::serial_print(c"[Syscall] Opening file\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] Opening file"); }
     let vnode = match crate::fs::vfs_open(path, 0, 0) {
         Ok(id) => id,
         Err(_) => return u32::MAX,
     };
-    unsafe { ffi::serial_print(c"[Syscall] Reading file\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] Reading file"); }
     let image = match crate::fs::vfs_read_all(vnode) {
         Some(v) => v,
         None => return u32::MAX,
     };
-    unsafe { ffi::serial_print(c"[Syscall] Creating page directory\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] Creating page directory"); }
     let pd_phys = unsafe { ffi::paging_create_directory_phys() };
     if pd_phys == 0 { return u32::MAX; }
-    unsafe { ffi::serial_print(c"[Syscall] Loading ELF\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Syscall] Loading ELF"); }
     match crate::elf::load_elf_from_bytes(&image) {
         Ok((entry, phdr_vaddr)) => {
-            unsafe { ffi::serial_print(c"[Syscall] ELF loaded successfully\n".as_ptr() as *const u8); }
+            unsafe { crate::println!("[Syscall] ELF loaded successfully"); }
             let switched = unsafe { ffi::paging_switch_to_directory(pd_phys) };
             if !switched { return u32::MAX; }
             unsafe {
                 ffi::g_current_user_cr3 = pd_phys as u64;
-                ffi::serial_print(c"[Syscall] Switched to user directory\n".as_ptr() as *const u8);
+                crate::println!("[Syscall] Switched to user directory");
             }
 
             const STACK_BASE: u32 = 0x00C00000;
@@ -542,7 +524,7 @@ pub extern "C" fn rust_sys_socket_write(fd: i32, buf_ptr: u32, len: u32) -> i32 
 #[no_mangle]
 pub extern "C" fn rust_sys_clone(entry: u32, stack: u32, arg: u32) -> u32 {
     unsafe {
-        ffi::serial_print(c"[Syscall] sys_clone called\n".as_ptr() as *const u8);
+        crate::println!("[Syscall] sys_clone called");
     }
     crate::process::Scheduler::clone_task(entry, stack, arg)
 }
@@ -552,7 +534,7 @@ pub extern "C" fn rust_sys_clone(entry: u32, stack: u32, arg: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn rust_sys_fork() -> u32 {
     unsafe {
-        ffi::serial_print(c"[Syscall] sys_fork called\n".as_ptr() as *const u8);
+        crate::println!("[Syscall] sys_fork called");
     }
     crate::process::Scheduler::fork_current()
 }
@@ -562,7 +544,7 @@ pub extern "C" fn rust_sys_fork() -> u32 {
 #[no_mangle]
 pub extern "C" fn rust_sys_waitpid(_pid: u32, _options: u32) -> u32 {
     unsafe {
-        ffi::serial_print(c"[Syscall] sys_waitpid called\n".as_ptr() as *const u8);
+        crate::println!("[Syscall] sys_waitpid called");
     }
     let (child_pid, exit_code) = Scheduler::wait_for_child();
     if child_pid == u32::MAX {
@@ -577,7 +559,7 @@ pub extern "C" fn rust_sys_waitpid(_pid: u32, _options: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn rust_sys_kill(pid: u32, sig: u32) -> u32 {
     unsafe {
-        ffi::serial_print(c"[Syscall] sys_kill called\n".as_ptr() as *const u8);
+        crate::println!("[Syscall] sys_kill called");
     }
     if sig == 15 || sig == 9 {
         Scheduler::terminate_pid(pid, sig)
@@ -779,7 +761,7 @@ pub extern "C" fn rust_sys_mmap(hint: u32, length: u32, flags: u32) -> u32 {
 pub extern "C" fn rust_sys_gettimeofday(timeval_ptr: u32) -> u32 {
     if timeval_ptr == 0 { return 0xFFFFFFFF; }
 
-    let uptime_ms = unsafe { crate::ffi::timer_get_uptime_ms_ffi() };
+    let uptime_ms = crate::SystemTimer::uptime_ms();
     let tv_sec = (uptime_ms / 1000) as u32;
     let tv_usec = ((uptime_ms % 1000) * 1000) as u32;
 

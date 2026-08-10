@@ -10,69 +10,6 @@ use core::ffi::c_void;
 
 // === Safe wrappers ===
 
-pub fn print_str(s: &str) {
-    let mut buffer = [0u8; 256];
-    let bytes = s.as_bytes();
-    let len = core::cmp::min(bytes.len(), 255);
-    buffer[..len].copy_from_slice(&bytes[..len]);
-    buffer[len] = 0;
-    unsafe {
-        serial_print(buffer.as_ptr());
-    }
-}
-
-#[cfg(feature = "x86_64")]
-pub fn vga_print_str(s: &str) {
-    let mut buffer = [0u8; 256];
-    let bytes = s.as_bytes();
-    let len = core::cmp::min(bytes.len(), 255);
-    buffer[..len].copy_from_slice(&bytes[..len]);
-    buffer[len] = 0;
-    unsafe { vga_print(buffer.as_ptr()) }
-}
-
-#[cfg(feature = "x86_64")]
-pub fn vga_println_str(s: &str) {
-    let mut buffer = [0u8; 256];
-    let bytes = s.as_bytes();
-    let len = core::cmp::min(bytes.len(), 255);
-    buffer[..len].copy_from_slice(&bytes[..len]);
-    buffer[len] = 0;
-    unsafe { vga_println(buffer.as_ptr()) }
-}
-
-/// # Safety
-/// `s` must be a valid null-terminated C string pointer or null.
-pub unsafe fn serial_print_safe(s: *const u8) {
-    if !s.is_null() {
-        serial_print(s);
-    }
-}
-
-#[cfg(feature = "x86_64")]
-pub unsafe fn vga_print_safe(s: *const u8) {
-    if !s.is_null() {
-        vga_print(s);
-    }
-}
-
-#[cfg(feature = "x86_64")]
-pub unsafe fn vga_println_safe(s: *const u8) {
-    if !s.is_null() {
-        vga_println(s);
-    }
-}
-
-#[cfg(feature = "x86_64")]
-pub fn set_vga_color(fg: u8, bg: u8) {
-    unsafe { vga_set_color(fg, bg) }
-}
-
-#[cfg(feature = "x86_64")]
-pub fn put_char(c: char) {
-    unsafe { vga_putchar(c as u8) }
-}
-
 #[cfg(feature = "x86_64")]
 pub fn keyboard_has_key() -> bool {
     unsafe { keyboard_has_data() }

@@ -24,3 +24,11 @@ pub use crate::io::IoPort;
 pub use crate::memory::{self, MemoryManager, PageFlags};
 pub use crate::serial::{self, SerialPort};
 pub use crate::time::{self, Timer};
+
+// --- Phase 3.1 safe driver facades ---
+pub use crate::drivers::serial::Serial;
+pub use crate::drivers::timer::SystemTimer;
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::vga::VgaText;
+#[cfg(feature = "aarch64")]
+pub use crate::drivers::pl110::Pl110;

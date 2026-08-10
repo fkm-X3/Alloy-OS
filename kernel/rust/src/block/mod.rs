@@ -163,7 +163,7 @@ pub fn init_block_devices() -> Vec<Box<dyn BlockDevice>> {
         for bus in 0..=1u8 {
             for drive in 0..=1u8 {
                 if crate::ffi::ata_drive_exists(bus, drive) {
-                    crate::ffi::print_str(&alloc::format!("[block] ATA {bus}:{drive} detected\n"));
+                    crate::println!("[block] ATA {bus}:{drive} detected");
                     let mut dev = AtaDevice::new(bus, drive).unwrap();
                     dev.probe();
                     devices.push(Box::new(dev));
@@ -186,7 +186,7 @@ pub fn init_block_devices() -> Vec<Box<dyn BlockDevice>> {
                 let cmdline = crate::ffi::initrd_module_cmdline(i);
                 if size > 0 && (size % SECTOR_SIZE) == 0 {
                     let name = core::str::from_utf8(&cmdline).unwrap_or("initrd");
-                    crate::ffi::print_str(&alloc::format!("[block] ramdisk #{i}: {name} start=0x{start:x} size={size}\n"));
+                    crate::println!("[block] ramdisk #{i}: {name} start=0x{start:x} size={size}");
                     devices.push(Box::new(ramdisk::Ramdisk::new(start, size)));
                 }
             }

@@ -47,23 +47,6 @@ pub mod arch {
 }
 
 pub mod drivers {
-    pub mod serial {
-        include!("common/drivers_serial.rs");
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    pub mod timer {
-        include!("x86_64/drivers/timer.rs");
-    }
-    #[cfg(target_arch = "aarch64")]
-    pub mod timer {
-        include!("aarch64/drivers/timer.rs");
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    pub mod vga {
-        include!("x86_64/drivers/vga.rs");
-    }
     #[cfg(target_arch = "x86_64")]
     pub mod vesa {
         include!("x86_64/drivers/vesa.rs");
@@ -91,11 +74,6 @@ pub mod drivers {
     #[cfg(target_arch = "x86_64")]
     pub mod initrd {
         include!("x86_64/drivers/initrd.rs");
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    pub mod pl110 {
-        include!("aarch64/drivers/pl110.rs");
     }
 }
 

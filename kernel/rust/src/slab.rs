@@ -125,9 +125,9 @@ impl SlabCache {
         
         // Allocate memory for slab (1 page = 4KB)
         let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
-        ffi::serial_print(c"[Slab] Before vmm_alloc_region\n".as_ptr() as *const u8);
+        crate::println!("[Slab] Before vmm_alloc_region");
         let ptr = ffi::vmm_alloc_region(4096, flags) as *mut u8;
-        ffi::serial_print(c"[Slab] After vmm_alloc_region\n".as_ptr() as *const u8);
+        crate::println!("[Slab] After vmm_alloc_region");
         
         if ptr.is_null() {
             return null_mut();
@@ -286,8 +286,7 @@ impl SlabAllocator {
             if size <= cache.size && align <= cache.size {
                 let result = cache.alloc();
                 if result.is_null() {
-                    use crate::ffi;
-                    ffi::serial_print(c"[Slab] ERROR: Cache allocation failed!\n".as_ptr() as *const u8);
+                    crate::println!("[Slab] ERROR: Cache allocation failed!");
                 }
                 return result;
             }

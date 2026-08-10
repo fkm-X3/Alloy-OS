@@ -110,9 +110,9 @@ impl Task {
             context.ttbr0 = unsafe { ffi::paging_get_kernel_directory_phys() } as u64;
         }
         unsafe {
-            ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);
+            crate::print!("[Task] Created task with ID ");
             // Print simple message without trying to print the name (causes issues)
-            ffi::serial_print(c"...\n".as_ptr() as *const u8);
+            crate::println!("...");
         }
         
         let mut task = Task {
@@ -314,7 +314,7 @@ impl Task {
 impl Drop for Task {
     fn drop(&mut self) {
         unsafe {
-            ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
+            crate::println!("[Task] Dropping task");
         }
 
         #[cfg(feature = "x86_64")]
@@ -324,7 +324,7 @@ impl Drop for Task {
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
         if pd != 0 && pd != kernel_pd {
             unsafe {
-                ffi::serial_print(c"[Task] Destroying task page directory\n".as_ptr() as *const u8);
+                crate::println!("[Task] Destroying task page directory");
                 ffi::paging_destroy_directory(pd);
             }
         }

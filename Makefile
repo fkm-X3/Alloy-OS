@@ -67,12 +67,6 @@ MM_DIR = $(KERNEL_C_DIR)/mm
 # Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 
-# Session 1.2 — the swap: zero C. The entire kernel C tree now lives as
-# translated Rust in alloy-kernel-unsafe-core (the `ported` feature, enabled
-# via RUST_FEATURES below). The asm objects resolve kernel_main/g_pmm/... from
-# the ported #[no_mangle] symbols inside the Rust staticlib.
-C_SOURCES =
-
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
 ASM_OBJECTS += $(patsubst %.S,$(BUILD_DIR)/%.o,$(filter %.S,$(ASM_SOURCES)))

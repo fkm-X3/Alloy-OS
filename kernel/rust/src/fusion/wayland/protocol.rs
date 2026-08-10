@@ -246,7 +246,7 @@ impl ProtocolHandler {
                             }
                             Err(e) => {
                                 unsafe {
-                                    crate::ffi::serial_print(c"[Wayland Protocol] Unhandled object request\n".as_ptr() as *const u8);
+                                    crate::println!("[Wayland Protocol] Unhandled object request");
                                 }
                                 return Err(e);
                             }
@@ -258,7 +258,7 @@ impl ProtocolHandler {
             _ => {
                 // Extended object IDs - try buffer handler for shared memory objects
                 unsafe {
-                    crate::ffi::serial_print(c"[Wayland Protocol] Extended object routing\n".as_ptr() as *const u8);
+                    crate::println!("[Wayland Protocol] Extended object routing");
                 }
                 let _ = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
             }

@@ -111,19 +111,16 @@ pub fn get_stats() -> ((usize, usize), (usize, usize)) {
 /// Print allocation statistics to serial (non-intrusive)
 pub fn print_stats() {
     let _ = get_stats();
-    
-    unsafe {
-        use crate::ffi;
-        ffi::serial_print(c"\n=== Allocator Statistics ===\n".as_ptr() as *const u8);
-        ffi::serial_print(c"Slab allocator:\n".as_ptr() as *const u8);
-        ffi::serial_print(c"  Objects allocated: ".as_ptr() as *const u8);
-        ffi::serial_print(c"  Objects freed: ".as_ptr() as *const u8);
-        ffi::serial_print(c"  Net objects: ".as_ptr() as *const u8);
-        
-        ffi::serial_print(c"\nHeap allocator:\n".as_ptr() as *const u8);
-        ffi::serial_print(c"  Bytes allocated: ".as_ptr() as *const u8);
-        ffi::serial_print(c"  Bytes freed: ".as_ptr() as *const u8);
-        ffi::serial_print(c"  Net bytes: ".as_ptr() as *const u8);
-        ffi::serial_print(c"===========================\n\n".as_ptr() as *const u8);
-    }
+
+    crate::println!("\n=== Allocator Statistics ===");
+    crate::println!("Slab allocator:");
+    crate::print!("  Objects allocated: ");
+    crate::print!("  Objects freed: ");
+    crate::print!("  Net objects: ");
+
+    crate::println!("\nHeap allocator:");
+    crate::print!("  Bytes allocated: ");
+    crate::print!("  Bytes freed: ");
+    crate::print!("  Net bytes: ");
+    crate::println!("===========================\n");
 }

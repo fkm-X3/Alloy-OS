@@ -4,6 +4,14 @@
 extern crate core;
 extern crate alloc;
 
+// Safe console + driver facades from the HAL (which re-exports
+// `unsafe_core::api`). The kernel crate no longer touches raw `ffi::*`
+// pointers for serial/VGA/timer output.
+pub use alloy_kernel_hal::{log, print, println};
+pub use alloy_kernel_hal::{Serial, SystemTimer};
+#[cfg(feature = "x86_64")]
+pub use alloy_kernel_hal::VgaText;
+
 pub mod allocator;
 pub mod heap;
 pub mod slab;
@@ -37,14 +45,11 @@ extern "C" fn display_server_entry() {
     unsafe { core::arch::asm!("cli"); }
 
     unsafe {
-        ffi::serial_print(c"[DisplayServer] Entry reached\n".as_ptr() as *const u8);
+        crate::println!("[DisplayServer] Entry reached");
     }
-
     match graphics::PlatformDisplay::new() {
         None => {
-            unsafe {
-                ffi::serial_print(c"[DisplayServer] FATAL: PlatformDisplay::new() returned None\n".as_ptr() as *const u8);
-            }
+            crate::println!("[DisplayServer] FATAL: PlatformDisplay::new() returned None");
             #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("sti"); }
             loop {
@@ -60,19 +65,13 @@ extern "C" fn display_server_entry() {
             display.swap_buffer();
 
             #[cfg(feature = "x86_64")]
-            unsafe {
-                ffi::serial_print(c"[Spawn] VESA ready, booting display server task\n".as_ptr() as *const u8);
-            }
+            crate::println!("[Spawn] VESA ready, booting display server task");
             #[cfg(feature = "aarch64")]
-            unsafe {
-                ffi::serial_print(c"[Spawn] PL110 ready, booting display server task\n".as_ptr() as *const u8);
-            }
+            crate::println!("[Spawn] PL110 ready, booting display server task");
             #[cfg(feature = "x86_64")]
             unsafe { core::arch::asm!("sti"); }
             let _ = display_server::run(display);
-            unsafe {
-                ffi::serial_print(c"[DisplayServer] run() returned, halting\n".as_ptr() as *const u8);
-            }
+            crate::println!("[DisplayServer] run() returned, halting");
             loop {
                 #[cfg(feature = "x86_64")]
                 unsafe { core::arch::asm!("hlt"); }
@@ -84,18 +83,21 @@ extern "C" fn display_server_entry() {
 }
 
 fn log_display_server_error(err: display_server::DisplayServerBootError) {
-    unsafe {
-        let msg = err.serial_message();
-        ffi::serial_print(msg.as_ptr());
-        let code = err.code();
-        ffi::serial_print(c" (code: ".as_ptr() as *const u8);
-        for &byte in code.as_bytes() {
-            #[cfg(feature = "x86_64")]
-            ffi::vga_putchar(byte);
-        }
-        ffi::serial_print(c")\n".as_ptr() as *const u8);
+    let msg = err.serial_message();
+    let len = msg.iter().position(|&b| b == 0).unwrap_or(msg.len());
+    crate::Serial::write_bytes(&msg[..len]);
+    let code = err.code();
+    crate::print!(" (code: ");
+    for &byte in code.as_bytes() {
         #[cfg(feature = "x86_64")]
-        ffi::vga_print(err.vga_message().as_ptr() as *const u8);
+        crate::VgaText::putchar(byte);
+    }
+    crate::println!(")");
+    #[cfg(feature = "x86_64")]
+    {
+        let vmsg = err.vga_message();
+        let vlen = vmsg.iter().position(|&b| b == 0).unwrap_or(vmsg.len());
+        crate::VgaText::println_bytes(&vmsg[..vlen]);
     }
 }
 
@@ -104,16 +106,14 @@ pub extern "C" fn rust_main() {
     // Initialize the HAL platform (marks FFI as ready)
     alloy_kernel_hal::platform::init();
 
-    unsafe {
-        ffi::serial_print(c"[Rust] Kernel entry - initializing subsystems\n".as_ptr() as *const u8);
-        ffi::serial_print(c"[Rust] About to vga_clear\n".as_ptr() as *const u8);
-        #[cfg(feature = "x86_64")]
-        ffi::vga_clear();
-        ffi::serial_print(c"[Rust] vga_clear done\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Rust] Kernel entry - initializing subsystems");
+    crate::println!("[Rust] About to vga_clear");
+    #[cfg(feature = "x86_64")]
+    crate::VgaText::clear();
+    crate::println!("[Rust] vga_clear done");
 
     crate::fs::vfs_init();
-    unsafe { ffi::serial_print(c"[VFS] initialized\n".as_ptr() as *const u8); }
+    crate::println!("[VFS] initialized");
 
     // Auto-mount FAT32 on any block devices
     #[cfg(feature = "x86_64")]
@@ -124,27 +124,16 @@ pub extern "C" fn rust_main() {
             if ns < 512 { continue; }
             let _ = fs::vfs_mount_fat32(dev_id, "/mnt/disk");
             if let Ok(entries) = fs::vfs_list_fat32(dev_id) {
-                unsafe {
-                    let msg = c"[VFS] Mounted FAT32 dev #";
-                    ffi::serial_print(msg.as_ptr() as *const u8);
-                    ffi::serial_print_hex(dev_id as u32);
-                    ffi::serial_print(c"\n".as_ptr() as *const u8);
-                }
+                crate::println!("[VFS] Mounted FAT32 dev #0x{:08X}", dev_id);
                 for entry in entries {
                     let name_s = core::str::from_utf8(&entry.name[..entry.name_len]).unwrap_or("?");
-                    unsafe {
-                        ffi::serial_print(c"  ".as_ptr() as *const u8);
-                        ffi::serial_print(name_s.as_ptr());
-                        ffi::serial_print(c"\n".as_ptr() as *const u8);
-                    }
+                    crate::println!("  {name_s}");
                 }
             }
         }
     }
 
-    unsafe {
-        ffi::serial_print(c"[Rust] Initializing scheduler\n".as_ptr() as *const u8);
-    }
+    crate::println!("[Rust] Initializing scheduler");
     process::Scheduler::init();
 
     // Create the display server task (LXQt shell + Wayland server)
@@ -159,11 +148,11 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading hello (EL0 svc syscall test)\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading hello (EL0 svc syscall test)");
                     }
                     if process::spawn_user_elf(&image) {
                         unsafe {
-                            ffi::serial_print(c"[Spawn] hello task created\n".as_ptr() as *const u8);
+                            crate::println!("[Spawn] hello task created");
                         }
                     }
                 }
@@ -178,7 +167,7 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading test_wl_client (Wayland client test)\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading test_wl_client (Wayland client test)");
                     }
                     process::spawn_user_elf(&image);
                 }
@@ -193,7 +182,7 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading hello_cpp (C++ test)\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading hello_cpp (C++ test)");
                     }
                     process::spawn_user_elf(&image);
                 }
@@ -208,11 +197,11 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(comp_vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading compositor\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading compositor");
                     }
                     if process::spawn_user_elf(&image) {
                         unsafe {
-                            ffi::serial_print(c"[Spawn] Compositor task created\n".as_ptr() as *const u8);
+                            crate::println!("[Spawn] Compositor task created");
                         }
                     }
                 }
@@ -227,7 +216,7 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading test_window (Qt6 QPA test)\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading test_window (Qt6 QPA test)");
                     }
                     process::spawn_user_elf(&image);
                 }
@@ -242,7 +231,7 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     unsafe {
-                        ffi::serial_print(c"[Spawn] Loading alloy_de_qml (QML desktop environment)\n".as_ptr() as *const u8);
+                        crate::println!("[Spawn] Loading alloy_de_qml (QML desktop environment)");
                     }
                     process::spawn_user_elf(&image);
                 }
@@ -250,10 +239,8 @@ pub extern "C" fn rust_main() {
         }
     }
 
-    unsafe {
-        ffi::serial_print(c"[Rust] Starting scheduler — entering multitasking\n".as_ptr() as *const u8);
-    }
-    unsafe { ffi::timer_init_ffi(1000); }
+    crate::println!("[Rust] Starting scheduler — entering multitasking");
+    crate::SystemTimer::init(1000);
     process::Scheduler::start();
 }
 

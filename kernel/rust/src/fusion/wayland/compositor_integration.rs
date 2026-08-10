@@ -256,7 +256,7 @@ pub fn composite_surface(
     /// Emit frame callback completion event
     pub fn emit_frame_callback(&mut self, callback_object_id: u32) {
         if let Some(ref mut timing) = self.frame_timing {
-            timing.presented_at = unsafe { crate::ffi::timer_get_uptime_ms_ffi() } as u32;
+            timing.presented_at = crate::SystemTimer::uptime_ms() as u32;
         }
         let _ = callback_object_id;
     }

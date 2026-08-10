@@ -476,7 +476,7 @@ impl Scheduler {
 
     #[no_mangle]
     pub extern "C" fn rust_timer_tick() {
-        let ticks = unsafe { ffi::timer_get_ticks_ffi() };
+        let ticks = crate::SystemTimer::ticks();
 
         if ticks > 0 && ticks % BOOST_INTERVAL == 0 {
             Self::boost_priorities();
@@ -495,7 +495,7 @@ impl Scheduler {
     #[no_mangle]
     pub extern "C" fn rust_handle_page_fault(_addr: usize, _err: u32) {
         unsafe {
-            crate::ffi::serial_print(c"[Scheduler] rust_handle_page_fault invoked — terminating task\n".as_ptr() as *const u8);
+            crate::println!("[Scheduler] rust_handle_page_fault invoked — terminating task");
         }
 
         Self::terminate_current(1);

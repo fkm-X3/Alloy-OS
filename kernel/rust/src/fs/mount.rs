@@ -19,14 +19,14 @@ pub struct MountTable {
 
 impl MountTable {
     pub fn new() -> Self {
-        unsafe { crate::ffi::serial_print(c"[Mount] MountTable::new start\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[Mount] MountTable::new start"); }
         let mut mounts = BTreeMap::new();
         let key = String::from("/");
         let val = MountPoint { fs_type: FsType::TmpFs, device_id: None };
-        unsafe { crate::ffi::serial_print(c"[Mount] About to insert\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[Mount] About to insert"); }
         mounts.insert(key, val);
-        unsafe { crate::ffi::serial_print(c"[Mount] Insert done\n".as_ptr() as *const u8); }
-        unsafe { crate::ffi::serial_print(c"[Mount] Building struct\n".as_ptr() as *const u8); }
+        unsafe { crate::println!("[Mount] Insert done"); }
+        unsafe { crate::println!("[Mount] Building struct"); }
         MountTable { mounts }
     }
 
@@ -78,20 +78,20 @@ impl MountTable {
 }
 
 pub fn make_mount_table() -> Box<MountTable> {
-    unsafe { crate::ffi::serial_print(c"[Mount] make_mount_table start\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Mount] make_mount_table start"); }
     let mut mounts = BTreeMap::new();
     let key = String::from("/");
     let val = MountPoint { fs_type: FsType::TmpFs, device_id: None };
     mounts.insert(key, val);
-    unsafe { crate::ffi::serial_print(c"[Mount] make_mount_table insert done\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Mount] make_mount_table insert done"); }
     // Build MountTable using unsafe pointer write to avoid compiler issues
     let layout = core::alloc::Layout::new::<MountTable>();
     let ptr = unsafe { alloc::alloc::alloc(layout) as *mut MountTable };
-    unsafe { crate::ffi::serial_print(c"[Mount] Raw alloc done\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Mount] Raw alloc done"); }
     unsafe { core::ptr::write(&mut (*ptr).mounts, mounts); }
-    unsafe { crate::ffi::serial_print(c"[Mount] Ptr write done\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Mount] Ptr write done"); }
     let mt = unsafe { Box::from_raw(ptr) };
-    unsafe { crate::ffi::serial_print(c"[Mount] Box created\n".as_ptr() as *const u8); }
+    unsafe { crate::println!("[Mount] Box created"); }
     mt
 }
 

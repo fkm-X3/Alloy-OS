@@ -131,9 +131,9 @@ fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
 
             let mut page_addr = aligned_start;
             while page_addr < aligned_start + alloc_size {
-                let phys = unsafe { ffi::pmm_alloc_frame() };
-                if phys.is_null() { return Err(-1); }
-                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys, flags) };
+                let frame = alloy_kernel_hal::PhysFrame::alloc().ok_or(-1)?;
+                let phys = frame.into_addr(); // owned by the page directory now
+                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys as *mut core::ffi::c_void, flags) };
                 if !ok { return Err(-1); }
                 let page_offset = page_addr.saturating_sub(vaddr);
                 if page_offset < filesz {
@@ -198,9 +198,9 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
 
             let mut page_addr = aligned_start;
             while page_addr < aligned_start + alloc_size {
-                let phys = unsafe { ffi::pmm_alloc_frame() };
-                if phys.is_null() { return Err(-1); }
-                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys, flags) };
+                let frame = alloy_kernel_hal::PhysFrame::alloc().ok_or(-1)?;
+                let phys = frame.into_addr(); // owned by the page directory now
+                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys as *mut core::ffi::c_void, flags) };
                 if !ok { return Err(-1); }
                 let page_offset = page_addr.saturating_sub(vaddr);
                 if page_offset < filesz {

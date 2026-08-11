@@ -61,11 +61,16 @@ pub mod arch;
 /// MmioReg).
 pub mod io;
 
+/// Safe physical-memory API (Phase 3.3): PhysFrame, PageFlags, PMM stats.
+/// VmRegion (3.3.2), AddressSpace (3.3.3), and validated user copies (3.3.4)
+/// land here as their sub-sessions proceed.
+pub mod mem;
+
 /// Interrupt controller abstractions (InterruptController trait, Pic8259,
 /// Gic).
 pub mod interrupt;
 
-/// Memory management abstractions (MemoryManager trait, PageFlags, Pmm).
+/// Memory management abstractions (MemoryManager trait, Pmm).
 pub mod memory;
 
 /// Serial port abstractions (SerialPort trait, Uart16550, Pl011Uart).

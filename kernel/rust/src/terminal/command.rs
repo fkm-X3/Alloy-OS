@@ -315,8 +315,8 @@ impl Command for SysinfoCommand {
             crate::terminal::println_cstr(&vendor[..]);
         }
 
-        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
-        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let total_memory = alloy_kernel_hal::mem::total_memory();
+        let available_memory = alloy_kernel_hal::mem::available_memory();
         let used_memory = total_memory.saturating_sub(available_memory);
         print_size_line("Memory Total: ", total_memory);
         print_size_line("Memory Used:  ", used_memory);
@@ -382,8 +382,8 @@ impl Command for FreeCommand {
         colors::print_info("Memory Usage");
         crate::VgaText::println("");
 
-        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
-        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let total_memory = alloy_kernel_hal::mem::total_memory();
+        let available_memory = alloy_kernel_hal::mem::available_memory();
         let used_memory = total_memory.saturating_sub(available_memory);
         let heap_size = unsafe { crate::ffi::vmm_get_heap_size() };
         let allocated_pages = unsafe { crate::ffi::vmm_get_allocated_pages() };
@@ -457,12 +457,12 @@ impl Command for MeminfoCommand {
         crate::VgaText::println("");
         
         // Get PMM statistics
-        unsafe {
-            let total_frames = crate::ffi::pmm_get_total_frames();
-            let used_frames = crate::ffi::pmm_get_used_frames();
+        {
+            let total_frames = alloy_kernel_hal::mem::total_frames();
+            let used_frames = alloy_kernel_hal::mem::used_frames();
             let free_frames = total_frames - used_frames;
-            let total_memory = crate::ffi::pmm_get_total_memory();
-            let available_memory = crate::ffi::pmm_get_available_memory();
+            let total_memory = alloy_kernel_hal::mem::total_memory();
+            let available_memory = alloy_kernel_hal::mem::available_memory();
             
             crate::VgaText::println("Physical Memory Manager:");
             

@@ -6,69 +6,7 @@
 use core::ffi::c_void;
 
 use crate::raw::ffi;
-
-/// Page flags for memory mapping
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageFlags {
-    pub present: bool,
-    pub writable: bool,
-    pub user_accessible: bool,
-    pub no_execute: bool,
-    pub cache_disabled: bool,
-}
-
-impl PageFlags {
-    pub const fn default() -> Self {
-        Self {
-            present: true,
-            writable: false,
-            user_accessible: false,
-            no_execute: false,
-            cache_disabled: false,
-        }
-    }
-
-    pub const fn kernel_read() -> Self {
-        Self {
-            present: true,
-            writable: false,
-            user_accessible: false,
-            no_execute: false,
-            cache_disabled: false,
-        }
-    }
-
-    pub const fn kernel_write() -> Self {
-        Self {
-            present: true,
-            writable: true,
-            user_accessible: false,
-            no_execute: false,
-            cache_disabled: false,
-        }
-    }
-
-    pub const fn user_read() -> Self {
-        Self {
-            present: true,
-            writable: false,
-            user_accessible: true,
-            no_execute: false,
-            cache_disabled: false,
-        }
-    }
-
-    pub const fn user_write() -> Self {
-        Self {
-            present: true,
-            writable: true,
-            user_accessible: true,
-            no_execute: false,
-            cache_disabled: false,
-        }
-    }
-}
+use crate::mem::PageFlags;
 
 /// Memory manager trait - architecture-agnostic interface
 pub trait MemoryManager {
@@ -146,12 +84,7 @@ impl Pmm {
 }
 
 fn flags_to_raw(flags: PageFlags) -> u32 {
-    let mut raw = 0u32;
-    if flags.present { raw |= 0x001; }
-    if flags.writable { raw |= 0x002; }
-    if flags.user_accessible { raw |= 0x004; }
-    if flags.cache_disabled { raw |= 0x010; }
-    raw
+    flags.raw()
 }
 
 impl MemoryManager for Pmm {

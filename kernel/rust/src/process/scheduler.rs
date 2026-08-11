@@ -474,8 +474,10 @@ impl Scheduler {
         }
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_timer_tick() {
+    /// Timer-tick handler, registered via
+    /// `set_timer_tick_handler` at boot and invoked from IRQ context on
+    /// every timer interrupt.
+    pub fn rust_timer_tick() {
         let ticks = crate::SystemTimer::ticks();
 
         if ticks > 0 && ticks % BOOST_INTERVAL == 0 {
@@ -492,13 +494,14 @@ impl Scheduler {
         }
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_handle_page_fault(_addr: usize, _err: u32) {
-        unsafe {
-            crate::println!("[Scheduler] rust_handle_page_fault invoked — terminating task");
-        }
+    /// Page-fault handler, registered via `set_page_fault_handler` at boot
+    /// and invoked from exception context for user-mode faults.
+    pub fn rust_handle_page_fault(_addr: usize, _err: u32) -> alloy_kernel_hal::FaultAction {
+        crate::println!("[Scheduler] rust_handle_page_fault invoked — terminating task");
 
         Self::terminate_current(1);
+
+        alloy_kernel_hal::FaultAction::Terminate
     }
 
     #[no_mangle]

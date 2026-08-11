@@ -53,7 +53,6 @@ extern "C" {
     fn irq14();
     fn irq15();
     fn syscall_entry();
-    fn rust_handle_page_fault(addr: uintptr_t, err_code: uint32_t);
     fn paging_handle_cow_fault(fault_addr: uintptr_t) -> uint8_t;
     fn paging_demand_map_kernel_page(fault_addr: uint64_t, user_cr3: uint64_t) -> bool_0;
     fn paging_get_kernel_directory_phys() -> uintptr_t;
@@ -664,7 +663,10 @@ pub unsafe extern "C" fn exception_handler(mut frame: *mut interrupt_frame) {
                 b"User-mode page fault, terminating current task...\n\0" as *const u8
                     as *const ::core::ffi::c_char,
             );
-            rust_handle_page_fault(fault_addr as uintptr_t, err_code as uint32_t);
+            let _ = crate::api::callback::invoke_page_fault(
+                fault_addr as uintptr_t,
+                err_code as uint32_t,
+            );
             return;
         }
     }

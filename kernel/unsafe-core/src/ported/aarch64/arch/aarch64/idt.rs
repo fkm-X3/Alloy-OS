@@ -2,7 +2,6 @@ use ::core::arch::asm;
 extern "C" {
     fn timer_get_uptime_ms_ffi() -> uint64_t;
     fn timer_handler();
-    fn rust_handle_page_fault(addr: uintptr_t, err_code: uint32_t);
     static mut _exception_vectors: uint8_t;
 }
 pub type uint8_t = u8;
@@ -22,7 +21,7 @@ pub unsafe extern "C" fn irq_handler_el1() {
 #[no_mangle]
 pub unsafe extern "C" fn page_fault_handler(mut far: uint64_t, mut esr: uint64_t) {
     let mut err_code: uint32_t = (esr & 0xff as uint64_t) as uint32_t;
-    rust_handle_page_fault(far as uintptr_t, err_code);
+    let _ = crate::api::callback::invoke_page_fault(far as uintptr_t, err_code);
 }
 #[no_mangle]
 pub unsafe extern "C" fn svc_handler(

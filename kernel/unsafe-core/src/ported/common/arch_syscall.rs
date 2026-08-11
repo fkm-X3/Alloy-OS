@@ -2,36 +2,6 @@ use ::core::arch::asm;
 extern "C" {
     fn serial_print(str: *const ::core::ffi::c_char);
     fn serial_print_hex(value: uint32_t);
-    fn rust_sys_exit(code: uint32_t) -> uint32_t;
-    fn rust_sys_fork() -> uint32_t;
-    fn rust_sys_yield() -> uint32_t;
-    fn rust_sys_getpid() -> uint32_t;
-    fn rust_sys_sleep(ms: uint32_t) -> uint32_t;
-    fn rust_sys_open(path_ptr: uint32_t, flags: uint32_t, mode: uint32_t) -> uint32_t;
-    fn rust_sys_read(fd: uint32_t, buf_ptr: uint32_t, len: uint32_t) -> uint32_t;
-    fn rust_sys_write(fd: uint32_t, buf_ptr: uint32_t, len: uint32_t) -> uint32_t;
-    fn rust_sys_close(fd: uint32_t) -> uint32_t;
-    fn rust_sys_dup(oldfd: uint32_t) -> uint32_t;
-    fn rust_sys_lseek(fd: uint32_t, offset: uint32_t, whence: uint32_t) -> uint32_t;
-    fn rust_sys_pipe(pipefd_ptr: uint32_t) -> uint32_t;
-    fn rust_sys_execve(path_ptr: uint32_t) -> uint32_t;
-    fn rust_sys_socket(domain: int32_t, socket_type: int32_t, protocol: int32_t) -> int32_t;
-    fn rust_sys_bind(fd: int32_t, addr: *const ::core::ffi::c_void, addr_len: uint32_t) -> int32_t;
-    fn rust_sys_listen(fd: int32_t, backlog: int32_t) -> int32_t;
-    fn rust_sys_accept(fd: int32_t) -> int32_t;
-    fn rust_sys_connect(
-        fd: int32_t,
-        addr: *const ::core::ffi::c_void,
-        addr_len: uint32_t,
-    ) -> int32_t;
-    fn rust_sys_close_socket(fd: int32_t) -> int32_t;
-    fn rust_sys_clone(entry: uint32_t, stack: uint32_t, arg: uint32_t) -> uint32_t;
-    fn rust_sys_waitpid(pid: uint32_t, options: uint32_t) -> uint32_t;
-    fn rust_sys_has_pending_connections(fd: int32_t) -> int32_t;
-    fn rust_sys_socket_read(fd: int32_t, buf_ptr: uint32_t, len: uint32_t) -> int32_t;
-    fn rust_sys_socket_write(fd: int32_t, buf_ptr: uint32_t, len: uint32_t) -> int32_t;
-    fn rust_sys_dup2(oldfd: uint32_t, newfd: uint32_t) -> uint32_t;
-    fn rust_sys_kill(pid: uint32_t, sig: uint32_t) -> uint32_t;
 }
 #[cfg(target_arch = "x86_64")]
 extern "C" {
@@ -81,99 +51,21 @@ pub unsafe extern "C" fn syscall_dispatcher(
     mut arg3: uint32_t,
     mut arg4: uint32_t,
 ) -> uint32_t {
-    let mut result: uint32_t = 0 as uint32_t;
-    match syscall_no {
-        0 => {
-            result = rust_sys_exit(arg0);
-        }
-        20 => {
-            result = rust_sys_fork();
-        }
-        21 => {
-            result = rust_sys_clone(arg0, arg1, arg2);
-        }
-        1 => {
-            result = rust_sys_yield();
-        }
-        2 => {
-            result = rust_sys_getpid();
-        }
-        3 => {
-            result = rust_sys_sleep(arg0);
-        }
-        4 => {
-            result = rust_sys_open(arg0, arg1, arg2);
-        }
-        5 => {
-            result = rust_sys_read(arg0, arg1, arg2);
-        }
-        6 => {
-            result = rust_sys_write(arg0, arg1, arg2);
-        }
-        7 => {
-            result = rust_sys_close(arg0);
-        }
-        8 => {
-            result = rust_sys_dup(arg0);
-        }
-        9 => {
-            result = rust_sys_lseek(arg0, arg1, arg2);
-        }
-        10 => {
-            result = rust_sys_pipe(arg0);
-        }
-        11 => {
-            result = rust_sys_execve(arg0);
-        }
-        12 => {
-            result = rust_sys_socket(arg0 as int32_t, arg1 as int32_t, arg2 as int32_t) as uint32_t;
-        }
-        13 => {
-            result = rust_sys_bind(arg0 as int32_t, arg1 as *const ::core::ffi::c_void, arg2)
-                as uint32_t;
-        }
-        14 => {
-            result = rust_sys_listen(arg0 as int32_t, arg1 as int32_t) as uint32_t;
-        }
-        15 => {
-            result = rust_sys_accept(arg0 as int32_t) as uint32_t;
-        }
-        16 => {
-            result = rust_sys_connect(arg0 as int32_t, arg1 as *const ::core::ffi::c_void, arg2)
-                as uint32_t;
-        }
-        17 => {
-            result = rust_sys_close_socket(arg0 as int32_t) as uint32_t;
-        }
-        18 => {
-            result = rust_sys_has_pending_connections(arg0 as int32_t) as uint32_t;
-        }
-        22 => {
-            result = rust_sys_waitpid(arg0, arg1);
-        }
-        23 => {
-            result = rust_sys_socket_read(arg0 as int32_t, arg1, arg2) as uint32_t;
-        }
-        24 => {
-            result = rust_sys_socket_write(arg0 as int32_t, arg1, arg2) as uint32_t;
-        }
-        29 => {
-            result = rust_sys_dup2(arg0, arg1);
-        }
-        30 => {
-            result = rust_sys_kill(arg0, arg1);
-        }
-        _ => {
+    // The kernel crate registered its handlers through
+    // `api::callback::SyscallTable::register` at boot; this dispatcher no
+    // longer calls `rust_sys_*` by symbol.
+    match crate::api::callback::dispatch_syscall(syscall_no, arg0, arg1, arg2, arg3, arg4) {
+        crate::api::callback::SyscallDispatch::Handled(result) => result,
+        crate::api::callback::SyscallDispatch::Unhandled => {
             serial_print(
                 b"[Syscall] Unknown syscall number: 0x\0" as *const u8
                     as *const ::core::ffi::c_char,
             );
             serial_print_hex(syscall_no);
             serial_print(b"\n\0" as *const u8 as *const ::core::ffi::c_char);
-            result = -(1 as ::core::ffi::c_int) as uint32_t;
+            -(1 as ::core::ffi::c_int) as uint32_t
         }
     }
-    return result;
 }
 #[cfg(target_arch = "x86_64")]
 static mut syscall_gs_save_area: [uint64_t; 3] = [

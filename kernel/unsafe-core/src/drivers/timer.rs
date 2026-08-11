@@ -30,10 +30,6 @@ static mut g_timer_frequency: u32 = 0;
 #[cfg(feature = "aarch64")]
 static mut g_timer_freq_hz: u64 = 0;
 
-extern "C" {
-    fn rust_timer_tick();
-}
-
 #[cfg(feature = "x86_64")]
 const PIT_BASE_FREQ: u32 = 1193180;
 
@@ -216,7 +212,10 @@ pub extern "C" fn timer_handler() {
     unsafe {
         g_timer_ticks = g_timer_ticks.wrapping_add(1);
     }
-    unsafe { rust_timer_tick() };
+    // The kernel registered its timer-tick handler via
+    // `api::callback::set_timer_tick_handler` at boot; unsafe-core never
+    // calls `rust_timer_tick` by symbol.
+    crate::api::callback::invoke_timer_tick();
 }
 
 /// `timer_get_ticks_ffi()`: total timer IRQs since boot.

@@ -15,7 +15,9 @@
 //! arch, callback.
 
 pub use crate::arch::{self, Arch, CpuContext, CpuInfo};
-pub use crate::interrupt::{self, InterruptController, IrqHandler};
+pub use crate::callback::{self, FaultAction, SyscallHandler, SyscallTable};
+pub use crate::callback::{set_page_fault_handler, set_timer_tick_handler};
+pub use crate::interrupt::{self, InterruptController, InterruptGuard, IrqHandler, IrqLine};
 pub use crate::io::{self, DefaultMmio, Mmio, MmioReg};
 #[cfg(feature = "x86_64")]
 pub use crate::io::X86IoPort;

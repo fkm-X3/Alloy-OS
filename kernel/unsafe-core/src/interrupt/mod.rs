@@ -9,6 +9,11 @@ use crate::io::{IoPort, X86IoPort};
 #[cfg(feature = "aarch64")]
 use crate::io::{Mmio, DefaultMmio};
 
+#[cfg(feature = "x86_64")]
+use crate::raw::asm::x86_64;
+#[cfg(feature = "aarch64")]
+use crate::raw::asm::aarch64;
+
 /// IRQ handler function type
 pub type IrqHandler = fn(irq: u32);
 
@@ -18,19 +23,139 @@ pub trait InterruptController {
     fn init(&mut self);
 
     /// Register an IRQ handler
-    fn register_handler(&mut self, irq: u32, handler: IrqHandler);
+    fn register_handler(&self, irq: u32, handler: IrqHandler);
 
     /// Enable a specific IRQ line
-    fn enable_irq(&mut self, irq: u32);
+    fn enable_irq(&self, irq: u32);
 
     /// Disable a specific IRQ line
-    fn disable_irq(&mut self, irq: u32);
+    fn disable_irq(&self, irq: u32);
 
     /// Send end-of-interrupt signal
-    fn send_eoi(&mut self, irq: u32);
+    fn send_eoi(&self, irq: u32);
 
     /// Remap IRQs to the given base vector
     fn remap(&mut self, base: u32);
+}
+
+/// The boot-time interrupt controller.
+///
+/// `Pic8259` on x86_64 (master/slave remapped to vectors 32/40 by the boot
+/// IDT), `Gic` on aarch64 (QEMU virt GICv2). The controller is a `static`
+/// because it holds no mutable state at runtime; all access is safe through
+/// [`IrqLine`].
+#[cfg(feature = "x86_64")]
+pub static PIC: Pic8259 = Pic8259::new(32, 40);
+#[cfg(feature = "aarch64")]
+pub static GIC: Gic = Gic::qemu_virt();
+
+/// A safe handle to a single hardware interrupt line.
+///
+/// Wraps an IRQ number and routes `enable`/`disable`/`send_eoi` to the
+/// active interrupt controller ([`PIC`] on x86_64, [`GIC`] on aarch64).
+/// Safe to copy and share; the port/MMIO writes happen inside unsafe-core.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IrqLine {
+    irq: u32,
+}
+
+impl IrqLine {
+    /// Create a handle for the IRQ line `irq`.
+    pub const fn new(irq: u32) -> Self {
+        IrqLine { irq }
+    }
+
+    /// The hardware IRQ number this line refers to.
+    pub fn number(&self) -> u32 {
+        self.irq
+    }
+
+    /// Unmask this IRQ line so the controller delivers it.
+    pub fn enable(&self) {
+        #[cfg(feature = "x86_64")]
+        PIC.enable_irq(self.irq);
+        #[cfg(feature = "aarch64")]
+        GIC.enable_irq(self.irq);
+    }
+
+    /// Mask this IRQ line so the controller stops delivering it.
+    pub fn disable(&self) {
+        #[cfg(feature = "x86_64")]
+        PIC.disable_irq(self.irq);
+        #[cfg(feature = "aarch64")]
+        GIC.disable_irq(self.irq);
+    }
+
+    /// Signal end-of-interrupt to the controller.
+    pub fn send_eoi(&self) {
+        #[cfg(feature = "x86_64")]
+        PIC.send_eoi(self.irq);
+        #[cfg(feature = "aarch64")]
+        GIC.send_eoi(self.irq);
+    }
+}
+
+/// RAII guard that masks IRQs on creation and restores the previous mask
+/// state on drop.
+///
+/// x86_64: `cli` on create, RFLAGS restored on drop. aarch64: DAIF I bit set
+/// on create, DAIF restored on drop. Nested guards are safe — each restores
+/// exactly the state it was created from.
+#[derive(Debug)]
+pub struct InterruptGuard {
+    saved: u64,
+}
+
+impl InterruptGuard {
+    /// Save the current interrupt state and mask IRQs.
+    pub fn new() -> Self {
+        #[cfg(feature = "x86_64")]
+        {
+            InterruptGuard {
+                saved: x86_64::save_irq_state(),
+            }
+        }
+        #[cfg(feature = "aarch64")]
+        {
+            InterruptGuard {
+                saved: aarch64::save_irq_state(),
+            }
+        }
+    }
+
+    /// Unmask IRQs while this guard is alive.
+    pub fn release(&mut self) {
+        #[cfg(feature = "x86_64")]
+        x86_64::enable_irqs();
+        #[cfg(feature = "aarch64")]
+        aarch64::enable_irqs();
+    }
+
+    /// Re-mask IRQs while this guard is alive.
+    pub fn hold(&mut self) {
+        #[cfg(feature = "x86_64")]
+        x86_64::disable_irqs();
+        #[cfg(feature = "aarch64")]
+        aarch64::disable_irqs();
+    }
+
+    /// Halt the CPU until the next interrupt arrives. Interrupts must be
+    /// unmasked (see [`release`](Self::release)) or the CPU never wakes.
+    pub fn halt(&self) {
+        #[cfg(feature = "x86_64")]
+        x86_64::wait_for_interrupt();
+        #[cfg(feature = "aarch64")]
+        aarch64::wait_for_interrupt();
+    }
+}
+
+impl Drop for InterruptGuard {
+    fn drop(&mut self) {
+        #[cfg(feature = "x86_64")]
+        x86_64::restore_irq_state(self.saved);
+        #[cfg(feature = "aarch64")]
+        aarch64::restore_irq_state(self.saved);
+    }
 }
 
 /// PIC (Programmable Interrupt Controller) for x86
@@ -78,11 +203,11 @@ impl InterruptController for Pic8259 {
         }
     }
 
-    fn register_handler(&mut self, _irq: u32, _handler: IrqHandler) {
+    fn register_handler(&self, _irq: u32, _handler: IrqHandler) {
         // Handlers are registered in the IDT
     }
 
-    fn enable_irq(&mut self, irq: u32) {
+    fn enable_irq(&self, irq: u32) {
         let port: u16 = if irq < 8 { 0x21 } else { 0xA1 };
         let mask: u8 = if irq < 8 {
             !(1 << irq)
@@ -95,7 +220,7 @@ impl InterruptController for Pic8259 {
         }
     }
 
-    fn disable_irq(&mut self, irq: u32) {
+    fn disable_irq(&self, irq: u32) {
         let port: u16 = if irq < 8 { 0x21 } else { 0xA1 };
         let mask: u8 = if irq < 8 {
             1 << irq
@@ -108,7 +233,7 @@ impl InterruptController for Pic8259 {
         }
     }
 
-    fn send_eoi(&mut self, irq: u32) {
+    fn send_eoi(&self, irq: u32) {
         if irq >= 8 {
             unsafe {
                 <X86IoPort as IoPort>::outb(0xA0, 0x20);
@@ -180,11 +305,11 @@ impl InterruptController for Gic {
         }
     }
 
-    fn register_handler(&mut self, _irq: u32, _handler: IrqHandler) {
+    fn register_handler(&self, _irq: u32, _handler: IrqHandler) {
         // Handlers are registered in the exception vector table
     }
 
-    fn enable_irq(&mut self, irq: u32) {
+    fn enable_irq(&self, irq: u32) {
         let reg = (irq / 32) * 4;
         let bit = 1 << (irq % 32);
         unsafe {
@@ -192,7 +317,7 @@ impl InterruptController for Gic {
         }
     }
 
-    fn disable_irq(&mut self, irq: u32) {
+    fn disable_irq(&self, irq: u32) {
         let reg = (irq / 32) * 4;
         let bit = 1 << (irq % 32);
         unsafe {
@@ -200,7 +325,7 @@ impl InterruptController for Gic {
         }
     }
 
-    fn send_eoi(&mut self, _irq: u32) {
+    fn send_eoi(&self, _irq: u32) {
         // Write to GICC_EOIR
         unsafe {
             DefaultMmio::write32((self.cpu_base + 0x010) as usize, _irq);

@@ -37,6 +37,44 @@ pub mod x86_64 {
         unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); }
     }
 
+    /// Save the interrupt state (RFLAGS) and disable interrupts (IF = 0).
+    /// Returns the saved flags for [`restore_irq_state`].
+    #[inline]
+    pub fn save_irq_state() -> u64 {
+        let flags: u64;
+        unsafe {
+            core::arch::asm!("pushfq", "pop {0}", out(reg) flags, options(preserves_flags));
+            core::arch::asm!("cli", options(nomem, nostack));
+        }
+        flags
+    }
+
+    /// Restore a previously saved interrupt state (RFLAGS).
+    #[inline]
+    pub fn restore_irq_state(flags: u64) {
+        unsafe {
+            core::arch::asm!("push {0}", "popfq", in(reg) flags, options(nomem, nostack));
+        }
+    }
+
+    /// Mask IRQs (same as [`cli`]).
+    #[inline]
+    pub fn disable_irqs() {
+        cli();
+    }
+
+    /// Unmask IRQs (same as [`sti`]).
+    #[inline]
+    pub fn enable_irqs() {
+        sti();
+    }
+
+    /// Wait for the next interrupt (same as [`hlt`]).
+    #[inline]
+    pub fn wait_for_interrupt() {
+        hlt();
+    }
+
     // --- Port I/O ---
 
     #[inline]
@@ -189,6 +227,43 @@ pub mod aarch64 {
         unsafe { core::arch::asm!("msr daifclr, #0b0011"); }
     }
 
+    /// Mask IRQs only (DAIF immediate I bit), leaving FIQ untouched. Matches
+    /// the IRQ-only masking used by the kernel's `SpinlockIRQ`/`irq_save`.
+    #[inline]
+    pub fn disable_irqs() {
+        unsafe { core::arch::asm!("msr daifset, #2"); }
+    }
+
+    /// Unmask IRQs only (DAIF immediate I bit).
+    #[inline]
+    pub fn enable_irqs() {
+        unsafe { core::arch::asm!("msr daifclr, #2"); }
+    }
+
+    /// Save the interrupt state (DAIF) and mask IRQs. Returns the saved DAIF
+    /// for [`restore_irq_state`].
+    #[inline]
+    pub fn save_irq_state() -> u64 {
+        let flags: u64;
+        unsafe {
+            core::arch::asm!("mrs {0}, daif", out(reg) flags);
+            core::arch::asm!("msr daifset, #2");
+        }
+        flags
+    }
+
+    /// Restore a previously saved interrupt state (DAIF).
+    #[inline]
+    pub fn restore_irq_state(flags: u64) {
+        unsafe { core::arch::asm!("msr daif, {0}", in(reg) flags); }
+    }
+
+    /// Wait for the next interrupt (same as [`wfi`]).
+    #[inline]
+    pub fn wait_for_interrupt() {
+        wfi();
+    }
+
     #[inline]
     pub fn read_midr_el1() -> u64 {
         let val: u64;
@@ -299,3 +374,16 @@ pub mod aarch64 {
         unsafe { core::arch::asm!("msr S3_3_C14_C2_1, {}", in(reg) val); }
     }
 }
+
+// ============================================================================
+// Arch-uniform aliases
+//
+// The interrupt guard and other safe facades call these names without
+// naming the arch module. Only one module exists per target, so the glob
+// re-exports never collide.
+// ============================================================================
+
+#[cfg(feature = "x86_64")]
+pub use self::x86_64::*;
+#[cfg(feature = "aarch64")]
+pub use self::aarch64::*;

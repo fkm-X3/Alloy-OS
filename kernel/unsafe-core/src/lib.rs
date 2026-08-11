@@ -38,6 +38,13 @@ pub mod api;
 /// Safe driver facades (Serial, SystemTimer, VgaText, Pl110).
 pub mod drivers;
 
+/// Syscall/timer/page-fault callback registration (Phase 3.2).
+///
+/// The ported dispatcher/IRQ/exception handlers invoke the handlers the
+/// kernel crate registers here at init; unsafe-core never calls back into
+/// the kernel crate by symbol.
+pub mod callback;
+
 // ============================================================================
 // Implementation modules (moved verbatim from the HAL).
 //

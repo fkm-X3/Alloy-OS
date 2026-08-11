@@ -40,9 +40,10 @@ use crate::graphics::Display;
 extern "C" fn display_server_entry() {
     // Disable interrupts during init so the timer can't preempt us.
     // The scheduler leaks any task that is preempted before it voluntarily
-    // yields or exits (old_box_opt is never re-enqueued).
-    #[cfg(feature = "x86_64")]
-    unsafe { core::arch::asm!("cli"); }
+    // yields or exits (old_box_opt is never re-enqueued). The guard restores
+    // the previous mask state on drop; `release` re-enables IRQs before the
+    // run loop.
+    let mut irq_guard = alloy_kernel_hal::InterruptGuard::new();
 
     unsafe {
         crate::println!("[DisplayServer] Entry reached");
@@ -50,13 +51,9 @@ extern "C" fn display_server_entry() {
     match graphics::PlatformDisplay::new() {
         None => {
             crate::println!("[DisplayServer] FATAL: PlatformDisplay::new() returned None");
-            #[cfg(feature = "x86_64")]
-            unsafe { core::arch::asm!("sti"); }
+            irq_guard.release();
             loop {
-                #[cfg(feature = "x86_64")]
-                unsafe { core::arch::asm!("hlt"); }
-                #[cfg(feature = "aarch64")]
-                unsafe { core::arch::asm!("wfi"); }
+                irq_guard.halt();
             }
         }
         Some(mut display) => {
@@ -68,15 +65,11 @@ extern "C" fn display_server_entry() {
             crate::println!("[Spawn] VESA ready, booting display server task");
             #[cfg(feature = "aarch64")]
             crate::println!("[Spawn] PL110 ready, booting display server task");
-            #[cfg(feature = "x86_64")]
-            unsafe { core::arch::asm!("sti"); }
+            irq_guard.release();
             let _ = display_server::run(display);
             crate::println!("[DisplayServer] run() returned, halting");
             loop {
-                #[cfg(feature = "x86_64")]
-                unsafe { core::arch::asm!("hlt"); }
-                #[cfg(feature = "aarch64")]
-                unsafe { core::arch::asm!("wfi"); }
+                irq_guard.halt();
             }
         }
     }
@@ -105,6 +98,14 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
 pub extern "C" fn rust_main() {
     // Initialize the HAL platform (marks FFI as ready)
     alloy_kernel_hal::platform::init();
+
+    // Register the kernel's syscall/timer/page-fault handlers with
+    // unsafe-core before anything can fire them: no userland exists yet and
+    // the timer is armed later by SystemTimer::init. This replaces the
+    // `rust_sys_*`/`rust_timer_tick`/`rust_handle_page_fault` symbol calls.
+    crate::syscall::register_all();
+    alloy_kernel_hal::set_timer_tick_handler(process::Scheduler::rust_timer_tick);
+    alloy_kernel_hal::set_page_fault_handler(process::Scheduler::rust_handle_page_fault);
 
     crate::println!("[Rust] Kernel entry - initializing subsystems");
     crate::println!("[Rust] About to vga_clear");

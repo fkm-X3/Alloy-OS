@@ -7,7 +7,11 @@ edition = "2021"
 name = "alloy_kernel_hal"
 path = "src/lib.rs"
 
+[dependencies]
+alloy-kernel-unsafe-core = { path = "../unsafe-core", default-features = false }
+
 [features]
 default = ["x86_64"]
-x86_64 = []
-aarch64 = []
+x86_64 = ["alloy-kernel-unsafe-core/x86_64"]
+aarch64 = ["alloy-kernel-unsafe-core/aarch64"]
+ported = ["alloy-kernel-unsafe-core/ported"]

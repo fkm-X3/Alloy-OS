@@ -16,7 +16,7 @@ ifeq ($(ARCH),x86_64)
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = x86_64-alloy.json
-    RUST_FEATURES = --no-default-features --features x86_64
+    RUST_FEATURES = --no-default-features --features x86_64,ported
     LINKER = kernel/linker_x86_64.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
@@ -40,7 +40,7 @@ else ifeq ($(ARCH),aarch64)
             if [ -f "$$f" ]; then echo "-bios $$f"; break; fi; \
         done)
     RUST_TARGET = aarch64-alloy.json
-    RUST_FEATURES = --no-default-features --features aarch64
+    RUST_FEATURES = --no-default-features --features aarch64,ported
     LINKER = kernel/linker_aarch64.ld
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
     ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
@@ -66,33 +66,6 @@ MM_DIR = $(KERNEL_C_DIR)/mm
 
 # Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
-
-C_SOURCES = $(KERNEL_C_DIR)/arch/cpu.c \
-            $(KERNEL_C_DIR)/arch/syscall.c \
-            $(ARCH_DIR)/gdt.c \
-            $(ARCH_DIR)/idt.c \
-            $(MM_DIR)/pmm.c \
-            $(MM_DIR)/vmm.c \
-            $(DRIVERS_DIR)/serial.c \
-            $(DRIVERS_DIR)/timer.c
-
-# Architecture-specific C sources
-ifeq ($(ARCH),aarch64)
-C_SOURCES += $(DRIVERS_DIR)/pl110.c \
-             $(MM_DIR)/paging_aarch64.c \
-             $(KERNEL_C_DIR)/boot/main_aarch64.c
-else
-C_SOURCES += $(KERNEL_C_DIR)/boot/main.c \
-             $(MM_DIR)/paging.c \
-             $(DRIVERS_DIR)/vga.c \
-             $(DRIVERS_DIR)/vesa.c \
-             $(DRIVERS_DIR)/keyboard.c \
-             $(DRIVERS_DIR)/mouse.c \
-             $(DRIVERS_DIR)/ata.c \
-             $(DRIVERS_DIR)/pci.c \
-             $(DRIVERS_DIR)/ahci.c \
-             $(DRIVERS_DIR)/initrd.c
-endif
 
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
@@ -203,76 +176,94 @@ $(DISK_IMG):
 	@mkdir -p $(BUILD_DIR)
 	qemu-img create -f raw $@ $(DISK_SIZE_MB)M 2>/dev/null || dd if=/dev/zero of=$@ bs=1M count=$(DISK_SIZE_MB) 2>/dev/null
 
-# Boot via ISO (x86: GRUB on ISO; aarch64: ISO + UEFI firmware)
-run: $(KERNEL_ISO) $(DISK_IMG)
+# Boot via ISO (x86: GRUB on ISO) or bare ELF via -kernel (aarch64: QEMU
+# virt has no BIOS/IDE; the kernel is loaded at 0x40080000 by the -kernel path)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+run: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log
 else
+run: $(KERNEL_ISO) $(DISK_IMG)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 endif
 
 run-ahci: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
 
-output: $(KERNEL_ISO) $(DISK_IMG)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+output: $(KERNEL_ELF)
+	$(QEMU) -kernel $(KERNEL_ELF) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
 else
+output: $(KERNEL_ISO) $(DISK_IMG)
 	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 endif
 
 output-ahci: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log -machine q35 -drive file=$(DISK_IMG),format=raw,if=none,id=disk -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0
 
-# Boot kernel ELF directly (no ISO/GRUB) – works for all arches
-run-elf: $(KERNEL_ELF) $(DISK_IMG)
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
-
-output-elf: $(KERNEL_ELF) $(DISK_IMG)
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -display none -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
-
-# Boot headless and auto-capture desktop shell screenshot (PNG)
-screenshot: $(KERNEL_ISO)
+# Boot kernel ELF directly (no ISO/GRUB) – works for all arches.
+# aarch64: no UEFI firmware (aarch64 boot asm drops EL2->EL1 itself) and no
+# IDE drive (QEMU virt has no IDE controller).
 ifeq ($(ARCH),aarch64)
-	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+run-elf: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log
 else
-	python3 tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+run-elf: $(KERNEL_ELF) $(DISK_IMG)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
 endif
 
+ifeq ($(ARCH),aarch64)
+output-elf: $(KERNEL_ELF)
+	$(QEMU) -kernel $(KERNEL_ELF) -display none $(QEMU_FLAGS) -no-reboot -no-shutdown -D qemu.log
+else
+output-elf: $(KERNEL_ELF) $(DISK_IMG)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -display none -no-reboot -no-shutdown -D qemu.log -drive file=$(DISK_IMG),format=raw,if=ide
+endif
+
+# Boot headless and auto-capture desktop shell screenshot (PNG).
+# NOTE: --bios '$(QEMU_FW)' expands to '' on x86_64 (undefined var), which the
+# harness treats as "no firmware" and skips aarch64 auto-detection.
+screenshot: $(KERNEL_ISO)
+	python3 os/userland/tools/capture_desktop_screenshot.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+
 # Boot headless with kernel ELF and capture screenshot (works for all arches)
+# aarch64: boot_aarch64.S drops EL2->EL1 itself, so no UEFI firmware is needed
+# (--bios '').  The script needs the aarch64 QEMU binary plus machine flags.
+ifeq ($(ARCH),aarch64)
 screenshot-elf: $(KERNEL_ELF)
-	python3 tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+	python3 os/userland/tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '' --qemu-binary qemu-system-aarch64 --qemu-extra '-machine virt -cpu cortex-a53 -m 128M' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+else
+screenshot-elf: $(KERNEL_ELF)
+	python3 os/userland/tools/capture_desktop_screenshot.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --output $(BUILD_DIR)/desktop-shell-grid.png --serial-log $(BUILD_DIR)/desktop-shell-boot.log --qemu-log $(BUILD_DIR)/qemu-screenshot.log --settle-seconds 5
+endif
 
 # Boot headless and run scripted mouse interactions (no screenshot)
 mouse-smoke: $(KERNEL_ISO)
-ifeq ($(ARCH),aarch64)
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
-else
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
-endif
+	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
 
 # Boot headless with kernel ELF and run scripted mouse interactions
 mouse-smoke-elf: $(KERNEL_ELF)
-	python3 tools/mouse_smoke.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
+	python3 os/userland/tools/mouse_smoke.py --kernel $(KERNEL_ELF) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-smoke-boot.log --qemu-log $(BUILD_DIR)/qemu-mouse-smoke.log
 
 # Run scripted mouse interactions and capture a screenshot artifact
 mouse-screenshot: $(KERNEL_ISO)
-ifeq ($(ARCH),aarch64)
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
-else
-	python3 tools/mouse_smoke.py --iso $(KERNEL_ISO) --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
-endif
+	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
 
 # Run in QEMU with debugging
-debug: $(KERNEL_ISO)
 ifeq ($(ARCH),aarch64)
-	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) $(QEMU_FW) -s -S
+debug: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -s -S
 else
+debug: $(KERNEL_ISO)
 	$(QEMU) -cdrom $(KERNEL_ISO) $(QEMU_FLAGS) -s -S
 endif
 
+ifeq ($(ARCH),aarch64)
+debug-elf: $(KERNEL_ELF)
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -s -S
+else
 debug-elf: $(KERNEL_ELF)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) $(QEMU_FW) -s -S
+endif
 
 # Clean build artifacts
 clean:

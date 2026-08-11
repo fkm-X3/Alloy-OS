@@ -130,7 +130,7 @@ impl RegistryHandler {
             .push(object_id);
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland Registry] Handled bind request\n".as_ptr() as *const u8);
+            crate::println!("[Wayland Registry] Handled bind request");
         }
 
         Ok(RegistryResponse::Bound {

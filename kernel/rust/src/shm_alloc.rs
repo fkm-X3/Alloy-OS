@@ -1,5 +1,6 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use alloy_kernel_hal::PhysFrame;
 use crate::sync::SpinLock;
 
 struct ShmRegion {
@@ -7,7 +8,7 @@ struct ShmRegion {
     height: u32,
     bpp: u32,
     size: u32,
-    pages: Vec<usize>,
+    pages: Vec<PhysFrame>,
 }
 
 static SHM_REGIONS: SpinLock<Option<BTreeMap<i32, ShmRegion>>> = SpinLock::new(None);
@@ -22,15 +23,13 @@ pub fn shm_alloc(width: u32, height: u32, bpp: u32) -> i32 {
     let num_pages = (size as usize + 4095) / 4096;
     let mut pages = Vec::with_capacity(num_pages);
 
+    // Frames are RAII (`PhysFrame`): the `pages` Vec frees them on drop,
+    // so the error path below needs no manual cleanup.
     for _ in 0..num_pages {
-        let phys = unsafe { crate::ffi::pmm_alloc_frame() };
-        if phys.is_null() {
-            for &p in &pages {
-                unsafe { crate::ffi::pmm_free_frame(p as *mut _); }
-            }
+        let Some(frame) = PhysFrame::alloc() else {
             return -1;
-        }
-        pages.push(phys as usize);
+        };
+        pages.push(frame);
     }
 
     let mut fd_guard = NEXT_FD.lock();
@@ -71,11 +70,11 @@ pub fn shm_user_vaddr(fd: i32) -> u32 {
     let vaddr = SHM_NEXT_VADDR.fetch_add(total_size as u32, core::sync::atomic::Ordering::Relaxed);
     if vaddr == 0 { return 0; }
 
-    for (i, &phys) in region.pages.iter().enumerate() {
+    for (i, frame) in region.pages.iter().enumerate() {
         let page_vaddr = vaddr + (i as u32 * 4096);
         let ok = unsafe { crate::ffi::vmm_map(
             page_vaddr as *mut core::ffi::c_void,
-            phys as *mut core::ffi::c_void,
+            frame.addr() as *mut core::ffi::c_void,
             crate::ffi::PAGE_PRESENT | crate::ffi::PAGE_WRITE | crate::ffi::PAGE_USER,
         )};
         if !ok { return 0; }

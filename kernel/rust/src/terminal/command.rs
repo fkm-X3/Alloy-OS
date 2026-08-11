@@ -20,9 +20,9 @@ fn print_u32_decimal_line(label: &str, value: u32) {
 
     let value_buf = format::u32_to_decimal(value);
     let value_start = format::trim_leading_spaces(&value_buf);
-    crate::ffi::vga_print_str(label);
+    crate::VgaText::print(label);
     unsafe {
-        crate::ffi::vga_println(&value_buf[value_start] as *const u8);
+        crate::terminal::println_cstr(&value_buf[value_start..]);
     }
 }
 
@@ -31,9 +31,9 @@ fn print_u64_decimal_line(label: &str, value: u64) {
 
     let value_buf = format::u64_to_decimal(value);
     let value_start = format::trim_leading_spaces(&value_buf);
-    crate::ffi::vga_print_str(label);
+    crate::VgaText::print(label);
     unsafe {
-        crate::ffi::vga_println(&value_buf[value_start] as *const u8);
+        crate::terminal::println_cstr(&value_buf[value_start..]);
     }
 }
 
@@ -42,11 +42,11 @@ fn print_size_line(label: &str, bytes: u64) {
 
     let (value_buf, unit_buf) = format::format_bytes(bytes);
     let value_start = format::trim_leading_spaces(&value_buf);
-    crate::ffi::vga_print_str(label);
+    crate::VgaText::print(label);
     unsafe {
-        crate::ffi::vga_print(&value_buf[value_start] as *const u8);
-        crate::ffi::vga_print(c" ".as_ptr() as *const u8);
-        crate::ffi::vga_println(&unit_buf[0] as *const u8);
+        crate::terminal::print_cstr(&value_buf[value_start..]);
+        crate::VgaText::print_bytes(b" ");
+        crate::terminal::println_cstr(&unit_buf[0..]);
     }
 }
 
@@ -65,11 +65,11 @@ fn print_uptime_value(uptime_ms: u64) {
         let days_str = format::u32_to_decimal(days as u32);
         let days_start = format::trim_leading_spaces(&days_str);
         unsafe {
-            crate::ffi::vga_print(&days_str[days_start] as *const u8);
+            crate::terminal::print_cstr(&days_str[days_start..]);
             if days == 1 {
-                crate::ffi::vga_print(c" day, ".as_ptr() as *const u8);
+                crate::VgaText::print_bytes(b" day, ");
             } else {
-                crate::ffi::vga_print(c" days, ".as_ptr() as *const u8);
+                crate::VgaText::print_bytes(b" days, ");
             }
         }
     }
@@ -79,24 +79,24 @@ fn print_uptime_value(uptime_ms: u64) {
     let seconds_str = format::u32_to_decimal(seconds as u32);
 
     unsafe {
-        crate::ffi::vga_print(
-            &hours_str[format::trim_leading_spaces(&hours_str)] as *const u8
+        crate::terminal::print_cstr(
+            &hours_str[format::trim_leading_spaces(&hours_str)..]
         );
-        crate::ffi::vga_print(c":".as_ptr() as *const u8);
+        crate::VgaText::print_bytes(b":");
 
         if minutes < 10 {
-            crate::ffi::vga_print(c"0".as_ptr() as *const u8);
+            crate::VgaText::print_bytes(b"0");
         }
-        crate::ffi::vga_print(
-            &minutes_str[format::trim_leading_spaces(&minutes_str)] as *const u8
+        crate::terminal::print_cstr(
+            &minutes_str[format::trim_leading_spaces(&minutes_str)..]
         );
-        crate::ffi::vga_print(c":".as_ptr() as *const u8);
+        crate::VgaText::print_bytes(b":");
 
         if seconds < 10 {
-            crate::ffi::vga_print(c"0".as_ptr() as *const u8);
+            crate::VgaText::print_bytes(b"0");
         }
-        crate::ffi::vga_println(
-            &seconds_str[format::trim_leading_spaces(&seconds_str)] as *const u8
+        crate::terminal::println_cstr(
+            &seconds_str[format::trim_leading_spaces(&seconds_str)..]
         );
     }
 }
@@ -196,7 +196,7 @@ impl Command for HelpCommand {
         colors::print_info("Available commands:");
         for command_name in registry.get_commands() {
             if let Some(command) = registry.get(command_name) {
-                crate::ffi::vga_println_str(&alloc::format!(
+                crate::VgaText::println(&alloc::format!(
                     "  {:<8} - {}",
                     command_name,
                     command.help()
@@ -222,11 +222,11 @@ impl Command for ClearCommand {
     fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         unsafe {
             // Clear screen by printing 25 empty lines
-            crate::ffi::vga_set_color(0, 0);
+            crate::VgaText::set_color(0, 0);
             for _ in 0..25 {
-                crate::ffi::vga_println(c"".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"");
             }
-            crate::ffi::vga_set_color(7, 0);
+            crate::VgaText::set_color(7, 0);
         }
         Ok(())
     }
@@ -246,10 +246,10 @@ impl Command for EchoCommand {
     
     fn execute(&self, args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         if args.is_empty() {
-            crate::ffi::vga_println_str("");
+            crate::VgaText::println("");
         } else {
             let text = args.join(" ");
-            crate::ffi::vga_println_str(&text);
+            crate::VgaText::println(&text);
         }
         Ok(())
     }
@@ -269,18 +269,18 @@ impl Command for VersionCommand {
     
     fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         colors::print_info(OS_NAME);
-        crate::ffi::vga_println_str(&alloc::format!("Version: {}", OS_VERSION));
-        crate::ffi::vga_println_str(&alloc::format!("Architecture: {}", OS_ARCH));
-        crate::ffi::vga_println_str(&alloc::format!("Language: {}", OS_LANGUAGE));
-        crate::ffi::vga_println_str("");
-        crate::ffi::vga_println_str("Features:");
-        crate::ffi::vga_println_str("  [x] Multiboot2 boot");
-        crate::ffi::vga_println_str("  [x] VGA text mode");
-        crate::ffi::vga_println_str("  [x] PS/2 keyboard");
-        crate::ffi::vga_println_str("  [x] Memory management");
-        crate::ffi::vga_println_str("  [x] Rust integration");
-        crate::ffi::vga_println_str("  [x] Terminal interface");
-        crate::ffi::vga_println_str("  [x] Diagnostic commands");
+        crate::VgaText::println(&alloc::format!("Version: {}", OS_VERSION));
+        crate::VgaText::println(&alloc::format!("Architecture: {}", OS_ARCH));
+        crate::VgaText::println(&alloc::format!("Language: {}", OS_LANGUAGE));
+        crate::VgaText::println("");
+        crate::VgaText::println("Features:");
+        crate::VgaText::println("  [x] Multiboot2 boot");
+        crate::VgaText::println("  [x] VGA text mode");
+        crate::VgaText::println("  [x] PS/2 keyboard");
+        crate::VgaText::println("  [x] Memory management");
+        crate::VgaText::println("  [x] Rust integration");
+        crate::VgaText::println("  [x] Terminal interface");
+        crate::VgaText::println("  [x] Diagnostic commands");
         Ok(())
     }
 }
@@ -303,27 +303,27 @@ impl Command for SysinfoCommand {
         }
 
         colors::print_info("System Summary");
-        crate::ffi::vga_println_str("");
-        crate::ffi::vga_println_str(OS_NAME);
-        crate::ffi::vga_println_str(&alloc::format!("Version: {}", OS_VERSION));
-        crate::ffi::vga_println_str(&alloc::format!("Architecture: {}", OS_ARCH));
+        crate::VgaText::println("");
+        crate::VgaText::println(OS_NAME);
+        crate::VgaText::println(&alloc::format!("Version: {}", OS_VERSION));
+        crate::VgaText::println(&alloc::format!("Architecture: {}", OS_ARCH));
 
         let mut vendor = [0u8; 13];
         unsafe {
             crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::ffi::vga_print(c"CPU Vendor: ".as_ptr() as *const u8);
-            crate::ffi::vga_println(vendor.as_ptr());
+            crate::VgaText::print_bytes(b"CPU Vendor: ");
+            crate::terminal::println_cstr(&vendor[..]);
         }
 
-        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
-        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let total_memory = alloy_kernel_hal::mem::total_memory();
+        let available_memory = alloy_kernel_hal::mem::available_memory();
         let used_memory = total_memory.saturating_sub(available_memory);
         print_size_line("Memory Total: ", total_memory);
         print_size_line("Memory Used:  ", used_memory);
         print_size_line("Memory Free:  ", available_memory);
 
-        let uptime_ms = unsafe { crate::ffi::get_system_uptime_ms() };
-        crate::ffi::vga_print_str("Uptime: ");
+        let uptime_ms = unsafe { crate::SystemTimer::uptime_ms() };
+        crate::VgaText::print("Uptime: ");
         print_uptime_value(uptime_ms);
         Ok(())
     }
@@ -347,8 +347,8 @@ impl Command for UnameCommand {
         }
 
         match args.first().copied() {
-            None => crate::ffi::vga_println_str(OS_UNAME),
-            Some("-a") => crate::ffi::vga_println_str(&alloc::format!(
+            None => crate::VgaText::println(OS_UNAME),
+            Some("-a") => crate::VgaText::println(&alloc::format!(
                 "{} {} {} {}",
                 OS_UNAME,
                 OS_VERSION,
@@ -380,21 +380,21 @@ impl Command for FreeCommand {
         }
 
         colors::print_info("Memory Usage");
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
 
-        let total_memory = unsafe { crate::ffi::pmm_get_total_memory() };
-        let available_memory = unsafe { crate::ffi::pmm_get_available_memory() };
+        let total_memory = alloy_kernel_hal::mem::total_memory();
+        let available_memory = alloy_kernel_hal::mem::available_memory();
         let used_memory = total_memory.saturating_sub(available_memory);
         let heap_size = unsafe { crate::ffi::vmm_get_heap_size() };
         let allocated_pages = unsafe { crate::ffi::vmm_get_allocated_pages() };
 
-        crate::ffi::vga_println_str("Physical:");
+        crate::VgaText::println("Physical:");
         print_size_line("  Total: ", total_memory);
         print_size_line("  Used:  ", used_memory);
         print_size_line("  Free:  ", available_memory);
 
-        crate::ffi::vga_println_str("");
-        crate::ffi::vga_println_str("Virtual Heap:");
+        crate::VgaText::println("");
+        crate::VgaText::println("Virtual Heap:");
         print_size_line("  Mapped bytes: ", heap_size as u64);
         print_u32_decimal_line("  Alloc pages:  ", allocated_pages);
 
@@ -420,11 +420,11 @@ impl Command for TicksCommand {
         }
 
         colors::print_info("Timer Statistics");
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
 
-        let tick_count = unsafe { crate::ffi::timer_get_ticks_ffi() };
-        let uptime_ms = unsafe { crate::ffi::timer_get_uptime_ms_ffi() };
-        let frequency_hz = unsafe { crate::ffi::timer_get_frequency_ffi() };
+        let tick_count = unsafe { crate::SystemTimer::ticks() };
+        let uptime_ms = unsafe { crate::SystemTimer::uptime_ms() };
+        let frequency_hz = unsafe { crate::SystemTimer::frequency() };
 
         print_u64_decimal_line("Tick count:     ", tick_count);
         print_u64_decimal_line("Uptime (ms):    ", uptime_ms);
@@ -454,50 +454,50 @@ impl Command for MeminfoCommand {
         use crate::utils::format;
         
         colors::print_info("Memory Statistics");
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
         
         // Get PMM statistics
-        unsafe {
-            let total_frames = crate::ffi::pmm_get_total_frames();
-            let used_frames = crate::ffi::pmm_get_used_frames();
+        {
+            let total_frames = alloy_kernel_hal::mem::total_frames();
+            let used_frames = alloy_kernel_hal::mem::used_frames();
             let free_frames = total_frames - used_frames;
-            let total_memory = crate::ffi::pmm_get_total_memory();
-            let available_memory = crate::ffi::pmm_get_available_memory();
+            let total_memory = alloy_kernel_hal::mem::total_memory();
+            let available_memory = alloy_kernel_hal::mem::available_memory();
             
-            crate::ffi::vga_println_str("Physical Memory Manager:");
+            crate::VgaText::println("Physical Memory Manager:");
             
             // Total memory
             let (val_buf, unit_buf) = format::format_bytes(total_memory);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(c"  Total memory:     ".as_ptr() as *const u8);
-            crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&unit_buf[0] as *const u8);
+            crate::VgaText::print_bytes(b"  Total memory:     ");
+            crate::terminal::print_cstr(&val_buf[val_start..]);
+            crate::VgaText::print_bytes(b" ");
+            crate::terminal::println_cstr(&unit_buf[0..]);
             
             // Available memory
             let (val_buf, unit_buf) = format::format_bytes(available_memory);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(c"  Available memory: ".as_ptr() as *const u8);
-            crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&unit_buf[0] as *const u8);
+            crate::VgaText::print_bytes(b"  Available memory: ");
+            crate::terminal::print_cstr(&val_buf[val_start..]);
+            crate::VgaText::print_bytes(b" ");
+            crate::terminal::println_cstr(&unit_buf[0..]);
             
             // Frame statistics
             let total_frames_str = format::u32_to_decimal(total_frames);
             let used_frames_str = format::u32_to_decimal(used_frames);
             let free_frames_str = format::u32_to_decimal(free_frames);
             
-            crate::ffi::vga_print(c"  Total frames:     ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&total_frames_str[format::trim_leading_spaces(&total_frames_str)] as *const u8);
+            crate::VgaText::print_bytes(b"  Total frames:     ");
+            crate::terminal::println_cstr(&total_frames_str[format::trim_leading_spaces(&total_frames_str)..]);
             
-            crate::ffi::vga_print(c"  Used frames:      ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&used_frames_str[format::trim_leading_spaces(&used_frames_str)] as *const u8);
+            crate::VgaText::print_bytes(b"  Used frames:      ");
+            crate::terminal::println_cstr(&used_frames_str[format::trim_leading_spaces(&used_frames_str)..]);
             
-            crate::ffi::vga_print(c"  Free frames:      ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&free_frames_str[format::trim_leading_spaces(&free_frames_str)] as *const u8);
+            crate::VgaText::print_bytes(b"  Free frames:      ");
+            crate::terminal::println_cstr(&free_frames_str[format::trim_leading_spaces(&free_frames_str)..]);
         }
         
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
         
         // Get VMM statistics
         unsafe {
@@ -505,60 +505,60 @@ impl Command for MeminfoCommand {
             let heap_size = crate::ffi::vmm_get_heap_size();
             let allocated_pages = crate::ffi::vmm_get_allocated_pages();
             
-            crate::ffi::vga_println_str("Virtual Memory Manager:");
+            crate::VgaText::println("Virtual Memory Manager:");
             
             // Heap start address
             let heap_start_hex = format::u32_to_hex(heap_start as u32);
-            crate::ffi::vga_print(c"  Heap start:       ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&heap_start_hex[0] as *const u8);
+            crate::VgaText::print_bytes(b"  Heap start:       ");
+            crate::terminal::println_cstr(&heap_start_hex[0..]);
             
             // Heap size
             let (val_buf, unit_buf) = format::format_bytes(heap_size as u64);
             let val_start = format::trim_leading_spaces(&val_buf);
-            crate::ffi::vga_print(c"  Heap size:        ".as_ptr() as *const u8);
-            crate::ffi::vga_print(&val_buf[val_start] as *const u8);
-            crate::ffi::vga_print(c" ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&unit_buf[0] as *const u8);
+            crate::VgaText::print_bytes(b"  Heap size:        ");
+            crate::terminal::print_cstr(&val_buf[val_start..]);
+            crate::VgaText::print_bytes(b" ");
+            crate::terminal::println_cstr(&unit_buf[0..]);
             
             // Allocated pages
             let allocated_pages_str = format::u32_to_decimal(allocated_pages);
-            crate::ffi::vga_print(c"  Allocated pages:  ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&allocated_pages_str[format::trim_leading_spaces(&allocated_pages_str)] as *const u8);
+            crate::VgaText::print_bytes(b"  Allocated pages:  ");
+            crate::terminal::println_cstr(&allocated_pages_str[format::trim_leading_spaces(&allocated_pages_str)..]);
         }
         
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
         
         // Get allocator statistics
         let (slab_stats, heap_stats) = crate::allocator::get_stats();
         
-        crate::ffi::vga_println_str("Rust Allocators:");
+        crate::VgaText::println("Rust Allocators:");
         
         // Slab allocator
         let slab_alloc_str = format::u32_to_decimal(slab_stats.0 as u32);
         let slab_freed_str = format::u32_to_decimal(slab_stats.1 as u32);
         
-        crate::ffi::vga_print_str("  Slab allocated:   ");
+        crate::VgaText::print("  Slab allocated:   ");
         unsafe {
-            crate::ffi::vga_println(&slab_alloc_str[format::trim_leading_spaces(&slab_alloc_str)] as *const u8);
+            crate::terminal::println_cstr(&slab_alloc_str[format::trim_leading_spaces(&slab_alloc_str)..]);
         }
         
-        crate::ffi::vga_print_str("  Slab freed:       ");
+        crate::VgaText::print("  Slab freed:       ");
         unsafe {
-            crate::ffi::vga_println(&slab_freed_str[format::trim_leading_spaces(&slab_freed_str)] as *const u8);
+            crate::terminal::println_cstr(&slab_freed_str[format::trim_leading_spaces(&slab_freed_str)..]);
         }
         
         // Heap allocator
         let heap_alloc_str = format::u32_to_decimal(heap_stats.0 as u32);
         let heap_freed_str = format::u32_to_decimal(heap_stats.1 as u32);
         
-        crate::ffi::vga_print_str("  Heap allocated:   ");
+        crate::VgaText::print("  Heap allocated:   ");
         unsafe {
-            crate::ffi::vga_println(&heap_alloc_str[format::trim_leading_spaces(&heap_alloc_str)] as *const u8);
+            crate::terminal::println_cstr(&heap_alloc_str[format::trim_leading_spaces(&heap_alloc_str)..]);
         }
         
-        crate::ffi::vga_print_str("  Heap freed:       ");
+        crate::VgaText::print("  Heap freed:       ");
         unsafe {
-            crate::ffi::vga_println(&heap_freed_str[format::trim_leading_spaces(&heap_freed_str)] as *const u8);
+            crate::terminal::println_cstr(&heap_freed_str[format::trim_leading_spaces(&heap_freed_str)..]);
         }
         
         Ok(())
@@ -590,14 +590,14 @@ impl Command for CpuInfoCommand {
         use crate::utils::format;
         
         colors::print_info("CPU Information");
-        crate::ffi::vga_println_str("");
+        crate::VgaText::println("");
         
         unsafe {
             // Get CPU vendor
             let mut vendor = [0u8; 13];
             crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::ffi::vga_print(c"Vendor:   ".as_ptr() as *const u8);
-            crate::ffi::vga_println(vendor.as_ptr());
+            crate::VgaText::print_bytes(b"Vendor:   ");
+            crate::terminal::println_cstr(&vendor[..]);
             
             // Get model info
             let mut family: u32 = 0;
@@ -609,40 +609,40 @@ impl Command for CpuInfoCommand {
             let model_str = format::u32_to_decimal(model);
             let stepping_str = format::u32_to_decimal(stepping);
             
-            crate::ffi::vga_print(c"Family:   ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&family_str[format::trim_leading_spaces(&family_str)] as *const u8);
+            crate::VgaText::print_bytes(b"Family:   ");
+            crate::terminal::println_cstr(&family_str[format::trim_leading_spaces(&family_str)..]);
             
-            crate::ffi::vga_print(c"Model:    ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&model_str[format::trim_leading_spaces(&model_str)] as *const u8);
+            crate::VgaText::print_bytes(b"Model:    ");
+            crate::terminal::println_cstr(&model_str[format::trim_leading_spaces(&model_str)..]);
             
-            crate::ffi::vga_print(c"Stepping: ".as_ptr() as *const u8);
-            crate::ffi::vga_println(&stepping_str[format::trim_leading_spaces(&stepping_str)] as *const u8);
+            crate::VgaText::print_bytes(b"Stepping: ");
+            crate::terminal::println_cstr(&stepping_str[format::trim_leading_spaces(&stepping_str)..]);
             
             // Get features
             let features = crate::ffi::cpu_get_features_ffi();
             
-            crate::ffi::vga_println(c"\nFeatures:".as_ptr() as *const u8);
+            crate::VgaText::println_bytes(b"\nFeatures:");
             
             if features & CPU_FEATURE_FPU != 0 {
-                crate::ffi::vga_println(c"  [x] FPU   - Floating Point Unit".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] FPU   - Floating Point Unit");
             }
             if features & CPU_FEATURE_TSC != 0 {
-                crate::ffi::vga_println(c"  [x] TSC   - Time Stamp Counter".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] TSC   - Time Stamp Counter");
             }
             if features & CPU_FEATURE_PAE != 0 {
-                crate::ffi::vga_println(c"  [x] PAE   - Physical Address Extension".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] PAE   - Physical Address Extension");
             }
             if features & CPU_FEATURE_APIC != 0 {
-                crate::ffi::vga_println(c"  [x] APIC  - Advanced Programmable Interrupt Controller".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] APIC  - Advanced Programmable Interrupt Controller");
             }
             if features & CPU_FEATURE_MMX != 0 {
-                crate::ffi::vga_println(c"  [x] MMX   - MMX Instructions".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] MMX   - MMX Instructions");
             }
             if features & CPU_FEATURE_SSE != 0 {
-                crate::ffi::vga_println(c"  [x] SSE   - Streaming SIMD Extensions".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] SSE   - Streaming SIMD Extensions");
             }
             if features & CPU_FEATURE_SSE2 != 0 {
-                crate::ffi::vga_println(c"  [x] SSE2  - Streaming SIMD Extensions 2".as_ptr() as *const u8);
+                crate::VgaText::println_bytes(b"  [x] SSE2  - Streaming SIMD Extensions 2");
             }
         }
         
@@ -664,7 +664,7 @@ impl Command for UptimeCommand {
     
     fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
         unsafe {
-            let uptime_ms = crate::ffi::get_system_uptime_ms();
+            let uptime_ms = crate::SystemTimer::uptime_ms();
 
             colors::print_info("System Uptime");
             print_uptime_value(uptime_ms);

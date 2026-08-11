@@ -8,6 +8,11 @@ use crate::ffi;
 #[derive(Debug)]
 pub struct FdCloseError;
 
+/// Kernel stack size per task. Must be large enough for the deepest call
+/// chain (e.g. the socket table path builds a ~0x4800-byte frame on the
+/// caller's stack); 16KB overflowed into adjacent heap free blocks.
+pub const KERNEL_STACK_SIZE: usize = 64 * 1024;
+
 // Task ID counter for unique task IDs
 static NEXT_TASK_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -55,7 +60,7 @@ pub struct Task {
     state: TaskState,
     context: Box<CpuContext>,
     #[allow(dead_code)]
-    stack: Option<Box<[u8; 16384]>>,  // 16KB kernel stack
+    stack: Option<Box<[u8; KERNEL_STACK_SIZE]>>,  // kernel stack
     name: String,
     // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
     fds: [Option<(u64, usize)>; 32],
@@ -73,14 +78,14 @@ impl Task {
     pub fn new(entry: extern "C" fn(), name: &str) -> Self {
         let id = TaskId::new();
         
-        // Allocate kernel stack (16KB)
-        let mut stack = Box::new([0u8; 16384]);
+        // Allocate kernel stack
+        let mut stack = Box::new([0u8; KERNEL_STACK_SIZE]);
         
         // Set up initial context
         let mut context = Box::new(CpuContext::new());
         
         // Stack grows downward, so ESP/RSP points to the end
-        let stack_top = stack.as_mut_ptr() as usize + 16384;
+        let stack_top = stack.as_mut_ptr() as usize + KERNEL_STACK_SIZE;
         #[cfg(feature = "x86_64")]
         {
             // context_switch does: mov rsp,[ctx.rsp]; push RIP; ret
@@ -90,10 +95,24 @@ impl Task {
             context.rbp = stack_top as u64;
             context.rip = entry as usize as u64;
         }
+        #[cfg(feature = "aarch64")]
+        {
+            // load_context ERETs with SP = ctx.sp, ELR = ctx.elr, SPSR =
+            // ctx.spsr for fresh tasks (LR == 0 sentinel).  Preempted
+            // tasks resume by `ret`-ing to the saved LR (after
+            // `bl save_context`) and unwinding through the IRQ epilogue.
+            // Run at EL1h with IRQs unmasked so the timer can preempt us.
+            context.sp = (stack_top & !15) as u64;
+            context.fp = context.sp;
+            context.elr = entry as usize as u64;
+            context.lr = 0; // 0 = fresh-task sentinel: load_context ERETs
+            context.spsr = 0x5; // M[3:0]=EL1h, DAIF F/I/A/D all unmasked
+            context.ttbr0 = unsafe { ffi::paging_get_kernel_directory_phys() } as u64;
+        }
         unsafe {
-            ffi::serial_print(c"[Task] Created task with ID ".as_ptr() as *const u8);
+            crate::print!("[Task] Created task with ID ");
             // Print simple message without trying to print the name (causes issues)
-            ffi::serial_print(c"...\n".as_ptr() as *const u8);
+            crate::println!("...");
         }
         
         let mut task = Task {
@@ -193,7 +212,7 @@ impl Task {
     /// Create a task from raw parts (used by clone/fork)
     pub fn from_parts(
         context: Box<CpuContext>,
-        stack: Option<Box<[u8; 16384]>>,
+        stack: Option<Box<[u8; KERNEL_STACK_SIZE]>>,
         name: String,
         fds: [Option<(u64, usize)>; 32],
         heap_break: u32,
@@ -295,7 +314,7 @@ impl Task {
 impl Drop for Task {
     fn drop(&mut self) {
         unsafe {
-            ffi::serial_print(c"[Task] Dropping task\n".as_ptr() as *const u8);
+            crate::println!("[Task] Dropping task");
         }
 
         #[cfg(feature = "x86_64")]
@@ -305,7 +324,7 @@ impl Drop for Task {
         let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
         if pd != 0 && pd != kernel_pd {
             unsafe {
-                ffi::serial_print(c"[Task] Destroying task page directory\n".as_ptr() as *const u8);
+                crate::println!("[Task] Destroying task page directory");
                 ffi::paging_destroy_directory(pd);
             }
         }

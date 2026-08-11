@@ -1,12 +1,11 @@
-use crate::ffi;
 use crate::graphics::PlatformDisplay;
 use crate::fusion::FusionDisplayBackend;
 use crate::fusion::WaylandServer;
+use crate::ffi;
 
 fn serial_log(message: &'static [u8]) {
-    unsafe {
-        ffi::serial_print(message.as_ptr());
-    }
+    let len = message.iter().position(|&b| b == 0).unwrap_or(message.len());
+    crate::Serial::write_bytes(&message[..len]);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

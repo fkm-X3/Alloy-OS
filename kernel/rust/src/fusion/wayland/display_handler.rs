@@ -109,7 +109,7 @@ impl DisplayHandler {
         });
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland Display] Handled sync request\n".as_ptr() as *const u8);
+            crate::println!("[Wayland Display] Handled sync request");
         }
 
         Ok(DisplayResponse::SyncAck {
@@ -134,7 +134,7 @@ impl DisplayHandler {
         let registry_id = u32::from_le_bytes(registry_id_bytes);
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland Display] Handled get_registry request\n".as_ptr() as *const u8);
+            crate::println!("[Wayland Display] Handled get_registry request");
         }
 
         Ok(DisplayResponse::RegistryCreated { registry_id })

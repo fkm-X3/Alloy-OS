@@ -1,4 +1,5 @@
 #include "boot/types.h"
+#include "../../drivers/timer.h"
 
 // Exception vectors are defined in exception_vectors.S
 // This file provides C handlers for the assembly vector stubs
@@ -15,8 +16,8 @@ void exception_handler_el1() {
 
 void irq_handler_el1() {
     // Called from irq_handler_el1_asm for IRQs
-    // For now, just acknowledge and return
-    // TODO: dispatch to device-specific IRQ handlers
+    // Dispatch to the timer (GIC PPI 30); timer_handler acks and reloads.
+    timer_handler();
 }
 
 void page_fault_handler(uint64_t far, uint64_t esr) {
@@ -40,9 +41,15 @@ void svc_handler(uint64_t num, uint64_t arg0, uint64_t arg1,
                        (uint32_t)arg2, (uint32_t)arg3, (uint32_t)arg4, 0);
 }
 
+// Full kernel exception vector table (exception_vectors.S).
+// The boot-time table (boot_aarch64.S) only handles the bootstrap window.
+extern uint8_t _exception_vectors;
+
 void init_idt() {
-    // Exception vectors are set up in boot_aarch64.S
-    // VBAR_EL1 is configured there, no additional setup needed here
+    // Point VBAR_EL1 at the full kernel vector table. Its IRQ handlers
+    // save ALL registers (boot_aarch64.S's bootstrap table did not).
+    asm volatile("msr vbar_el1, %0" : : "r"(&_exception_vectors));
+    asm volatile("isb");
 
     // Enable IRQs (use DAIF)
     asm volatile("msr daifclr, #0b0010");  // Clear IRQ mask only

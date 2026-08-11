@@ -1,0 +1,200 @@
+[
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/arch/cpu.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/arch/cpu.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/arch/syscall.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/arch/syscall.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/arch/aarch64/gdt.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/arch/aarch64/gdt.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/arch/aarch64/idt.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/arch/aarch64/idt.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/mm/pmm.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/mm/pmm.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/mm/vmm.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/mm/vmm.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/drivers/serial.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/drivers/serial.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/drivers/timer.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/drivers/timer.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/drivers/pl110.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/drivers/pl110.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/mm/paging_aarch64.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/mm/paging_aarch64.c"
+  },
+  {
+    "directory": "/home/bob/Alloy-OS",
+    "arguments": [
+      "clang",
+      "--target=aarch64-unknown-none",
+      "-std=gnu11",
+      "-ffreestanding",
+      "-nostdlib",
+      "-fno-builtin",
+      "-march=armv8-a",
+      "-DARCH_AARCH64",
+      "-Ikernel/c",
+      "-O2",
+      "-fsyntax-only",
+      "/home/bob/Alloy-OS/kernel/c/boot/main_aarch64.c"
+    ],
+    "file": "/home/bob/Alloy-OS/kernel/c/boot/main_aarch64.c"
+  }
+]

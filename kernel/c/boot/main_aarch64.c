@@ -11,7 +11,7 @@ void init_gdt();
 void init_idt();
 void rust_main();
 
-#define PL110_FRAMEBUFFER 0x48000000
+#define PL110_FRAMEBUFFER 0x47D00000
 #define SCREEN_WIDTH  1024
 #define SCREEN_HEIGHT 768
 

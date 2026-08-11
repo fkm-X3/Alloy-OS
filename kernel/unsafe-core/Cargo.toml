@@ -1,0 +1,19 @@
+[package]
+name = "alloy-kernel-unsafe-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "alloy_kernel_unsafe_core"
+path = "src/lib.rs"
+
+[features]
+default = ["x86_64"]
+x86_64 = []
+aarch64 = []
+# Enable the C2Rust-translated `kernel/c/` tree. Off by default so
+# the crate baseline builds without the machine output.
+ported = []
+
+[dependencies]
+c2rust-bitfields = { version = "0.22.1", default-features = false, features = ["no_std"] }

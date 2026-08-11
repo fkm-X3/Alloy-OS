@@ -257,7 +257,7 @@ impl WaylandServer {
         self.socket = Some(socket);
 
         unsafe {
-            crate::ffi::serial_print(c"[Wayland] Server initialized at /tmp/wayland-0\n".as_ptr() as *const u8);
+            crate::println!("[Wayland] Server initialized at /tmp/wayland-0");
         }
 
         Ok(())
@@ -289,7 +289,7 @@ impl WaylandServer {
             self.send_initial_globals(client_id);
 
             unsafe {
-                crate::ffi::serial_print(c"[Wayland] Accepted client connection\n".as_ptr() as *const u8);
+                crate::println!("[Wayland] Accepted client connection");
             }
 
             Ok(())
@@ -596,7 +596,7 @@ self.registry_handler.remove_client(client_id);
             self.compositor_handler.clear_surface_for_client(client_id);
 
             unsafe {
-                crate::ffi::serial_print(c"[Wayland] Client disconnected\n".as_ptr() as *const u8);
+                crate::println!("[Wayland] Client disconnected");
             }
             Ok(())
         } else {

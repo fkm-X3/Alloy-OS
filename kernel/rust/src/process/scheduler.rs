@@ -140,23 +140,40 @@ impl Scheduler {
                         // the old task back into the ready queue.
                         let mut re_lock = SCHEDULER.lock();
                         if let Some(ref mut re_sched) = *re_lock {
-                            let had_full_quantum =
-                                old_box.ticks_used() >= QUANTA[old_box.priority() as usize];
-                            if had_full_quantum {
-                                let new_p =
-                                    (old_box.priority() + 1).min(NUM_PRIORITIES as u8 - 1);
-                                old_box.set_priority(new_p);
+                            if old_box.state() == TaskState::Terminated {
+                                // A terminated task must never be re-queued:
+                                // it would resume after sys_exit and keep
+                                // running (in aarch64's shared address space
+                                // it could even corrupt the kernel heap).
+                                // Leak the Box instead of dropping it: we are
+                                // currently executing on this very task's
+                                // kernel stack, and the heap lock may be held
+                                // by a preempted task — both make a free()
+                                // here unsafe.
+                                core::mem::forget(old_box);
                             } else {
-                                let new_p = old_box.priority().saturating_sub(1);
-                                old_box.set_priority(new_p);
+                                let had_full_quantum =
+                                    old_box.ticks_used() >= QUANTA[old_box.priority() as usize];
+                                if had_full_quantum {
+                                    let new_p =
+                                        (old_box.priority() + 1).min(NUM_PRIORITIES as u8 - 1);
+                                    old_box.set_priority(new_p);
+                                } else {
+                                    let new_p = old_box.priority().saturating_sub(1);
+                                    old_box.set_priority(new_p);
+                                }
+                                old_box.reset_ticks_used();
+                                old_box.set_state(TaskState::Ready);
+                                re_sched.ready_queues[old_box.priority() as usize].push_back(old_box);
                             }
-                            old_box.reset_ticks_used();
-                            old_box.set_state(TaskState::Ready);
-                            re_sched.ready_queues[old_box.priority() as usize].push_back(old_box);
                         }
-                        // re_lock drops here → lock released, IRQs stay
-                        // disabled (original RFLAGS had IF=0 from the outer
-                        // lock() that saved IF=0 after fetch_add).
+                        // Release re_lock explicitly BEFORE load_context.
+                        // load_context is `-> !` (aarch64 erets / x86_64 jmp),
+                        // so a guard Drop placed after it is unreachable and
+                        // eliminated by the compiler — the lock would leak.
+                        // IRQs stay disabled (original RFLAGS had IF=0 from
+                        // the outer lock() that saved IF=0 after fetch_add).
+                        re_lock.release_no_irq_restore();
 
                         // Reset depth and load new context — never returns
                         SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
@@ -171,7 +188,7 @@ impl Scheduler {
                         // Re-enable interrupts before returning so that the
                         // IRQ handler (which will iretq back to the task)
                         // runs with correct IF state.
-                        unsafe { core::arch::asm!("sti"); }
+                        crate::sync::irq_enable();
                     }
                 }
             }
@@ -248,7 +265,7 @@ impl Scheduler {
 
         let child = Box::new(Task::from_parts(
             ctx,
-            Some(Box::new([0u8; 16384])),
+            Some(Box::new([0u8; crate::process::task::KERNEL_STACK_SIZE])),
             String::from("clone"),
             [None; 32],
             0x01000000,
@@ -457,9 +474,11 @@ impl Scheduler {
         }
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_timer_tick() {
-        let ticks = unsafe { ffi::timer_get_ticks_ffi() };
+    /// Timer-tick handler, registered via
+    /// `set_timer_tick_handler` at boot and invoked from IRQ context on
+    /// every timer interrupt.
+    pub fn rust_timer_tick() {
+        let ticks = crate::SystemTimer::ticks();
 
         if ticks > 0 && ticks % BOOST_INTERVAL == 0 {
             Self::boost_priorities();
@@ -475,13 +494,14 @@ impl Scheduler {
         }
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_handle_page_fault(_addr: usize, _err: u32) {
-        unsafe {
-            crate::ffi::serial_print(c"[Scheduler] rust_handle_page_fault invoked — terminating task\n".as_ptr() as *const u8);
-        }
+    /// Page-fault handler, registered via `set_page_fault_handler` at boot
+    /// and invoked from exception context for user-mode faults.
+    pub fn rust_handle_page_fault(_addr: usize, _err: u32) -> alloy_kernel_hal::FaultAction {
+        crate::println!("[Scheduler] rust_handle_page_fault invoked — terminating task");
 
         Self::terminate_current(1);
+
+        alloy_kernel_hal::FaultAction::Terminate
     }
 
     #[no_mangle]

@@ -5,7 +5,6 @@
 
 use core::ptr::null_mut;
 use core::alloc::Layout;
-use crate::ffi;
 
 /// Minimum allocation size (to store free list node)
 const MIN_BLOCK_SIZE: usize = 16;
@@ -103,7 +102,7 @@ impl HeapAllocator {
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let align = layout.align().max(HEAP_ALIGN);
         if align > HEAP_ALIGN {
-            ffi::serial_print(c"[Heap] ERROR: Unsupported allocation alignment\n".as_ptr() as *const u8);
+            crate::println!("[Heap] ERROR: Unsupported allocation alignment");
             return null_mut();
         }
 
@@ -121,14 +120,17 @@ impl HeapAllocator {
         // No suitable block found, allocate new pages from VMM
         let pages_needed = total_size.div_ceil(4096);
         let alloc_size = pages_needed * 4096;
-        
-        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
-        ffi::serial_print(c"[Heap] Before vmm_alloc_region\n".as_ptr() as *const u8);
-        let ptr = ffi::vmm_alloc_region(alloc_size, flags) as *mut u8;
-        ffi::serial_print(c"[Heap] After vmm_alloc_region\n".as_ptr() as *const u8);
+
+        crate::println!("[Heap] Before vmm_alloc_region");
+        let region = alloy_kernel_hal::mem::VmRegion::alloc(alloc_size, alloy_kernel_hal::PageFlags::kernel_write());
+        let ptr = match region {
+            Some(r) => r.leak() as *mut u8,
+            None => null_mut(),
+        };
+        crate::println!("[Heap] After vmm_alloc_region");
         
         if ptr.is_null() {
-            ffi::serial_print(c"[Heap] ERROR: VMM allocation failed!\n".as_ptr() as *const u8);
+            crate::println!("[Heap] ERROR: VMM allocation failed!");
             return null_mut();
         }
         
@@ -165,11 +167,10 @@ impl HeapAllocator {
         // Validate header before proceeding
         if !(*header).is_valid() {
             // Detailed corruption reporting
-            use crate::ffi;
-            ffi::serial_print(c"[Heap] CRITICAL: Heap corruption detected!\n".as_ptr() as *const u8);
-            ffi::serial_print(c"  Pointer: ".as_ptr() as *const u8);
-            ffi::serial_print(c"  Expected magic: 0xDEADBEEF\n".as_ptr() as *const u8);
-            ffi::serial_print(c"  Actual magic: ".as_ptr() as *const u8);
+            crate::println!("[Heap] CRITICAL: Heap corruption detected!");
+            crate::print!("  Pointer: ");
+            crate::println!("  Expected magic: 0xDEADBEEF");
+            crate::print!("  Actual magic: ");
             
             panic!("Heap corruption at {:p}", ptr);
         }

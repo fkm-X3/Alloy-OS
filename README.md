@@ -10,8 +10,9 @@
   <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml/badge.svg" alt="Quick Check"></a>
 </p>
 
-## How will Alloy-OS be rewritten in rust
-Im not going to be porting over every line of legacy C one by one, im going to use C2Rust, its un-idiomatic, full of ugly, un-idiomatic, raw-pointer-heavy Rust but its better then manual porting, and thats really that all matters for now.
+
+> [!IMPORTANT]
+> Alloy-OS is being rewritten entirely in RUST, Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch Main branch.
 
 ## Quick start
 

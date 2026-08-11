@@ -121,12 +121,14 @@ impl SlabCache {
     
     /// Create a new slab
     unsafe fn create_slab(&mut self) -> *mut SlabHeader {
-        use crate::ffi;
         
         // Allocate memory for slab (1 page = 4KB)
-        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
         crate::println!("[Slab] Before vmm_alloc_region");
-        let ptr = ffi::vmm_alloc_region(4096, flags) as *mut u8;
+        let region = alloy_kernel_hal::mem::VmRegion::alloc(4096, alloy_kernel_hal::PageFlags::kernel_write());
+        let ptr = match region {
+            Some(r) => r.leak() as *mut u8,
+            None => null_mut(),
+        };
         crate::println!("[Slab] After vmm_alloc_region");
         
         if ptr.is_null() {

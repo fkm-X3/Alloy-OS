@@ -5,7 +5,6 @@
 
 use alloc::vec;
 use alloc::vec::Vec;
-use core::ffi::c_void;
 use core::fmt::Debug;
 
 use super::framebuffer::{Framebuffer, FramebufferInfo};
@@ -33,9 +32,11 @@ fn map_framebuffer_for_kernel_access(fb_addr: u64, fb_size: u64) -> Option<u64> 
 
     let mut page = start_page;
     while page < end_page {
-        let virt = page as usize as *mut c_void;
-        let phys = page as usize as *mut c_void;
-        let mapped = unsafe { ffi::vmm_map(virt, phys, ffi::PAGE_PRESENT | ffi::PAGE_WRITE) };
+        let mapped = alloy_kernel_hal::mem::map_page(
+            page as usize,
+            page as usize,
+            alloy_kernel_hal::PageFlags::kernel_write(),
+        );
         if !mapped {
             return None;
         }

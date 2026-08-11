@@ -565,15 +565,19 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
 
     if new_page > old_page {
         let alloc_size = new_page - old_page;
-        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
-        let ptr = unsafe { ffi::vmm_alloc_region(alloc_size as usize, flags) };
-        if ptr.is_null() {
+        let ptr = alloy_kernel_hal::mem::VmRegion::alloc(
+            alloc_size as usize,
+            alloy_kernel_hal::PageFlags::user_write(),
+        )
+        .map(|r| r.leak())
+        .unwrap_or(0);
+        if ptr == 0 {
             return u32::MAX;
         }
     } else if new_page < old_page {
         let free_start = new_page;
         let free_size = old_page - new_page;
-        unsafe { ffi::vmm_free_region(free_start as *mut core::ffi::c_void, free_size as usize); }
+        alloy_kernel_hal::mem::free_region(free_start as usize, free_size as usize);
     }
 
     let _ = crate::process::Scheduler::with_current_task_mut(|task| {
@@ -712,9 +716,13 @@ pub extern "C" fn rust_sys_mmap(hint: u32, length: u32, flags: u32) -> u32 {
     if map_anonymous {
         // For anonymous mappings, use the mmap region above the brk region.
         // Find a free virtual address range and map physical frames to it.
-        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
-        let ptr = unsafe { ffi::vmm_alloc_region(alloc_pages as usize, flags) };
-        if ptr.is_null() {
+        let ptr = alloy_kernel_hal::mem::VmRegion::alloc(
+            alloc_pages as usize,
+            alloy_kernel_hal::PageFlags::user_write(),
+        )
+        .map(|r| r.leak())
+        .unwrap_or(0);
+        if ptr == 0 {
             return 0xFFFFFFFF;
         }
         return ptr as u32;

@@ -5,7 +5,6 @@
 
 use core::ptr::null_mut;
 use core::alloc::Layout;
-use crate::ffi;
 
 /// Minimum allocation size (to store free list node)
 const MIN_BLOCK_SIZE: usize = 16;
@@ -121,10 +120,13 @@ impl HeapAllocator {
         // No suitable block found, allocate new pages from VMM
         let pages_needed = total_size.div_ceil(4096);
         let alloc_size = pages_needed * 4096;
-        
-        let flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE;
+
         crate::println!("[Heap] Before vmm_alloc_region");
-        let ptr = ffi::vmm_alloc_region(alloc_size, flags) as *mut u8;
+        let region = alloy_kernel_hal::mem::VmRegion::alloc(alloc_size, alloy_kernel_hal::PageFlags::kernel_write());
+        let ptr = match region {
+            Some(r) => r.leak() as *mut u8,
+            None => null_mut(),
+        };
         crate::println!("[Heap] After vmm_alloc_region");
         
         if ptr.is_null() {

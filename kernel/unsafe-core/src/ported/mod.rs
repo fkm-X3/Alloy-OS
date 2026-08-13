@@ -77,23 +77,11 @@ pub mod drivers {
     }
 }
 
-pub mod mm {
-    pub mod pmm {
-        include!("common/mm_pmm.rs");
-    }
-    pub mod vmm {
-        include!("common/mm_vmm.rs");
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    pub mod paging {
-        include!("x86_64/mm/paging.rs");
-    }
-    #[cfg(target_arch = "aarch64")]
-    pub mod paging {
-        include!("aarch64/mm/paging_aarch64.rs");
-    }
-}
+// The C2Rust PMM/VMM/paging modules are replaced by the hand-written
+// `crate::mem::{pmm,vmm,paging,paging_aarch64}` and deleted
+// from the tree. The boot mains and `raw::ffi` still resolve the same
+// `#[no_mangle]` symbols (`g_pmm`, `g_vmm`, `g_paging`, `pmm_init`,
+// `vmm_init`, `paging_init`, ...) against the new modules.
 
 pub mod boot {
     #[cfg(target_arch = "x86_64")]

@@ -144,7 +144,7 @@ impl Pl110 {
 
 // ============================================================================
 // C-ABI entry points kept for surviving callers (aarch64 boot main,
-// kernel graphics until Session 3.4).
+// kernel graphics).
 // ============================================================================
 
 /// `pl110_init(fb_addr, width, height)`.

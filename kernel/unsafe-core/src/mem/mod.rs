@@ -1,15 +1,22 @@
-//! Safe physical-memory API (Phase 3.3).
+//! Safe physical-memory API.
 //!
 //! Replaces the raw `ffi::pmm_*`/`ffi::paging_*` call sites in the safe
 //! kernel with types and functions that cannot cause UB from safe code.
 //! Raw pointers never cross this module's public surface: physical frames
 //! are `usize` addresses, buffers are slices.
 //!
-//! Session 3.3.1 delivered `PhysFrame` + the PMM stat accessors. Session
-//! 3.3.2 adds `VmRegion` + `map_page`/`unmap_page`/`free_region` + the temp
-//! window helper. Session 3.3.3 adds `AddressSpace` (kernel/create/switch/
-//! destroy, map-in-pd, clone/fork-COW, `handle_cow_fault`). Session 3.3.4
-//! adds the validated user copies.
+//! The `#[no_mangle]` C-ABI entry points in the `pmm`/`vmm`/`paging`
+//! submodules keep the boot mains, the surviving ported modules (idt, vesa,
+//! ahci, ...) and `raw::ffi` resolving against the same symbols as before.
+
+// Hand-written replacements for the ported PMM/VMM/paging.
+pub mod pmm;
+pub mod vmm;
+#[cfg(feature = "x86_64")]
+pub mod paging;
+#[cfg(feature = "aarch64")]
+pub mod paging_aarch64;
+pub mod user;
 
 use core::ffi::c_void;
 
@@ -155,7 +162,7 @@ impl Drop for PhysFrame {
 }
 
 // ----------------------------------------------------------------------------
-// Virtual regions and page mapping (Session 3.3.2).
+// Virtual regions and page mapping.
 // ----------------------------------------------------------------------------
 
 fn align_up(value: usize, align: usize) -> usize {
@@ -256,7 +263,7 @@ pub fn free_region(addr: usize, size: usize) {
 /// The window is a single slot shared by the whole system and is not safe
 /// against interrupts or task switches, so callers must keep IRQs disabled
 /// across the call (the ported spawn path already does this). Consumed by
-/// the spawn migration in Session 3.3.3.
+/// the spawn migration.
 #[allow(dead_code)]
 pub fn with_temp_frame<R>(phys: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R> {
     let ptr = unsafe { ffi::paging_temp_map_frame(phys) };
@@ -269,7 +276,7 @@ pub fn with_temp_frame<R>(phys: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R
 }
 
 // ----------------------------------------------------------------------------
-// Address spaces (Session 3.3.3).
+// Address spaces .
 // ----------------------------------------------------------------------------
 
 /// A per-process address space (an x86_64 page directory), owned RAII-style.

@@ -765,7 +765,7 @@ pub extern "C" fn rust_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32
 /// Only the numbers the translated C dispatcher routed are registered, so
 /// userland-visible behavior is byte-identical (19, 25–28 still fall to the
 /// dispatcher's "unknown syscall" path). Registering the remaining handlers
-/// lands with their subsystems in a later session.
+/// lands with their subsystems in a later code.
 pub fn register_all() {
     use alloy_kernel_hal::{SyscallHandler, SyscallTable};
 

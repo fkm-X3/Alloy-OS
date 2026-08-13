@@ -38,7 +38,7 @@ pub mod api;
 /// Safe driver facades (Serial, SystemTimer, VgaText, Pl110).
 pub mod drivers;
 
-/// Syscall/timer/page-fault callback registration (Phase 3.2).
+/// Syscall/timer/page-fault callback registration.
 ///
 /// The ported dispatcher/IRQ/exception handlers invoke the handlers the
 /// kernel crate registers here at init; unsafe-core never calls back into
@@ -61,9 +61,8 @@ pub mod arch;
 /// MmioReg).
 pub mod io;
 
-/// Safe physical-memory API (Phase 3.3): PhysFrame, PageFlags, PMM stats.
-/// VmRegion (3.3.2), AddressSpace (3.3.3), and validated user copies (3.3.4)
-/// land here as their sub-sessions proceed.
+/// Safe physical-memory API: PhysFrame, PageFlags, PMM stats.
+/// VmRegion, AddressSpace, and validated user copies
 pub mod mem;
 
 /// Interrupt controller abstractions (InterruptController trait, Pic8259,

@@ -1,4 +1,4 @@
-//! Safe device-driver facades (Phase 3).
+//! Safe device-driver facades.
 //!
 //! Each module wraps one hardware console/timer device behind a safe type
 //! that the kernel crate can call without `unsafe`. The C2Rust modules in

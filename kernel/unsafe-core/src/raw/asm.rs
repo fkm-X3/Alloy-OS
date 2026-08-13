@@ -190,6 +190,14 @@ pub mod x86_64 {
         cr2
     }
 
+    /// Read CR3 (current page directory root).
+    #[inline]
+    pub fn read_cr3() -> u64 {
+        let cr3: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
+        cr3
+    }
+
     /// Write CR3 (switch page directory root).
     #[inline]
     pub fn write_cr3(value: u64) {

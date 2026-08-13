@@ -7,8 +7,9 @@
 //!
 //! Session 3.3.1 delivered `PhysFrame` + the PMM stat accessors. Session
 //! 3.3.2 adds `VmRegion` + `map_page`/`unmap_page`/`free_region` + the temp
-//! window helper. Later sub-sessions add `AddressSpace` (3.3.3) and the
-//! validated user copies (3.3.4).
+//! window helper. Session 3.3.3 adds `AddressSpace` (kernel/create/switch/
+//! destroy, map-in-pd, clone/fork-COW, `handle_cow_fault`). Session 3.3.4
+//! adds the validated user copies.
 
 use core::ffi::c_void;
 
@@ -221,6 +222,21 @@ pub fn map_page(virt: usize, phys: usize, flags: PageFlags) -> bool {
     unsafe { ffi::vmm_map(virt as *mut c_void, phys as *mut c_void, flags.raw()) }
 }
 
+/// Map `frame` at `virt` in the current address space, taking ownership of
+/// the frame (the page table owns it from then on).
+///
+/// On failure the frame is returned to the PMM instead of leaking. Used by
+/// the execve stack mapping, which populates the freshly-switched user page
+/// tables through the current-space `vmm_map` path.
+pub fn map_frame(virt: usize, frame: PhysFrame, flags: PageFlags) -> bool {
+    let phys = frame.addr();
+    let ok = unsafe { ffi::vmm_map(virt as *mut c_void, phys as *mut c_void, flags.raw()) };
+    if ok {
+        core::mem::forget(frame);
+    }
+    ok
+}
+
 /// Unmap a single page.
 pub fn unmap_page(virt: usize) {
     unsafe { ffi::vmm_unmap(virt as *mut c_void) };
@@ -250,6 +266,128 @@ pub fn with_temp_frame<R>(phys: usize, f: impl FnOnce(*mut u8) -> R) -> Option<R
     let result = f(ptr as *mut u8);
     unsafe { ffi::paging_temp_unmap_frame() };
     Some(result)
+}
+
+// ----------------------------------------------------------------------------
+// Address spaces (Session 3.3.3).
+// ----------------------------------------------------------------------------
+
+/// A per-process address space (an x86_64 page directory), owned RAII-style.
+///
+/// [`AddressSpace::kernel`] is a non-owning view of the shared kernel
+/// directory and is never destroyed. `create`/`clone_of`/`fork_of` return
+/// owned directories that are destroyed on drop, returning their frames to
+/// the PMM (honouring COW refcounts).
+///
+/// On aarch64 the translated paging is identity/no-op, so these operations
+/// degenerate to the kernel directory — the wrappers keep the API uniform
+/// while the MMU is disabled.
+pub struct AddressSpace {
+    pd_phys: usize,
+    owned: bool,
+}
+
+impl AddressSpace {
+    /// True when `pd_phys` is a fresh directory that drop must destroy.
+    ///
+    /// The aarch64 paging stubs return the kernel directory for
+    /// create/clone/fork, so a directory that degenerates to the kernel
+    /// directory is never owned.
+    fn owned(pd_phys: usize) -> bool {
+        unsafe { ffi::paging_get_kernel_directory_phys() != pd_phys }
+    }
+
+    /// The kernel's own shared address space (not owned; never destroyed).
+    pub fn kernel() -> Self {
+        AddressSpace {
+            pd_phys: unsafe { ffi::paging_get_kernel_directory_phys() },
+            owned: false,
+        }
+    }
+
+    /// Allocate a fresh address space whose kernel half mirrors the kernel
+    /// directory (used by spawn/execve).
+    pub fn create() -> Option<Self> {
+        let pd = unsafe { ffi::paging_create_directory_phys() };
+        if pd == 0 {
+            None
+        } else {
+            Some(AddressSpace { pd_phys: pd, owned: Self::owned(pd) })
+        }
+    }
+
+    /// Deep-clone the address space at `pd_phys` into a new owned one
+    /// (used by `clone`).
+    pub fn clone_of(pd_phys: usize) -> Option<Self> {
+        let pd = unsafe { ffi::paging_clone_directory(pd_phys) };
+        if pd == 0 {
+            None
+        } else {
+            Some(AddressSpace { pd_phys: pd, owned: Self::owned(pd) })
+        }
+    }
+
+    /// COW-fork the address space at `pd_phys` into a new owned one
+    /// (used by `fork`).
+    pub fn fork_of(pd_phys: usize) -> Option<Self> {
+        let pd = unsafe { ffi::paging_fork_directory(pd_phys) };
+        if pd == 0 {
+            None
+        } else {
+            Some(AddressSpace { pd_phys: pd, owned: Self::owned(pd) })
+        }
+    }
+
+    /// Physical address of the page directory backing this address space
+    /// (stored in `CpuContext.cr3` / `CpuContext.ttbr0`).
+    pub fn addr(&self) -> usize {
+        self.pd_phys
+    }
+
+    /// True when this is the kernel's own (non-owned) address space.
+    pub fn is_kernel(&self) -> bool {
+        !self.owned
+    }
+
+    /// Make this the CPU's active address space.
+    pub fn switch(&self) -> bool {
+        unsafe { ffi::paging_switch_to_directory(self.pd_phys) }
+    }
+
+    /// Record this as the current user address space — the base the user-copy
+    /// helpers switch CR3 to when touching user memory.
+    pub fn set_current_user(&self) {
+        unsafe { ffi::g_current_user_cr3 = self.pd_phys as u64 };
+    }
+
+    /// Map one frame into this address space at `virt`, taking ownership of
+    /// the frame (the page table owns it from then on).
+    ///
+    /// On failure the frame is returned to the PMM. Callers must keep IRQs
+    /// disabled across the call (the ported map uses the shared temp window).
+    pub fn map_page(&mut self, virt: usize, frame: PhysFrame, flags: PageFlags) -> bool {
+        let phys = frame.addr();
+        let ok = unsafe { ffi::paging_map_page_in_pd(self.pd_phys, virt, phys, flags.raw()) };
+        if ok {
+            core::mem::forget(frame);
+        }
+        ok
+    }
+
+    /// Handle a copy-on-write page fault at `fault_addr` in the address space
+    /// rooted at `pd_phys`. Returns true when the fault was resolved by the
+    /// ported COW machinery.
+    pub fn handle_cow_fault(pd_phys: usize, fault_addr: usize) -> bool {
+        unsafe { ffi::paging_handle_cow_fault(pd_phys, fault_addr) != 0 }
+    }
+}
+
+impl Drop for AddressSpace {
+    fn drop(&mut self) {
+        if self.owned {
+            unsafe { ffi::paging_destroy_directory(self.pd_phys) };
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------

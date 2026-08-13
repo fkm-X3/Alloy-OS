@@ -2,8 +2,8 @@
 //!
 //! Provides syscall handlers that can be invoked via INT 0x80
 
-use crate::ffi;
 use crate::process::Scheduler;
+use alloy_kernel_hal::mem::{self, AddressSpace, PageFlags, PhysFrame};
 
 pub mod table;
 pub mod dispatcher;
@@ -265,30 +265,24 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
         Some(v) => v,
         None => return u32::MAX,
     };
-    unsafe { crate::println!("[Syscall] Creating page directory"); }
-    let pd_phys = unsafe { ffi::paging_create_directory_phys() };
-    if pd_phys == 0 { return u32::MAX; }
-    unsafe { crate::println!("[Syscall] Loading ELF"); }
+    crate::println!("[Syscall] Creating page directory");
+    let Some(aspace) = AddressSpace::create() else { return u32::MAX; };
+    crate::println!("[Syscall] Loading ELF");
     match crate::elf::load_elf_from_bytes(&image) {
         Ok((entry, phdr_vaddr)) => {
-            unsafe { crate::println!("[Syscall] ELF loaded successfully"); }
-            let switched = unsafe { ffi::paging_switch_to_directory(pd_phys) };
-            if !switched { return u32::MAX; }
-            unsafe {
-                ffi::g_current_user_cr3 = pd_phys as u64;
-                crate::println!("[Syscall] Switched to user directory");
-            }
+            crate::println!("[Syscall] ELF loaded successfully");
+            if !aspace.switch() { return u32::MAX; }
+            aspace.set_current_user();
+            crate::println!("[Syscall] Switched to user directory");
 
             const STACK_BASE: u32 = 0x00C00000;
             const STACK_SIZE: u32 = 0x4000;
 
-            let stack_flags = ffi::PAGE_PRESENT | ffi::PAGE_WRITE | ffi::PAGE_USER;
+            let stack_flags = PageFlags::user_write();
             let mut page_addr = STACK_BASE;
             while page_addr < STACK_BASE + STACK_SIZE {
-                let phys = unsafe { ffi::pmm_alloc_frame() };
-                if phys.is_null() { return u32::MAX; }
-                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys, stack_flags) };
-                if !ok { return u32::MAX; }
+                let Some(frame) = PhysFrame::alloc() else { return u32::MAX; };
+                if !mem::map_frame(page_addr as usize, frame, stack_flags) { return u32::MAX; }
                 page_addr += 4096;
             }
             let stack_ptr = STACK_BASE;
@@ -372,13 +366,14 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
                 if crate::utils::copy_to_user(argc_addr, argc_bytes).is_err() { return u32::MAX; }
             }
 
+            let aspace_addr = aspace.addr();
             let _ = Scheduler::with_current_task_mut(|task| {
                 let ctx = task.context_mut();
                 #[cfg(feature = "x86_64")]
                 {
                     ctx.rip = entry as u64;
                     ctx.rsp = argc_addr as u64;
-                    ctx.cr3 = pd_phys as u64;
+                    ctx.cr3 = aspace_addr as u64;
                     ctx.cs = 0x23;
                     ctx.ds = 0x1B;
                     ctx.es = 0x1B;
@@ -388,9 +383,10 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
                 }
                 #[cfg(feature = "aarch64")]
                 {
-                    ctx.ttbr0 = pd_phys as u64;
+                    ctx.ttbr0 = aspace_addr as u64;
                     ctx.spsr = 0;
                 }
+                task.set_address_space(aspace);
             });
 
             0

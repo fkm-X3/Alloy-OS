@@ -72,7 +72,7 @@ extern "C" {
     pub fn paging_destroy_directory(pd_phys: usize);
     pub fn paging_clone_directory(pd_phys: usize) -> usize;
     pub fn paging_fork_directory(pd_phys: usize) -> usize;
-    pub fn paging_handle_cow_fault(fault_addr: usize) -> u8;
+    pub fn paging_handle_cow_fault(pd_phys: usize, fault_addr: usize) -> u8;
     pub fn paging_map_page_in_pd(pd_phys: usize, virt_addr: usize, phys_addr: usize, flags: u32) -> bool;
     pub fn paging_temp_map_frame(phys_addr: usize) -> *mut c_void;
     pub fn paging_temp_unmap_frame();

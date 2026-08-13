@@ -875,21 +875,16 @@ unsafe extern "C" fn fork_fork_pt(mut src_pt: *mut page_table, mut dst_pt: *mut 
         let mut pte: uint64_t = (*src_pt).0.entries[i as usize];
         if pte & 1 as uint64_t == 0 {
             (*dst_pt).0.entries[i as usize] = 0 as page_table_entry_t;
-        } else {
+        } else if pte & PAGE_USER as uint64_t != 0 && pte & PAGE_WRITE as uint64_t != 0 {
             let mut frame_phys: uint64_t = pte & 0xfffffffff000 as uint64_t;
             let mut flags: uint64_t = pte & 0xfff as uint64_t;
-            if flags & PAGE_WRITE as uint64_t != 0 {
-                flags &= !PAGE_WRITE as uint64_t;
-                flags |= PAGE_COW as uint64_t;
-                pmm_refcount_inc(frame_phys as uintptr_t as *mut ::core::ffi::c_void);
-                (*src_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
-                (*dst_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
-            } else {
-                flags |= PAGE_COW as uint64_t;
-                pmm_refcount_inc(frame_phys as uintptr_t as *mut ::core::ffi::c_void);
-                (*src_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
-                (*dst_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
-            }
+            flags &= !PAGE_WRITE as uint64_t;
+            flags |= PAGE_COW as uint64_t;
+            pmm_refcount_inc(frame_phys as uintptr_t as *mut ::core::ffi::c_void);
+            (*src_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
+            (*dst_pt).0.entries[i as usize] = (frame_phys | flags) as page_table_entry_t;
+        } else {
+            (*dst_pt).0.entries[i as usize] = pte as page_table_entry_t;
         }
         i += 1;
     }
@@ -921,12 +916,11 @@ pub unsafe extern "C" fn paging_fork_directory(mut pd_phys: uintptr_t) -> uintpt
         win_map(pd_phys as uint64_t, 0 as ::core::ffi::c_int) as *mut page_directory;
     let mut dst_pml4: *mut page_directory =
         win2_map(dst_pml4_phys, 0 as ::core::ffi::c_int) as *mut page_directory;
-    let mut i: ::core::ffi::c_int = 0 as ::core::ffi::c_int;
-    while i < 4 as ::core::ffi::c_int {
-        (*dst_pml4).0.entries[i as usize] = (*src_pml4).0.entries[i as usize];
-        i += 1;
-    }
-    let mut pml4_i: ::core::ffi::c_int = 4 as ::core::ffi::c_int;
+    // Deep-fork ALL of the source directory with COW — including the user
+    // half (pml4 indices 0-3).  Previously those were copied verbatim, which
+    // made the child share the parent's user page tables writably (no COW
+    // isolation for user pages at all).
+    let mut pml4_i: ::core::ffi::c_int = 0 as ::core::ffi::c_int;
     's_54: loop {
         if !(pml4_i < 512 as ::core::ffi::c_int) {
             current_block = 10753070352654377903;
@@ -1082,9 +1076,53 @@ pub unsafe extern "C" fn paging_fork_directory(mut pd_phys: uintptr_t) -> uintpt
         }
     };
 }
+/// Resolve the page-table entry for `virt_addr` in the directory rooted at
+/// `pd_phys`, walking the tables through the kernel temp windows (safe from
+/// any CR3).  The returned pointer aliases the PT mapped in the temp window,
+/// so callers must modify it before any other window mapping.  Returns NULL
+/// for unmapped or huge-page (2MB) entries.
+unsafe extern "C" fn get_page_entry_in_pd(
+    mut pd_phys: uintptr_t,
+    mut virt_addr: uint64_t,
+) -> *mut uint64_t {
+    let mut pml4_idx: uint64_t = virt_addr >> 39 as ::core::ffi::c_int & 0x1ff as uint64_t;
+    let mut pdpt_idx: uint64_t = virt_addr >> 30 as ::core::ffi::c_int & 0x1ff as uint64_t;
+    let mut pd_idx: uint64_t = virt_addr >> 21 as ::core::ffi::c_int & 0x1ff as uint64_t;
+    let mut pt_idx: uint64_t = virt_addr >> 12 as ::core::ffi::c_int & 0x1ff as uint64_t;
+    let mut pml4: *mut page_directory =
+        win_map(pd_phys as uint64_t, PT_TEMP_IDX) as *mut page_directory;
+    let mut pml4e: uint64_t = (*pml4).0.entries[pml4_idx as usize];
+    win_unmap(PT_TEMP_IDX);
+    if pml4e & 1 as uint64_t == 0 {
+        return ::core::ptr::null_mut::<uint64_t>();
+    }
+    let mut pdpt_phys: uint64_t = pml4e & 0xfffffffff000 as uint64_t;
+    let mut pdpt: *mut page_table =
+        win_map(pdpt_phys, PT_TEMP_IDX) as *mut page_table;
+    let mut pdpde: uint64_t = (*pdpt).0.entries[pdpt_idx as usize];
+    win_unmap(PT_TEMP_IDX);
+    if pdpde & 1 as uint64_t == 0 {
+        return ::core::ptr::null_mut::<uint64_t>();
+    }
+    let mut pd_tbl_phys: uint64_t = pdpde & 0xfffffffff000 as uint64_t;
+    let mut pd_tbl: *mut page_table =
+        win_map(pd_tbl_phys, PT_TEMP_IDX) as *mut page_table;
+    let mut pde: uint64_t = (*pd_tbl).0.entries[pd_idx as usize];
+    win_unmap(PT_TEMP_IDX);
+    if pde & 1 as uint64_t == 0 || pde & 0x80 as uint64_t != 0 {
+        return ::core::ptr::null_mut::<uint64_t>();
+    }
+    let mut pt_phys: uint64_t = pde & 0xfffffffff000 as uint64_t;
+    let mut pt: *mut page_table = win_map(pt_phys, PT_TEMP_IDX) as *mut page_table;
+    return (&raw mut (*pt).0.entries as *mut page_table_entry_t).offset(pt_idx as isize)
+        as *mut uint64_t;
+}
 #[no_mangle]
-pub unsafe extern "C" fn paging_handle_cow_fault(mut fault_addr: uintptr_t) -> uint8_t {
-    let mut pte: *mut uint64_t = get_page_entry(fault_addr as uint64_t, false_0 != 0);
+pub unsafe extern "C" fn paging_handle_cow_fault(
+    mut pd_phys: uintptr_t,
+    mut fault_addr: uintptr_t,
+) -> uint8_t {
+    let mut pte: *mut uint64_t = get_page_entry_in_pd(pd_phys, fault_addr as uint64_t);
     if pte.is_null() || *pte & 1 as uint64_t == 0 {
         return 0 as uint8_t;
     }

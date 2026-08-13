@@ -197,6 +197,23 @@ pub fn vfs_init() {
         }
     }
 
+    let forktest_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../forktest"));
+    if !forktest_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/forktest", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, forktest_bytes.to_vec());
+                unsafe { crate::println!("[VFS] /forktest embedded into VFS"); }
+            }
+        }
+        if let Ok(id2) = vfs_open("/bin/forktest", 0, 0) {
+            let mut g2 = VFS_STATE.lock();
+            if let Some(state2) = g2.as_mut() {
+                state2.data.insert(id2, forktest_bytes.to_vec());
+            }
+        }
+    }
+
     let test_window_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_window"));
     if !test_window_bytes.is_empty() {
         if let Ok(id) = vfs_open("/test_window", 0, 0) {

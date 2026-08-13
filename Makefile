@@ -90,6 +90,7 @@ userland:
 	cp -f os/userland/build/$(ARCH)/hello hello 2>/dev/null || true
 	cp -f os/userland/build/$(ARCH)/compositor compositor 2>/dev/null || true
 	cp -f os/userland/build/$(ARCH)/test_wl_client test_wl_client 2>/dev/null || true
+	cp -f os/userland/build/$(ARCH)/forktest forktest 2>/dev/null || true
 ifneq ($(ARCH),aarch64)
 	cp -f os/userland/build/$(ARCH)/hello_cpp hello_cpp 2>/dev/null || touch hello_cpp
 	cp -f os/userland/build/$(ARCH)/test_qml test_window 2>/dev/null || touch test_window

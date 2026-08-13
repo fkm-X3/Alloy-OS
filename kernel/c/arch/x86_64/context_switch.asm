@@ -229,15 +229,16 @@ load_context:
     pop rax
     mov gs, ax
 
-    ; Pop RIP_new into rdx, then RSP_new into rsp
+    ; Pop RIP_new into rdx, then RSP_new into rax
     pop rdx             ; RDX = RIP_new
-    pop rsp             ; RSP = RSP_new
+    pop rax             ; RAX = RSP_new
 
     ; Check if kernel or user task
     cmp qword [rel cs_new], 0x23
     je .load_user_iretq
 
     ; ── KERNEL TASK ──────────────────────────────────────────────
+    mov rsp, rax            ; RSP = RSP_new (fresh kernel stack)
     or rsi, 0x200           ; Ensure IF set
     push rsi
     popfq
@@ -246,8 +247,12 @@ load_context:
 
 .load_user_iretq:
     ; ── USER TASK via iretq ──────────────────────────────────────
+    ; Build the iretq frame on the KERNEL stack (RSP currently points to
+    ; the kernel stack).  iretq pops RIP/CS/RFLAGS/RSP/SS from here and
+    ; switches to the user stack.  Never push the frame onto the user
+    ; stack: after fork the user stack is COW (read-only) and a kernel
+    ; write to it would page-fault.
     or rsi, 0x200
-    mov rax, rsp
     push qword 0x1B         ; SS
     push rax                ; RSP (user stack)
     push rsi                ; RFLAGS
@@ -470,9 +475,10 @@ context_switch:
     pop rax
     mov gs, ax
 
-    ; Pop RIP_new into rdx, then RSP_new into rsp
+    ; Pop RIP_new into rdx, then RSP_new into rax (kept in rax so the
+    ; iretq frame can be built on the kernel stack).
     pop rdx             ; RDX = RIP_new
-    pop rsp             ; RSP = RSP_new
+    pop rax             ; RAX = RSP_new
 
     DIAG_CHAR 'G'
 
@@ -480,6 +486,7 @@ context_switch:
     je .user_iretq
 
     ; ── KERNEL TASK: ring-0 -> ring-0 ──────────────────────────────
+    mov rsp, rax        ; RSP = RSP_new
     or rsi, 0x200
     push rsi
     popfq
@@ -495,9 +502,10 @@ context_switch:
 
     or rsi, 0x200
 
-    mov rax, rsp
+    ; Build the iretq frame on the KERNEL stack — never on the user stack,
+    ; which may be COW (read-only) after a fork.
     push qword 0x1B     ; SS
-    push rax            ; RSP
+    push rax            ; RSP (user stack)
     push rsi            ; RFLAGS
     push qword 0x23     ; CS
     push rdx            ; RIP

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::ffi;
+use alloy_kernel_hal::mem::AddressSpace;
 
 /// Error returned when closing a file descriptor fails
 #[derive(Debug)]
@@ -31,7 +31,7 @@ impl TaskId {
     pub fn new() -> Self {
         TaskId(NEXT_TASK_ID.fetch_add(1, Ordering::Relaxed))
     }
-    
+
     pub fn as_u32(&self) -> u32 {
         self.0
     }
@@ -59,6 +59,9 @@ pub struct Task {
     exit_code: u32,
     state: TaskState,
     context: Box<CpuContext>,
+    /// RAII owner of the task's page directory. Destroyed on drop; mirrors
+    /// `context.cr3`/`context.ttbr0`, which the asm context switch reads.
+    address_space: AddressSpace,
     #[allow(dead_code)]
     stack: Option<Box<[u8; KERNEL_STACK_SIZE]>>,  // kernel stack
     name: String,
@@ -107,7 +110,7 @@ impl Task {
             context.elr = entry as usize as u64;
             context.lr = 0; // 0 = fresh-task sentinel: load_context ERETs
             context.spsr = 0x5; // M[3:0]=EL1h, DAIF F/I/A/D all unmasked
-            context.ttbr0 = unsafe { ffi::paging_get_kernel_directory_phys() } as u64;
+            context.ttbr0 = AddressSpace::kernel().addr() as u64;
         }
         unsafe {
             crate::print!("[Task] Created task with ID ");
@@ -121,6 +124,7 @@ impl Task {
             exit_code: 0,
             state: TaskState::Ready,
             context,
+            address_space: AddressSpace::kernel(),
             stack: Some(stack),
             name: String::from(name),
             fds: [None; 32],
@@ -217,6 +221,7 @@ impl Task {
         fds: [Option<(u64, usize)>; 32],
         heap_break: u32,
         parent_id: Option<TaskId>,
+        address_space: AddressSpace,
     ) -> Self {
         Task {
             id: TaskId::new(),
@@ -224,6 +229,7 @@ impl Task {
             exit_code: 0,
             state: TaskState::Ready,
             context,
+            address_space,
             stack,
             name,
             fds,
@@ -278,6 +284,17 @@ impl Task {
         self.parent_id = pid;
     }
 
+    /// Replace the task's address space (e.g. on execve). The previous
+    /// address space is destroyed, returning its frames to the PMM.
+    pub fn set_address_space(&mut self, aspace: AddressSpace) {
+        self.address_space = aspace;
+    }
+
+    /// The task's current address space.
+    pub fn address_space(&self) -> &AddressSpace {
+        &self.address_space
+    }
+
     pub fn exit_code(&self) -> u32 {
         self.exit_code
     }
@@ -317,15 +334,9 @@ impl Drop for Task {
             crate::println!("[Task] Dropping task");
         }
 
-        #[cfg(feature = "x86_64")]
-        let pd = self.context.cr3 as usize;
-        #[cfg(feature = "aarch64")]
-        let pd = self.context.ttbr0 as usize;
-        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
-        if pd != 0 && pd != kernel_pd {
+        if !self.address_space.is_kernel() {
             unsafe {
                 crate::println!("[Task] Destroying task page directory");
-                ffi::paging_destroy_directory(pd);
             }
         }
     }

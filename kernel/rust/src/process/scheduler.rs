@@ -8,6 +8,7 @@ use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
 use crate::sync::SpinlockIRQ;
 use crate::ffi;
+use alloy_kernel_hal::mem::AddressSpace;
 
 /// Global scheduler instance — must use SpinlockIRQ because timer interrupts
 /// call rust_timer_tick() which acquires this lock from interrupt context.
@@ -236,7 +237,8 @@ impl Scheduler {
             None => return u32::MAX,
         };
         let mut ctx = Box::new(crate::process::task::CpuContext::new());
-        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
+        let kernel_pd = AddressSpace::kernel();
+        let mut child_as = AddressSpace::kernel();
 
         #[cfg(feature = "x86_64")]
         {
@@ -253,14 +255,14 @@ impl Scheduler {
 
             let current_cr3: usize = sched.current_task.as_ref()
                 .map(|t| t.context().cr3 as usize)
-                .unwrap_or(kernel_pd);
-            ctx.cr3 = if current_cr3 != kernel_pd {
-                let new_pd = unsafe { ffi::paging_clone_directory(current_cr3) };
-                if new_pd == 0 { return u32::MAX; }
-                new_pd as u64
+                .unwrap_or(kernel_pd.addr());
+            if current_cr3 != kernel_pd.addr() {
+                let Some(new_as) = AddressSpace::clone_of(current_cr3) else { return u32::MAX; };
+                ctx.cr3 = new_as.addr() as u64;
+                child_as = new_as;
             } else {
-                kernel_pd as u64
-            };
+                ctx.cr3 = kernel_pd.addr() as u64;
+            }
         }
 
         let child = Box::new(Task::from_parts(
@@ -270,6 +272,7 @@ impl Scheduler {
             [None; 32],
             0x01000000,
             None,
+            child_as,
         ));
 
         let pid = child.id().as_u32();
@@ -291,22 +294,51 @@ impl Scheduler {
             None => return u32::MAX,
         };
 
+        #[cfg(feature = "aarch64")]
         let parent_ctx = parent_task.context();
-        let kernel_pd = unsafe { ffi::paging_get_kernel_directory_phys() };
+        let kernel_pd = AddressSpace::kernel();
 
-        // Clone the CPU context for the child
+        // The child resumes in user mode immediately after the fork syscall
+        // returns (RAX = 0), so its context is rebuilt from the current syscall
+        // frame (GS save area) rather than copied from the parent's stored
+        // (kernel-mode) context — copying that would make the child restart the
+        // entry point and re-fork.
+        #[cfg(feature = "x86_64")]
+        let frame = alloy_kernel_hal::current_user_syscall_frame();
+
+        #[cfg(feature = "x86_64")]
+        let mut child_ctx = {
+            let mut ctx = Box::new(crate::process::task::CpuContext::new());
+            ctx.rax = 0;                      // fork returns 0 to the child
+            ctx.rip = frame.rip;              // resume after `syscall` (RCX)
+            ctx.rflags = frame.rflags | 0x200; // keep interrupt flag set
+            ctx.rsp = frame.user_rsp;         // same user stack (COW-shared)
+            ctx.rbx = frame.rbx;
+            ctx.rbp = frame.rbp;
+            ctx.r12 = frame.r12;
+            ctx.r13 = frame.r13;
+            ctx.r14 = frame.r14;
+            ctx.r15 = frame.r15;
+            ctx.cs = 0x23;                    // user code selector
+            ctx.ds = 0x1B;                    // user data selectors
+            ctx.es = 0x1B;
+            ctx.fs = 0x1B;
+            ctx.gs = 0x1B;
+            ctx.ss = 0x1B;
+            ctx.fs_base = 0;
+            ctx
+        };
+        #[cfg(feature = "aarch64")]
         let mut child_ctx = Box::new(*parent_ctx);
+        let mut child_as = AddressSpace::kernel();
 
         #[cfg(feature = "x86_64")]
         {
-            // Child fork returns 0
-            child_ctx.rax = 0;
-
             // Use COW-based address space cloning
-            if parent_ctx.cr3 as usize != kernel_pd {
-                let child_pd = unsafe { ffi::paging_fork_directory(parent_ctx.cr3 as usize) };
-                if child_pd == 0 { return u32::MAX; }
-                child_ctx.cr3 = child_pd as u64;
+            if frame.user_cr3 as usize != kernel_pd.addr() {
+                let Some(child_pd) = AddressSpace::fork_of(frame.user_cr3 as usize) else { return u32::MAX; };
+                child_ctx.cr3 = child_pd.addr() as u64;
+                child_as = child_pd;
             }
         }
 
@@ -326,10 +358,13 @@ impl Scheduler {
             child_fds,
             child_heap,
             Some(parent_id),
+            child_as,
         ));
 
         let child_pid = child.id().as_u32();
-        sched.ready_queues[0].push_back(child);
+        // Run the child first (before any other ready task) so a freshly forked
+        // child is scheduled promptly even with cooperative-style scheduling.
+        sched.ready_queues[0].push_front(child);
         child_pid
     }
 

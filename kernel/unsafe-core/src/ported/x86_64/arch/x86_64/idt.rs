@@ -53,7 +53,7 @@ extern "C" {
     fn irq14();
     fn irq15();
     fn syscall_entry();
-    fn paging_handle_cow_fault(fault_addr: uintptr_t) -> uint8_t;
+    fn paging_handle_cow_fault(pd_phys: uintptr_t, fault_addr: uintptr_t) -> uint8_t;
     fn paging_demand_map_kernel_page(fault_addr: uint64_t, user_cr3: uint64_t) -> bool_0;
     fn paging_get_kernel_directory_phys() -> uintptr_t;
     static mut g_saved_user_cr3: uint64_t;
@@ -633,7 +633,7 @@ pub unsafe extern "C" fn exception_handler(mut frame: *mut interrupt_frame) {
         }
         paging_dump_user_pt_0(user_cr3, fault_addr);
         if err_code & 0x7 as uint64_t == 0x7 as uint64_t {
-            if paging_handle_cow_fault(fault_addr as uintptr_t) != 0 {
+            if paging_handle_cow_fault(user_cr3 as uintptr_t, fault_addr as uintptr_t) != 0 {
                 serial_print(
                     b"[COW] Resolved COW page fault at 0x\0" as *const u8
                         as *const ::core::ffi::c_char,

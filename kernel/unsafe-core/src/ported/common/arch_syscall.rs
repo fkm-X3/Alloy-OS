@@ -68,11 +68,53 @@ pub unsafe extern "C" fn syscall_dispatcher(
     }
 }
 #[cfg(target_arch = "x86_64")]
-static mut syscall_gs_save_area: [uint64_t; 3] = [
-    0 as ::core::ffi::c_int as uint64_t,
-    0 as ::core::ffi::c_int as uint64_t,
-    0 as ::core::ffi::c_int as uint64_t,
-];
+// Layout (written by syscall_entry.asm before the dispatcher runs):
+//   [0]  user RSP         [3]  return RIP (RCX)     [6] rbp
+//   [1]  syscall number   [4]  saved RFLAGS (R11)   [7] r12  [8] r13
+//   [2]  user CR3         [5]  rbx                  [9] r14  [10] r15
+static mut syscall_gs_save_area: [uint64_t; 11] = [0; 11];
+
+#[cfg(target_arch = "x86_64")]
+#[derive(Debug, Clone, Copy)]
+pub struct UserSyscallFrame {
+    pub user_rsp: u64,
+    pub syscall_no: u32,
+    pub user_cr3: u64,
+    pub rip: u64,
+    pub rflags: u64,
+    pub rbx: u64,
+    pub rbp: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+}
+
+/// Snapshot the x86_64 syscall frame of the currently running syscall.
+///
+/// `syscall_entry.asm` mirrors the user resume state (RSP, CR3, return RIP,
+/// RFLAGS, callee-saved registers) into the GS save area after `swapgs`, so
+/// handlers like `fork` can rebuild a child's user context without a frame
+/// pointer. Valid only from within syscall context.
+#[cfg(target_arch = "x86_64")]
+pub fn current_user_syscall_frame() -> UserSyscallFrame {
+    let a = unsafe { &raw const syscall_gs_save_area } as *const u64;
+    unsafe {
+        UserSyscallFrame {
+            user_rsp: core::ptr::read(a),
+            syscall_no: core::ptr::read(a.add(1)) as u32,
+            user_cr3: core::ptr::read(a.add(2)),
+            rip: core::ptr::read(a.add(3)),
+            rflags: core::ptr::read(a.add(4)),
+            rbx: core::ptr::read(a.add(5)),
+            rbp: core::ptr::read(a.add(6)),
+            r12: core::ptr::read(a.add(7)),
+            r13: core::ptr::read(a.add(8)),
+            r14: core::ptr::read(a.add(9)),
+            r15: core::ptr::read(a.add(10)),
+        }
+    }
+}
 #[cfg(target_arch = "x86_64")]
 #[no_mangle]
 pub static mut g_kernel_gs_base: uint64_t = 0 as uint64_t;

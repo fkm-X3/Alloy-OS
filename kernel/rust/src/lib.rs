@@ -161,6 +161,26 @@ pub extern "C" fn rust_main() {
         }
     }
 
+    // Spawn forktest (x86_64 COW fork smoke: parent forks, child writes a
+    // shared page triggering a COW split; both print their views of the var)
+    #[cfg(feature = "x86_64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/forktest", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    unsafe {
+                        crate::println!("[Spawn] Loading forktest (COW fork smoke)");
+                    }
+                    if process::spawn_user_elf(&image) {
+                        unsafe {
+                            crate::println!("[Spawn] forktest task created");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Spawn test_wl_client (Wayland client protocol test)
     #[cfg(feature = "x86_64")]
     {

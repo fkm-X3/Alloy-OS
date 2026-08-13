@@ -23,7 +23,9 @@ pub use crate::io::{self, DefaultMmio, Mmio, MmioReg};
 pub use crate::io::X86IoPort;
 #[cfg(feature = "x86_64")]
 pub use crate::io::IoPort;
-pub use crate::mem::{self, PageFlags, PhysFrame};
+pub use crate::mem::{self, AddressSpace, PageFlags, PhysFrame, VmRegion};
+#[cfg(feature = "x86_64")]
+pub use crate::ported::arch::syscall::{current_user_syscall_frame, UserSyscallFrame};
 pub use crate::memory::{self, MemoryManager};
 pub use crate::serial::{self, SerialPort};
 pub use crate::time::{self, Timer};

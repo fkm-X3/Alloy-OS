@@ -37,6 +37,18 @@ syscall_entry:
     mov rax, cr3
     mov gs:16, rax                  ; [gs+16] = user CR3
 
+    ; Mirror the rest of the user frame into the GS save area so syscall 20
+    ; (fork) can rebuild the child's user context without a frame pointer.
+    ; RCX/R11 still hold the syscall return RIP/RFLAGS here.
+    mov gs:24, rcx                  ; [gs+24] = return RIP
+    mov gs:32, r11                  ; [gs+32] = saved RFLAGS
+    mov gs:40, rbx                  ; [gs+40] = rbx
+    mov gs:48, rbp                  ; [gs+48] = rbp
+    mov gs:56, r12                  ; [gs+56] = r12
+    mov gs:64, r13                  ; [gs+64] = r13
+    mov gs:72, r14                  ; [gs+72] = r14
+    mov gs:80, r15                  ; [gs+80] = r15
+
     ; Load kernel CR3
     mov rax, [kernel_pml4_phys]
     mov cr3, rax
@@ -100,8 +112,8 @@ syscall_entry:
     ; Restore user context
     pop r11                         ; RFLAGS
     pop rcx                         ; RIP
-    pop rax                         ; user CR3
-    mov cr3, rax
+    pop r10                         ; user CR3 (use r10, not rax, so the
+    mov cr3, r10                    ; syscall return value in rax survives)
     pop rsp                         ; original user RSP
 
     ; (CR3 copy remains on user stack below RSP, harmless)

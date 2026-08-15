@@ -1,6 +1,5 @@
 // Minimal tmpfs skeleton - in-memory filesystem placeholder
 
-
 pub struct TmpFs {
     // TODO: Use a proper map from path -> Vnode + data
 }

@@ -3,8 +3,8 @@
 //! Tracks pointer and keyboard focus, managing which surfaces receive input events.
 //! Ensures only one surface has focus at a time and handles focus transitions.
 
-use alloc::collections::BTreeMap;
 use super::surface::SurfaceId;
+use alloc::collections::BTreeMap;
 
 /// Wayland seat identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -164,7 +164,7 @@ mod tests {
     fn test_set_pointer_focus() {
         let mut state = FocusState::new();
         let surface = SurfaceId(1);
-        
+
         state.set_pointer_focus(Some(surface));
         assert_eq!(state.pointer_focus(), Some(surface));
         assert!(state.is_active(surface));
@@ -175,10 +175,10 @@ mod tests {
         let mut state = FocusState::new();
         let surface1 = SurfaceId(1);
         let surface2 = SurfaceId(2);
-        
+
         state.set_pointer_focus(Some(surface1));
         assert!(state.is_active(surface1));
-        
+
         state.set_pointer_focus(Some(surface2));
         assert!(!state.is_active(surface1));
         assert!(state.is_active(surface2));
@@ -188,10 +188,10 @@ mod tests {
     fn test_clear_surface() {
         let mut state = FocusState::new();
         let surface = SurfaceId(1);
-        
+
         state.set_pointer_focus(Some(surface));
         state.set_keyboard_focus(Some(surface));
-        
+
         state.clear_surface(surface);
         assert_eq!(state.pointer_focus(), None);
         assert_eq!(state.keyboard_focus(), None);
@@ -203,12 +203,15 @@ mod tests {
         let mut manager = FocusManager::new();
         let seat = SeatId(0);
         let surface = SurfaceId(1);
-        
+
         let seat_state = manager.get_seat_mut(seat);
         seat_state.set_pointer_focus(Some(surface));
-        
-        assert_eq!(manager.get_seat(seat).unwrap().pointer_focus(), Some(surface));
-        
+
+        assert_eq!(
+            manager.get_seat(seat).unwrap().pointer_focus(),
+            Some(surface)
+        );
+
         manager.clear_surface(surface);
         assert_eq!(manager.get_seat(seat).unwrap().pointer_focus(), None);
     }

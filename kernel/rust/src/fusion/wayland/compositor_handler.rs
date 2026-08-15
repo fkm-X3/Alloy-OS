@@ -5,10 +5,10 @@
 
 use alloc::collections::BTreeMap;
 
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
-use super::surface::{SurfaceId, SurfaceState};
 use super::damage::DamageRect;
+use super::surface::{SurfaceId, SurfaceState};
+use super::{WaylandError, WaylandResult};
 
 /// Opcode for wl_compositor requests
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -99,9 +99,7 @@ impl CompositorHandler {
         let request = CompositorRequest::try_from(opcode)?;
 
         match request {
-            CompositorRequest::CreateSurface => {
-                self.handle_create_surface(client_id, payload)
-            }
+            CompositorRequest::CreateSurface => self.handle_create_surface(client_id, payload),
         }
     }
 
@@ -115,7 +113,8 @@ impl CompositorHandler {
         let request = SurfaceRequest::try_from(opcode)?;
 
         // Find surface by object ID
-        let surface_id = self.object_id_map
+        let surface_id = self
+            .object_id_map
             .get(&object_id)
             .copied()
             .ok_or(WaylandError::ObjectNotFound)?;
@@ -237,15 +236,8 @@ impl CompositorHandler {
     }
 
     /// Handle wl_surface.destroy request
-    fn handle_destroy(
-        &mut self,
-        surface_id: SurfaceId,
-    ) -> WaylandResult<SurfaceResponse> {
-        let object_id = {
-            self.surfaces
-                .get(&surface_id)
-                .map(|s| s.object_id)
-        };
+    fn handle_destroy(&mut self, surface_id: SurfaceId) -> WaylandResult<SurfaceResponse> {
+        let object_id = { self.surfaces.get(&surface_id).map(|s| s.object_id) };
 
         if let Some(oid) = object_id {
             self.object_id_map.remove(&oid);
@@ -389,7 +381,10 @@ mod tests {
 
     #[test]
     fn test_compositor_request_conversion() {
-        assert_eq!(CompositorRequest::try_from(0).unwrap(), CompositorRequest::CreateSurface);
+        assert_eq!(
+            CompositorRequest::try_from(0).unwrap(),
+            CompositorRequest::CreateSurface
+        );
         assert!(CompositorRequest::try_from(99).is_err());
     }
 
@@ -398,7 +393,10 @@ mod tests {
         assert_eq!(SurfaceRequest::try_from(0).unwrap(), SurfaceRequest::Damage);
         assert_eq!(SurfaceRequest::try_from(1).unwrap(), SurfaceRequest::Attach);
         assert_eq!(SurfaceRequest::try_from(2).unwrap(), SurfaceRequest::Commit);
-        assert_eq!(SurfaceRequest::try_from(3).unwrap(), SurfaceRequest::Destroy);
+        assert_eq!(
+            SurfaceRequest::try_from(3).unwrap(),
+            SurfaceRequest::Destroy
+        );
     }
 
     #[test]
@@ -408,10 +406,15 @@ mod tests {
         let mut payload = Vec::new();
         payload.extend_from_slice(&3u32.to_le_bytes());
 
-        let response = handler.handle_compositor_request(client_id, 0, &payload).unwrap();
+        let response = handler
+            .handle_compositor_request(client_id, 0, &payload)
+            .unwrap();
         assert_eq!(handler.surface_count(), 1);
         match response {
-            CompositorResponse::SurfaceCreated { surface_id, object_id } => {
+            CompositorResponse::SurfaceCreated {
+                surface_id,
+                object_id,
+            } => {
                 assert_eq!(surface_id.0, 1);
                 assert_eq!(object_id, 3);
             }
@@ -425,7 +428,9 @@ mod tests {
 
         let mut create_payload = Vec::new();
         create_payload.extend_from_slice(&3u32.to_le_bytes());
-        handler.handle_compositor_request(client_id, 0, &create_payload).unwrap();
+        handler
+            .handle_compositor_request(client_id, 0, &create_payload)
+            .unwrap();
 
         let mut damage_payload = Vec::new();
         damage_payload.extend_from_slice(&0i32.to_le_bytes());
@@ -433,7 +438,9 @@ mod tests {
         damage_payload.extend_from_slice(&100i32.to_le_bytes());
         damage_payload.extend_from_slice(&100i32.to_le_bytes());
 
-        let response = handler.handle_surface_request(3, 0, &damage_payload).unwrap();
+        let response = handler
+            .handle_surface_request(3, 0, &damage_payload)
+            .unwrap();
         match response {
             SurfaceResponse::DamageRecorded => {}
             _ => panic!("Expected DamageRecorded"),
@@ -447,7 +454,9 @@ mod tests {
 
         let mut create_payload = Vec::new();
         create_payload.extend_from_slice(&3u32.to_le_bytes());
-        handler.handle_compositor_request(client_id, 0, &create_payload).unwrap();
+        handler
+            .handle_compositor_request(client_id, 0, &create_payload)
+            .unwrap();
 
         let response = handler.handle_surface_request(3, 2, &[]).unwrap();
         match response {
@@ -463,7 +472,9 @@ mod tests {
 
         let mut payload = Vec::new();
         payload.extend_from_slice(&3u32.to_le_bytes());
-        handler.handle_compositor_request(client_id, 0, &payload).unwrap();
+        handler
+            .handle_compositor_request(client_id, 0, &payload)
+            .unwrap();
 
         assert_eq!(handler.surface_count(), 1);
         handler.clear_surface_for_client(client_id);

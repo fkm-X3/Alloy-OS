@@ -5,13 +5,13 @@
 //! and frame timing callbacks. This is the critical bridge between the
 //! Wayland protocol layer and the Fusion display backend.
 
-use alloc::vec::Vec;
-use super::surface::SurfaceState;
-use super::shm::{ShmBuffer, ShmFormat, ShmManager};
 use super::damage::DamageRect;
+use super::shm::{ShmBuffer, ShmFormat, ShmManager};
+use super::surface::SurfaceState;
 use crate::fusion::backend::FusionDisplayBackend;
 use crate::graphics::Display;
 use crate::graphics::PlatformDisplay;
+use alloc::vec::Vec;
 
 const PANEL_HEIGHT: u32 = 48;
 const PANEL_COLOR: u32 = 0xFF1A1A2E;
@@ -61,11 +61,11 @@ impl CompositorIntegration {
     ///
     /// Iterates through surfaces sorted by Z-order, reads pixel data from SHM buffers,
     /// and composites onto the framebuffer. Only damaged regions are updated.
-pub fn composite_frame(
-         backend: &mut FusionDisplayBackend,
-         shm_manager: &mut ShmManager,
-         surfaces: &[(u32, &SurfaceState)],
-     ) {
+    pub fn composite_frame(
+        backend: &mut FusionDisplayBackend,
+        shm_manager: &mut ShmManager,
+        surfaces: &[(u32, &SurfaceState)],
+    ) {
         backend.clear_framebuffer();
 
         // Sort surfaces by z_order so higher z surfaces render on top
@@ -81,7 +81,8 @@ pub fn composite_frame(
             }
 
             // Skip surfaces with no pending damage
-            if surface.current.damage.is_empty() && !surface.current.damage_tracker.is_full_damage() {
+            if surface.current.damage.is_empty() && !surface.current.damage_tracker.is_full_damage()
+            {
                 continue;
             }
 
@@ -112,7 +113,11 @@ pub fn composite_frame(
         // Draw the panel bar at the bottom of the screen
         let fb_w = backend.framebuffer_width();
         let fb_h = backend.framebuffer_height();
-        let panel_y = if fb_h >= PANEL_HEIGHT { fb_h - PANEL_HEIGHT } else { 0 };
+        let panel_y = if fb_h >= PANEL_HEIGHT {
+            fb_h - PANEL_HEIGHT
+        } else {
+            0
+        };
         let display = backend.display_mut();
         for row in panel_y..fb_h {
             for col in 0..fb_w {
@@ -128,24 +133,30 @@ pub fn composite_frame(
 
     /// Get framebuffer width
     pub fn framebuffer_width(&self) -> u32 {
-        self.backend.as_ref().map(|b| b.framebuffer_width()).unwrap_or(0)
+        self.backend
+            .as_ref()
+            .map(|b| b.framebuffer_width())
+            .unwrap_or(0)
     }
 
     /// Get framebuffer height
     pub fn framebuffer_height(&self) -> u32 {
-        self.backend.as_ref().map(|b| b.framebuffer_height()).unwrap_or(0)
+        self.backend
+            .as_ref()
+            .map(|b| b.framebuffer_height())
+            .unwrap_or(0)
     }
 
     /// Composite with explicit buffer and damage information
-pub fn composite_surface(
-         backend: &mut FusionDisplayBackend,
-         buffer: &ShmBuffer,
-         damage: &[DamageRect],
-         surface_x: i32,
-         surface_y: i32,
-         _surface_width: u32,
-         _surface_height: u32,
-     ) -> Result<(), &'static str> {
+    pub fn composite_surface(
+        backend: &mut FusionDisplayBackend,
+        buffer: &ShmBuffer,
+        damage: &[DamageRect],
+        surface_x: i32,
+        surface_y: i32,
+        _surface_width: u32,
+        _surface_height: u32,
+    ) -> Result<(), &'static str> {
         if damage.is_empty() {
             return Ok(());
         }
@@ -189,7 +200,9 @@ pub fn composite_surface(
                         let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
                         for col in 0..w {
                             let pixel = unsafe {
-                                core::ptr::read_unaligned(row_ptr.add(col as usize * 4) as *const u32)
+                                core::ptr::read_unaligned(
+                                    row_ptr.add(col as usize * 4) as *const u32
+                                )
                             };
                             pixels[(row * w + col) as usize] = pixel;
                         }
@@ -202,7 +215,9 @@ pub fn composite_surface(
                         let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
                         for col in 0..w {
                             let pixel = unsafe {
-                                core::ptr::read_unaligned(row_ptr.add(col as usize * 4) as *const u32)
+                                core::ptr::read_unaligned(
+                                    row_ptr.add(col as usize * 4) as *const u32
+                                )
                             };
                             pixels[(row * w + col) as usize] = pixel | 0xFF000000;
                         }
@@ -215,7 +230,9 @@ pub fn composite_surface(
                         let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
                         for col in 0..w {
                             let pixel16 = unsafe {
-                                core::ptr::read_unaligned(row_ptr.add(col as usize * 2) as *const u16)
+                                core::ptr::read_unaligned(
+                                    row_ptr.add(col as usize * 2) as *const u16
+                                )
                             };
                             let r = ((pixel16 >> 11) & 0x1F) as u32;
                             let g = ((pixel16 >> 5) & 0x3F) as u32;
@@ -223,7 +240,8 @@ pub fn composite_surface(
                             let r8 = (r << 3) | (r >> 2);
                             let g8 = (g << 2) | (g >> 4);
                             let b8 = (b << 3) | (b >> 2);
-                            pixels[(row * w + col) as usize] = 0xFF000000 | (r8 << 16) | (g8 << 8) | b8;
+                            pixels[(row * w + col) as usize] =
+                                0xFF000000 | (r8 << 16) | (g8 << 8) | b8;
                         }
                     }
                     backend.composite_shm_buffer(&pixels, w, h, dest_x, dest_y, 0, 0, w, h);
@@ -273,7 +291,10 @@ pub fn composite_surface(
 
     /// Validate format compatibility for composition
     pub fn is_format_supported(format: ShmFormat) -> bool {
-        matches!(format, ShmFormat::Argb8888 | ShmFormat::Xrgb8888 | ShmFormat::Rgb565)
+        matches!(
+            format,
+            ShmFormat::Argb8888 | ShmFormat::Xrgb8888 | ShmFormat::Rgb565
+        )
     }
 
     /// Get total frames composited
@@ -349,13 +370,19 @@ impl FormatConverter {
     #[inline]
     pub fn alpha_blend(src: u32, dst: u32) -> u32 {
         let src_a = (src >> 24) & 0xFF;
-        if src_a == 255 { return src; }
-        if src_a == 0 { return dst; }
+        if src_a == 255 {
+            return src;
+        }
+        if src_a == 0 {
+            return dst;
+        }
         let dst_a = (dst >> 24) & 0xFF;
         let src_alpha = src_a;
         let dst_alpha = dst_a * (255 - src_a) / 255;
         let out_alpha = src_alpha + dst_alpha;
-        if out_alpha == 0 { return 0; }
+        if out_alpha == 0 {
+            return 0;
+        }
         let src_r = (src >> 16) & 0xFF;
         let src_g = (src >> 8) & 0xFF;
         let src_b = src & 0xFF;

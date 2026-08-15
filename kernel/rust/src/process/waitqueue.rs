@@ -1,8 +1,8 @@
-use alloc::collections::VecDeque;
-use alloc::boxed::Box;
-use alloc::vec::Vec;
 use crate::process::task::Task;
 use crate::sync::SpinLock;
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 
 pub struct WaitQueue {
     inner: SpinLock<WaitQueueInner>,

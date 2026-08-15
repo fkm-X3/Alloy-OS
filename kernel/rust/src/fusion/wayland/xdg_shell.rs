@@ -1,6 +1,6 @@
-use alloc::collections::BTreeMap;
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
+use super::{WaylandError, WaylandResult};
+use alloc::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum XdgSurfaceRole {
@@ -90,7 +90,11 @@ impl XdgShellHandler {
         Ok(XdgSurfaceResponse::Destroyed)
     }
 
-    fn handle_get_toplevel(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<XdgSurfaceResponse> {
+    fn handle_get_toplevel(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<XdgSurfaceResponse> {
         if payload.len() < 4 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -104,14 +108,22 @@ impl XdgShellHandler {
         Ok(XdgSurfaceResponse::ToplevelCreated { toplevel_id })
     }
 
-    fn handle_get_popup(&mut self, object_id: u32, _payload: &[u8]) -> WaylandResult<XdgSurfaceResponse> {
+    fn handle_get_popup(
+        &mut self,
+        object_id: u32,
+        _payload: &[u8],
+    ) -> WaylandResult<XdgSurfaceResponse> {
         if let Some(surface) = self.surfaces.get_mut(&object_id) {
             surface.role = XdgSurfaceRole::Popup;
         }
         Ok(XdgSurfaceResponse::PopupCreated)
     }
 
-    fn handle_set_window_geometry(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<XdgSurfaceResponse> {
+    fn handle_set_window_geometry(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<XdgSurfaceResponse> {
         if payload.len() < 16 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -126,7 +138,11 @@ impl XdgShellHandler {
         Ok(XdgSurfaceResponse::GeometrySet)
     }
 
-    fn handle_ack_configure(&mut self, object_id: u32, _payload: &[u8]) -> WaylandResult<XdgSurfaceResponse> {
+    fn handle_ack_configure(
+        &mut self,
+        object_id: u32,
+        _payload: &[u8],
+    ) -> WaylandResult<XdgSurfaceResponse> {
         if let Some(surface) = self.surfaces.get_mut(&object_id) {
             surface.configured = true;
         }
@@ -156,7 +172,11 @@ impl XdgShellHandler {
         Ok(ToplevelResponse::Destroyed)
     }
 
-    fn handle_toplevel_set_title(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<ToplevelResponse> {
+    fn handle_toplevel_set_title(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<ToplevelResponse> {
         let title = alloc::string::String::from_utf8_lossy(payload).into_owned();
         for (_id, surface) in self.surfaces.iter_mut() {
             if surface.xdg_surface_object_id == object_id {
@@ -167,7 +187,11 @@ impl XdgShellHandler {
         Ok(ToplevelResponse::TitleSet)
     }
 
-    fn handle_toplevel_set_app_id(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<ToplevelResponse> {
+    fn handle_toplevel_set_app_id(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<ToplevelResponse> {
         let app_id = alloc::string::String::from_utf8_lossy(payload).into_owned();
         for (_id, surface) in self.surfaces.iter_mut() {
             if surface.xdg_surface_object_id == object_id {
@@ -185,8 +209,7 @@ impl XdgShellHandler {
         }
     }
 
-    pub fn remove_surfaces_for_client(&mut self, _client_id: ClientId) {
-    }
+    pub fn remove_surfaces_for_client(&mut self, _client_id: ClientId) {}
 }
 
 pub enum XdgWmBaseResponse {

@@ -32,43 +32,93 @@ impl Color {
 
     /// Common colors
     pub fn black() -> Color {
-        Color { r: 0, g: 0, b: 0, a: 255 }
+        Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        }
     }
 
     pub fn white() -> Color {
-        Color { r: 255, g: 255, b: 255, a: 255 }
+        Color {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        }
     }
 
     pub fn red() -> Color {
-        Color { r: 255, g: 0, b: 0, a: 255 }
+        Color {
+            r: 255,
+            g: 0,
+            b: 0,
+            a: 255,
+        }
     }
 
     pub fn green() -> Color {
-        Color { r: 0, g: 255, b: 0, a: 255 }
+        Color {
+            r: 0,
+            g: 255,
+            b: 0,
+            a: 255,
+        }
     }
 
     pub fn blue() -> Color {
-        Color { r: 0, g: 0, b: 255, a: 255 }
+        Color {
+            r: 0,
+            g: 0,
+            b: 255,
+            a: 255,
+        }
     }
 
     pub fn cyan() -> Color {
-        Color { r: 0, g: 255, b: 255, a: 255 }
+        Color {
+            r: 0,
+            g: 255,
+            b: 255,
+            a: 255,
+        }
     }
 
     pub fn magenta() -> Color {
-        Color { r: 255, g: 0, b: 255, a: 255 }
+        Color {
+            r: 255,
+            g: 0,
+            b: 255,
+            a: 255,
+        }
     }
 
     pub fn yellow() -> Color {
-        Color { r: 255, g: 255, b: 0, a: 255 }
+        Color {
+            r: 255,
+            g: 255,
+            b: 0,
+            a: 255,
+        }
     }
 
     pub fn light_gray() -> Color {
-        Color { r: 200, g: 200, b: 200, a: 255 }
+        Color {
+            r: 200,
+            g: 200,
+            b: 200,
+            a: 255,
+        }
     }
 
     pub fn dark_gray() -> Color {
-        Color { r: 64, g: 64, b: 64, a: 255 }
+        Color {
+            r: 64,
+            g: 64,
+            b: 64,
+            a: 255,
+        }
     }
 }
 
@@ -86,7 +136,7 @@ impl FramebufferRenderer {
         if width == 0 || height == 0 {
             return Err(crate::fusion::backend::FusionError::InvalidDimensions);
         }
-        
+
         let pixel_count = (width as usize)
             .checked_mul(height as usize)
             .ok_or(crate::fusion::backend::FusionError::InvalidDimensions)?;
@@ -142,9 +192,17 @@ impl FramebufferRenderer {
     }
 
     /// Draw a rectangle outline
-    pub fn stroke_rect(&mut self, x: u32, y: u32, width: u32, height: u32, color: Color, thickness: u32) {
+    pub fn stroke_rect(
+        &mut self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        color: Color,
+        thickness: u32,
+    ) {
         let pixel = color.to_pixel();
-        
+
         // Top and bottom edges
         for i in 0..width {
             for t in 0..thickness {
@@ -206,7 +264,16 @@ impl FramebufferRenderer {
                 cx = x;
                 continue;
             }
-            font.render_glyph(ch, &mut self.pixels, self.width, self.height, cx, cy, fg_pixel, bg_pixel);
+            font.render_glyph(
+                ch,
+                &mut self.pixels,
+                self.width,
+                self.height,
+                cx,
+                cy,
+                fg_pixel,
+                bg_pixel,
+            );
             cx = cx.saturating_add(font.char_width());
         }
     }
@@ -230,7 +297,7 @@ impl FramebufferRenderer {
     /// Draw a circle (Bresenham's algorithm)
     pub fn circle(&mut self, cx: u32, cy: u32, radius: u32, color: Color, filled: bool) {
         let pixel = color.to_pixel();
-        
+
         if filled {
             // Filled circle using scanline
             for y in 0..=(2 * radius) {
@@ -238,22 +305,28 @@ impl FramebufferRenderer {
                 if dy > radius as i32 {
                     continue;
                 }
-                
+
                 // Integer square root approximation (no_std compatible)
                 let dy2 = dy as u32;
                 let r2 = radius * radius;
                 let dy2_sq = dy2 * dy2;
                 let dx_sq = r2.saturating_sub(dy2_sq);
                 let dx = integer_sqrt(dx_sq);
-                
+
                 for x in 0..=dx {
-                    let px = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
+                    let px = cx
+                        .saturating_add(radius)
+                        .saturating_sub(dx)
+                        .saturating_add(x);
                     let py = cy.saturating_add(y).saturating_sub(radius);
                     if px < self.width && py < self.height {
                         self.set_pixel(px, py, pixel);
                     }
-                    
-                    let px2 = cx.saturating_add(radius).saturating_sub(dx).saturating_add(x);
+
+                    let px2 = cx
+                        .saturating_add(radius)
+                        .saturating_sub(dx)
+                        .saturating_add(x);
                     let py2 = cy.saturating_add(radius).saturating_sub(y);
                     if px2 < self.width && py2 < self.height {
                         self.set_pixel(px2, py2, pixel);
@@ -280,7 +353,11 @@ impl FramebufferRenderer {
                 ];
 
                 for (px, py) in &points {
-                    if *px >= 0 && (*px as u32) < self.width && *py >= 0 && (*py as u32) < self.height {
+                    if *px >= 0
+                        && (*px as u32) < self.width
+                        && *py >= 0
+                        && (*py as u32) < self.height
+                    {
                         self.set_pixel(*px as u32, *py as u32, pixel);
                     }
                 }

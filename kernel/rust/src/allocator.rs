@@ -1,14 +1,14 @@
 //! Global allocator implementation for Rust kernel
-//! 
+//!
 //! This allocator uses a two-tier strategy:
 //! - Slab allocator for small objects (<= 1024 bytes)
 //! - Heap allocator for larger objects
 
-use core::alloc::{GlobalAlloc, Layout};
-use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicBool, Ordering, fence};
 use crate::heap::HeapAllocator;
 use crate::slab::SlabAllocator;
+use core::alloc::{GlobalAlloc, Layout};
+use core::cell::UnsafeCell;
+use core::sync::atomic::{fence, AtomicBool, Ordering};
 
 /// Wrapper to make `UnsafeCell` `Sync` when access is guarded by `ALLOC_LOCK`.
 struct AllocCell<T>(UnsafeCell<T>);
@@ -38,7 +38,10 @@ static HEAP_ALLOCATOR: AllocCell<HeapAllocator> = AllocCell(UnsafeCell::new(Heap
 /// Returns the previous interrupt state for [`unlock`].
 fn lock() -> u64 {
     let flags = crate::sync::irq_save();
-    while ALLOC_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+    while ALLOC_LOCK
+        .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        .is_err()
+    {
         core::hint::spin_loop();
     }
     // Ensure all previous writes are visible
@@ -60,28 +63,33 @@ pub struct AllocatorVMM;
 unsafe impl GlobalAlloc for AllocatorVMM {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let flags = lock();
-        
-        let result = if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
-            // Use slab allocator for small objects
-            unsafe { (*SLAB_ALLOCATOR.get()).alloc(layout.size(), layout.align()) }
-        } else {
-            // Use heap allocator for larger objects
-            unsafe { (*HEAP_ALLOCATOR.get()).alloc(layout) }
-        };
-        
+
+        let result =
+            if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
+                // Use slab allocator for small objects
+                unsafe { (*SLAB_ALLOCATOR.get()).alloc(layout.size(), layout.align()) }
+            } else {
+                // Use heap allocator for larger objects
+                unsafe { (*HEAP_ALLOCATOR.get()).alloc(layout) }
+            };
+
         unlock(flags);
         result
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let flags = lock();
-        
+
         if unsafe { (*SLAB_ALLOCATOR.get()).can_allocate(layout.size(), layout.align()) } {
-            unsafe { (*SLAB_ALLOCATOR.get()).free(ptr, layout.size(), layout.align()); }
+            unsafe {
+                (*SLAB_ALLOCATOR.get()).free(ptr, layout.size(), layout.align());
+            }
         } else {
-            unsafe { (*HEAP_ALLOCATOR.get()).dealloc(ptr, layout); }
+            unsafe {
+                (*HEAP_ALLOCATOR.get()).dealloc(ptr, layout);
+            }
         }
-        
+
         unlock(flags);
     }
 }
@@ -93,8 +101,11 @@ static ALLOCATOR: AllocatorVMM = AllocatorVMM;
 /// Allocation error handler
 #[alloc_error_handler]
 fn alloc_error_handler(layout: Layout) -> ! {
-    panic!("Allocation error: failed to allocate {} bytes with {} byte alignment", 
-           layout.size(), layout.align());
+    panic!(
+        "Allocation error: failed to allocate {} bytes with {} byte alignment",
+        layout.size(),
+        layout.align()
+    );
 }
 
 /// Get allocation statistics

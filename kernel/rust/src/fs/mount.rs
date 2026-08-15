@@ -1,6 +1,6 @@
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
-use alloc::boxed::Box;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FsType {
@@ -19,18 +19,34 @@ pub struct MountTable {
 
 impl MountTable {
     pub fn new() -> Self {
-        unsafe { crate::println!("[Mount] MountTable::new start"); }
+        unsafe {
+            crate::println!("[Mount] MountTable::new start");
+        }
         let mut mounts = BTreeMap::new();
         let key = String::from("/");
-        let val = MountPoint { fs_type: FsType::TmpFs, device_id: None };
-        unsafe { crate::println!("[Mount] About to insert"); }
+        let val = MountPoint {
+            fs_type: FsType::TmpFs,
+            device_id: None,
+        };
+        unsafe {
+            crate::println!("[Mount] About to insert");
+        }
         mounts.insert(key, val);
-        unsafe { crate::println!("[Mount] Insert done"); }
-        unsafe { crate::println!("[Mount] Building struct"); }
+        unsafe {
+            crate::println!("[Mount] Insert done");
+        }
+        unsafe {
+            crate::println!("[Mount] Building struct");
+        }
         MountTable { mounts }
     }
 
-    pub fn mount(&mut self, path: &str, fs_type: FsType, device_id: Option<usize>) -> Result<(), ()> {
+    pub fn mount(
+        &mut self,
+        path: &str,
+        fs_type: FsType,
+        device_id: Option<usize>,
+    ) -> Result<(), ()> {
         let norm = normalize_path(path);
         if self.mounts.contains_key(&norm) {
             return Err(());
@@ -78,20 +94,35 @@ impl MountTable {
 }
 
 pub fn make_mount_table() -> Box<MountTable> {
-    unsafe { crate::println!("[Mount] make_mount_table start"); }
+    unsafe {
+        crate::println!("[Mount] make_mount_table start");
+    }
     let mut mounts = BTreeMap::new();
     let key = String::from("/");
-    let val = MountPoint { fs_type: FsType::TmpFs, device_id: None };
+    let val = MountPoint {
+        fs_type: FsType::TmpFs,
+        device_id: None,
+    };
     mounts.insert(key, val);
-    unsafe { crate::println!("[Mount] make_mount_table insert done"); }
+    unsafe {
+        crate::println!("[Mount] make_mount_table insert done");
+    }
     // Build MountTable using unsafe pointer write to avoid compiler issues
     let layout = core::alloc::Layout::new::<MountTable>();
     let ptr = unsafe { alloc::alloc::alloc(layout) as *mut MountTable };
-    unsafe { crate::println!("[Mount] Raw alloc done"); }
-    unsafe { core::ptr::write(&mut (*ptr).mounts, mounts); }
-    unsafe { crate::println!("[Mount] Ptr write done"); }
+    unsafe {
+        crate::println!("[Mount] Raw alloc done");
+    }
+    unsafe {
+        core::ptr::write(&mut (*ptr).mounts, mounts);
+    }
+    unsafe {
+        crate::println!("[Mount] Ptr write done");
+    }
     let mt = unsafe { Box::from_raw(ptr) };
-    unsafe { crate::println!("[Mount] Box created"); }
+    unsafe {
+        crate::println!("[Mount] Box created");
+    }
     mt
 }
 
@@ -112,7 +143,9 @@ fn normalize_path(path: &str) -> String {
     if out.len() > 1 && out.ends_with('/') {
         out.pop();
     }
-    if out.is_empty() { out.push('/') }
+    if out.is_empty() {
+        out.push('/')
+    }
     out
 }
 

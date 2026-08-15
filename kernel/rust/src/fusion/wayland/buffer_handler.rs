@@ -3,9 +3,9 @@
 //! Handles wl_shm and wl_shm_pool request opcodes from Wayland clients.
 //! Manages buffer pool creation and buffer allocation from pools.
 
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
 use super::shm::{ShmFormat, ShmManager};
+use super::{WaylandError, WaylandResult};
 
 #[cfg(test)]
 use alloc::vec::Vec;
@@ -159,18 +159,15 @@ impl ShmBufferHandler {
         let format = ShmFormat::try_from(format_raw)?;
 
         // Create buffer in pool
-        let buffer_id = self.shm_manager.create_buffer(
-            pool_id, offset, width, height, stride, format,
-        )?;
+        let buffer_id = self
+            .shm_manager
+            .create_buffer(pool_id, offset, width, height, stride, format)?;
 
         Ok(ShmPoolHandlerResponse::BufferCreated { buffer_id })
     }
 
     /// Handle wl_shm_pool.destroy request
-    fn handle_destroy_pool(
-        &mut self,
-        pool_id: u32,
-    ) -> WaylandResult<ShmPoolHandlerResponse> {
+    fn handle_destroy_pool(&mut self, pool_id: u32) -> WaylandResult<ShmPoolHandlerResponse> {
         self.shm_manager.destroy_pool(pool_id)?;
         Ok(ShmPoolHandlerResponse::Destroyed)
     }
@@ -204,8 +201,14 @@ mod tests {
 
     #[test]
     fn test_shm_pool_request_conversion() {
-        assert_eq!(ShmPoolRequest::try_from(0).unwrap(), ShmPoolRequest::CreateBuffer);
-        assert_eq!(ShmPoolRequest::try_from(1).unwrap(), ShmPoolRequest::Destroy);
+        assert_eq!(
+            ShmPoolRequest::try_from(0).unwrap(),
+            ShmPoolRequest::CreateBuffer
+        );
+        assert_eq!(
+            ShmPoolRequest::try_from(1).unwrap(),
+            ShmPoolRequest::Destroy
+        );
         assert!(ShmPoolRequest::try_from(99).is_err());
     }
 
@@ -249,7 +252,9 @@ mod tests {
         pool_payload.extend_from_slice(&(-1i32).to_le_bytes());
         pool_payload.extend_from_slice(&16384u32.to_le_bytes());
         pool_payload.extend_from_slice(&1u32.to_le_bytes());
-        handler.handle_shm_request(client_id, 0, &pool_payload).unwrap();
+        handler
+            .handle_shm_request(client_id, 0, &pool_payload)
+            .unwrap();
 
         // Create buffer
         let mut buf_payload = Vec::new();
@@ -260,7 +265,9 @@ mod tests {
         buf_payload.extend_from_slice(&0u32.to_le_bytes()); // format (ARGB8888)
         buf_payload.extend_from_slice(&2u32.to_le_bytes()); // new_id (ignored)
 
-        let response = handler.handle_shm_pool_request(client_id, 1, 0, &buf_payload).unwrap();
+        let response = handler
+            .handle_shm_pool_request(client_id, 1, 0, &buf_payload)
+            .unwrap();
         match response {
             ShmPoolHandlerResponse::BufferCreated { buffer_id } => {
                 assert_eq!(buffer_id, 1);
@@ -279,10 +286,14 @@ mod tests {
         pool_payload.extend_from_slice(&(-1i32).to_le_bytes());
         pool_payload.extend_from_slice(&4096u32.to_le_bytes());
         pool_payload.extend_from_slice(&1u32.to_le_bytes());
-        handler.handle_shm_request(client_id, 0, &pool_payload).unwrap();
+        handler
+            .handle_shm_request(client_id, 0, &pool_payload)
+            .unwrap();
 
         // Destroy pool
-        let response = handler.handle_shm_pool_request(client_id, 1, 1, &[]).unwrap();
+        let response = handler
+            .handle_shm_pool_request(client_id, 1, 1, &[])
+            .unwrap();
         match response {
             ShmPoolHandlerResponse::Destroyed => {}
             _ => panic!("Expected Destroyed"),
@@ -299,7 +310,9 @@ mod tests {
         pool_payload.extend_from_slice(&(-1i32).to_le_bytes());
         pool_payload.extend_from_slice(&4096u32.to_le_bytes());
         pool_payload.extend_from_slice(&1u32.to_le_bytes());
-        handler.handle_shm_request(client_id, 0, &pool_payload).unwrap();
+        handler
+            .handle_shm_request(client_id, 0, &pool_payload)
+            .unwrap();
 
         // Try to create buffer with invalid stride (too small for 64px ARGB8888)
         let mut buf_payload = Vec::new();
@@ -310,6 +323,8 @@ mod tests {
         buf_payload.extend_from_slice(&0u32.to_le_bytes()); // format (ARGB8888)
         buf_payload.extend_from_slice(&2u32.to_le_bytes()); // new_id
 
-        assert!(handler.handle_shm_pool_request(client_id, 1, 0, &buf_payload).is_err());
+        assert!(handler
+            .handle_shm_pool_request(client_id, 1, 0, &buf_payload)
+            .is_err());
     }
 }

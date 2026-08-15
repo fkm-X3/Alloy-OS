@@ -82,7 +82,8 @@ impl ShmBuffer {
 
         // Check buffer size doesn't overflow
         let _bytes_per_pixel = self.format.bytes_per_pixel() as u32;
-        let required_size = self.offset
+        let required_size = self
+            .offset
             .checked_add(self.height.saturating_mul(self.stride))
             .ok_or(WaylandError::ProtocolViolation)?;
 
@@ -100,7 +101,8 @@ impl ShmBuffer {
 
     /// Get the total size needed including offset
     pub fn total_size(&self) -> u32 {
-        self.offset.saturating_add(self.height.saturating_mul(self.stride))
+        self.offset
+            .saturating_add(self.height.saturating_mul(self.stride))
     }
 }
 
@@ -227,7 +229,9 @@ impl ShmManager {
         stride: u32,
         format: ShmFormat,
     ) -> WaylandResult<u32> {
-        let pool = self.pools.get_mut(&pool_id)
+        let pool = self
+            .pools
+            .get_mut(&pool_id)
             .ok_or(WaylandError::ObjectNotFound)?;
 
         let buffer = pool.create_buffer(offset, width, height, stride, format)?;
@@ -241,7 +245,9 @@ impl ShmManager {
     /// Get a buffer by ID
     pub fn get_buffer(&self, buffer_id: u32) -> Option<&ShmBuffer> {
         if let Some((pool_id, buffer_id)) = self.buffers.get(&buffer_id) {
-            self.pools.get(pool_id).and_then(|p| p.get_buffer(*buffer_id))
+            self.pools
+                .get(pool_id)
+                .and_then(|p| p.get_buffer(*buffer_id))
         } else {
             None
         }
@@ -373,7 +379,9 @@ mod tests {
     #[test]
     fn test_shm_pool_create_buffer() {
         let mut pool = ShmPool::new(1, -1, 16384);
-        let buffer = pool.create_buffer(0, 64, 64, 256, ShmFormat::Argb8888).unwrap();
+        let buffer = pool
+            .create_buffer(0, 64, 64, 256, ShmFormat::Argb8888)
+            .unwrap();
         assert_eq!(buffer.width, 64);
         assert_eq!(buffer.height, 64);
         assert_eq!(pool.buffers.len(), 1);
@@ -393,7 +401,9 @@ mod tests {
     fn test_shm_manager_buffer_lifecycle() {
         let mut mgr = ShmManager::new();
         let pool_id = mgr.create_pool(-1, 16384).unwrap();
-        let buffer_id = mgr.create_buffer(pool_id, 0, 64, 64, 256, ShmFormat::Argb8888).unwrap();
+        let buffer_id = mgr
+            .create_buffer(pool_id, 0, 64, 64, 256, ShmFormat::Argb8888)
+            .unwrap();
         assert!(mgr.get_buffer(buffer_id).is_some());
         assert!(mgr.destroy_buffer(buffer_id).is_ok());
         assert!(mgr.get_buffer(buffer_id).is_none());

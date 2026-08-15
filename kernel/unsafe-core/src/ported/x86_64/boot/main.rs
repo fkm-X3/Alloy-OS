@@ -6,6 +6,7 @@ extern "C" {
     fn vmm_init();
     fn init_serial();
     fn vesa_init_from_multiboot(multiboot_addr: uint32_t);
+    fn initrd_init(multiboot_addr: uint32_t);
     fn init_gdt();
     fn init_idt();
     fn syscall_init();
@@ -36,6 +37,7 @@ pub unsafe extern "C" fn kernel_main(mut magic: uint32_t, mut multiboot_addr: ui
     paging_enable();
     vmm_init();
     vesa_init_from_multiboot(multiboot_addr);
+    initrd_init(multiboot_addr);
     rust_main();
     loop {
         arch_halt();

@@ -81,23 +81,11 @@ extern "C" {
 }
 
 // ============================================================================
-// x86-specific externs (VGA, keyboard, mouse, VESA, storage, initrd)
+// x86-specific externs (VESA, initrd)
 // ============================================================================
 
 #[cfg(feature = "x86_64")]
 extern "C" {
-    // PS/2 keyboard
-    pub fn keyboard_has_data() -> bool;
-    pub fn keyboard_get_char() -> i8;
-
-    // PS/2 mouse
-    pub fn mouse_has_data() -> bool;
-    pub fn mouse_read_event(
-        dx: *mut i8, dy: *mut i8, wheel: *mut i8, buttons: *mut u8, flags: *mut u8,
-    ) -> bool;
-    pub fn mouse_is_initialized() -> bool;
-    pub fn mouse_last_init_error() -> u8;
-
     // VESA framebuffer
     pub fn vesa_cursor_is_available() -> u8;
     pub fn vesa_cursor_enable(enable: u8);
@@ -112,22 +100,6 @@ extern "C" {
     pub fn vesa_get_bits_per_pixel() -> u8;
     pub fn vesa_get_bytes_per_scanline() -> u16;
     pub fn vesa_get_framebuffer_size() -> u64;
-
-    // ATA PIO
-    pub fn ata_init() -> i32;
-    pub fn ata_drive_present(bus: u8, drive: u8) -> i32;
-    pub fn ata_read_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *mut u8) -> i32;
-    pub fn ata_write_sectors(bus: u8, drive: u8, lba: u64, count: u8, buffer: *const u8) -> i32;
-
-    // PCI
-    pub fn pci_init();
-    pub fn pci_device_count() -> i32;
-
-    // AHCI (SATA)
-    pub fn ahci_init() -> i32;
-    pub fn ahci_drive_count() -> i32;
-    pub fn ahci_read_sectors(index: i32, lba: u64, count: u8, buffer: *mut u8) -> i32;
-    pub fn ahci_write_sectors(index: i32, lba: u64, count: u8, buffer: *const u8) -> i32;
 
     // Initrd / ramdisk
     pub fn initrd_init(multiboot_addr: u32);

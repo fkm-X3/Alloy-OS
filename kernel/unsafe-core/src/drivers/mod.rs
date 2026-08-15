@@ -11,7 +11,28 @@ pub mod serial;
 pub mod timer;
 
 #[cfg(feature = "x86_64")]
+pub mod pci;
+
+#[cfg(feature = "x86_64")]
+pub mod ata;
+
+#[cfg(feature = "x86_64")]
+pub mod ahci;
+
+#[cfg(feature = "x86_64")]
+pub mod initrd;
+
+#[cfg(feature = "x86_64")]
+pub mod vesa;
+
+#[cfg(feature = "x86_64")]
 pub mod vga;
+
+#[cfg(feature = "x86_64")]
+pub mod keyboard;
+
+#[cfg(feature = "x86_64")]
+pub mod mouse;
 
 #[cfg(feature = "aarch64")]
 pub mod pl110;

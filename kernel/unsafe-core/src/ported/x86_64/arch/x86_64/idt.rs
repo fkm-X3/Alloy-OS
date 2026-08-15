@@ -702,6 +702,12 @@ pub unsafe extern "C" fn exception_handler(mut frame: *mut interrupt_frame) {
 #[no_mangle]
 pub unsafe extern "C" fn irq_handler(mut frame: *mut interrupt_frame) {
     let mut irq_no: uint64_t = (*frame).int_no;
+    // Ack the PIC before dispatching: the timer handler may switch tasks and
+    // never return, so the EOI must already be sent or the cascade stalls.
+    if irq_no >= 8 as uint64_t {
+        outb(PIC2_COMMAND as uint16_t, 0x20 as uint8_t);
+    }
+    outb(PIC1_COMMAND as uint16_t, 0x20 as uint8_t);
     match irq_no {
         0 => {
             timer_handler();
@@ -714,10 +720,6 @@ pub unsafe extern "C" fn irq_handler(mut frame: *mut interrupt_frame) {
         }
         _ => {}
     }
-    if irq_no >= 8 as uint64_t {
-        outb(PIC2_COMMAND as uint16_t, 0x20 as uint8_t);
-    }
-    outb(PIC1_COMMAND as uint16_t, 0x20 as uint8_t);
 }
 #[no_mangle]
 pub unsafe extern "C" fn get_system_uptime_ms() -> uint64_t {

@@ -21,7 +21,10 @@ impl BlockDevice for Ramdisk {
     }
 
     fn read_sectors(&mut self, lba: u64, count: u64, buf: &mut [u8]) -> Result<(), ()> {
-        if lba.checked_add(count).map_or(true, |end| end > self.num_sectors) {
+        if lba
+            .checked_add(count)
+            .map_or(true, |end| end > self.num_sectors)
+        {
             return Err(());
         }
         let byte_off = (lba as usize) * SECTOR_SIZE;
@@ -39,7 +42,10 @@ impl BlockDevice for Ramdisk {
     }
 
     fn write_sectors(&mut self, lba: u64, count: u64, buf: &[u8]) -> Result<(), ()> {
-        if lba.checked_add(count).map_or(true, |end| end > self.num_sectors) {
+        if lba
+            .checked_add(count)
+            .map_or(true, |end| end > self.num_sectors)
+        {
             return Err(());
         }
         let byte_off = (lba as usize) * SECTOR_SIZE;

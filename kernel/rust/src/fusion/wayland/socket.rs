@@ -120,9 +120,7 @@ impl UnixSocket {
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
         #[allow(unused_unsafe)]
-        let result = unsafe {
-            crate::syscall::rust_sys_listen(fd as i32, LISTEN_BACKLOG as i32)
-        };
+        let result = unsafe { crate::syscall::rust_sys_listen(fd as i32, LISTEN_BACKLOG as i32) };
 
         if result < 0 {
             unsafe {
@@ -148,9 +146,7 @@ impl UnixSocket {
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
         #[allow(unused_unsafe)]
-        let client_fd = unsafe {
-            crate::syscall::rust_sys_accept(fd as i32)
-        };
+        let client_fd = unsafe { crate::syscall::rust_sys_accept(fd as i32) };
 
         if client_fd < 0 {
             return Err(WaylandError::AcceptFailed);
@@ -171,9 +167,7 @@ impl UnixSocket {
         };
 
         #[allow(unused_unsafe)]
-        let result = unsafe {
-            crate::syscall::rust_sys_has_pending_connections(fd as i32)
-        };
+        let result = unsafe { crate::syscall::rust_sys_has_pending_connections(fd as i32) };
 
         result == 1
     }

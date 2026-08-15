@@ -1,14 +1,14 @@
-use alloc::collections::VecDeque;
-use alloc::boxed::Box;
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::collections::BTreeMap;
-use core::sync::atomic::{AtomicU32, Ordering};
+use crate::ffi;
 use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
 use crate::sync::SpinlockIRQ;
-use crate::ffi;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::collections::VecDeque;
+use alloc::string::String;
+use alloc::vec::Vec;
 use alloy_kernel_hal::mem::AddressSpace;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Global scheduler instance — must use SpinlockIRQ because timer interrupts
 /// call rust_timer_tick() which acquires this lock from interrupt context.
@@ -123,13 +123,17 @@ impl Scheduler {
                 None => {
                     // No old task to save — just load the new one
                     SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
-                    unsafe { ffi::load_context(new_ctx_ptr); }
+                    unsafe {
+                        ffi::load_context(new_ctx_ptr);
+                    }
                 }
                 Some(mut old_box) => {
                     let old_ctx_ptr = old_box.context_mut() as *mut _;
 
                     // Step 1: Save old context — returns normally
-                    unsafe { ffi::save_context(old_ctx_ptr); }
+                    unsafe {
+                        ffi::save_context(old_ctx_ptr);
+                    }
 
                     // Step 2: Check if this is the initial path or a resume
                     let current_depth = SCHEDULE_DEPTH.load(Ordering::Relaxed);
@@ -165,7 +169,8 @@ impl Scheduler {
                                 }
                                 old_box.reset_ticks_used();
                                 old_box.set_state(TaskState::Ready);
-                                re_sched.ready_queues[old_box.priority() as usize].push_back(old_box);
+                                re_sched.ready_queues[old_box.priority() as usize]
+                                    .push_back(old_box);
                             }
                         }
                         // Release re_lock explicitly BEFORE load_context.
@@ -178,7 +183,9 @@ impl Scheduler {
 
                         // Reset depth and load new context — never returns
                         SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
-                        unsafe { ffi::load_context(new_ctx_ptr); }
+                        unsafe {
+                            ffi::load_context(new_ctx_ptr);
+                        }
                     } else {
                         // ── Resume path ─────────────────────────────────
                         // Task was already re-enqueued on the initial path.
@@ -253,11 +260,15 @@ impl Scheduler {
             ctx.gs = 0x1B;
             ctx.ss = 0x1B;
 
-            let current_cr3: usize = sched.current_task.as_ref()
+            let current_cr3: usize = sched
+                .current_task
+                .as_ref()
                 .map(|t| t.context().cr3 as usize)
                 .unwrap_or(kernel_pd.addr());
             if current_cr3 != kernel_pd.addr() {
-                let Some(new_as) = AddressSpace::clone_of(current_cr3) else { return u32::MAX; };
+                let Some(new_as) = AddressSpace::clone_of(current_cr3) else {
+                    return u32::MAX;
+                };
                 ctx.cr3 = new_as.addr() as u64;
                 child_as = new_as;
             } else {
@@ -309,18 +320,18 @@ impl Scheduler {
         #[cfg(feature = "x86_64")]
         let mut child_ctx = {
             let mut ctx = Box::new(crate::process::task::CpuContext::new());
-            ctx.rax = 0;                      // fork returns 0 to the child
-            ctx.rip = frame.rip;              // resume after `syscall` (RCX)
+            ctx.rax = 0; // fork returns 0 to the child
+            ctx.rip = frame.rip; // resume after `syscall` (RCX)
             ctx.rflags = frame.rflags | 0x200; // keep interrupt flag set
-            ctx.rsp = frame.user_rsp;         // same user stack (COW-shared)
+            ctx.rsp = frame.user_rsp; // same user stack (COW-shared)
             ctx.rbx = frame.rbx;
             ctx.rbp = frame.rbp;
             ctx.r12 = frame.r12;
             ctx.r13 = frame.r13;
             ctx.r14 = frame.r14;
             ctx.r15 = frame.r15;
-            ctx.cs = 0x23;                    // user code selector
-            ctx.ds = 0x1B;                    // user data selectors
+            ctx.cs = 0x23; // user code selector
+            ctx.ds = 0x1B; // user data selectors
             ctx.es = 0x1B;
             ctx.fs = 0x1B;
             ctx.gs = 0x1B;
@@ -336,7 +347,9 @@ impl Scheduler {
         {
             // Use COW-based address space cloning
             if frame.user_cr3 as usize != kernel_pd.addr() {
-                let Some(child_pd) = AddressSpace::fork_of(frame.user_cr3 as usize) else { return u32::MAX; };
+                let Some(child_pd) = AddressSpace::fork_of(frame.user_cr3 as usize) else {
+                    return u32::MAX;
+                };
                 child_ctx.cr3 = child_pd.addr() as u64;
                 child_as = child_pd;
             }
@@ -392,7 +405,8 @@ impl Scheduler {
         // Record exit status for parent
         if let Some(parent_id) = parent {
             let parent_u32 = parent_id.as_u32();
-            sched.children_exit_status
+            sched
+                .children_exit_status
                 .entry(parent_u32)
                 .or_insert_with(Vec::new)
                 .push((pid, exit_code));
@@ -447,7 +461,9 @@ impl Scheduler {
                 None => return (u32::MAX, 0),
             };
 
-            let current_pid = sched.current_task.as_ref()
+            let current_pid = sched
+                .current_task
+                .as_ref()
                 .map(|t| t.id().as_u32())
                 .unwrap_or(u32::MAX);
 
@@ -522,7 +538,8 @@ impl Scheduler {
         let need_preempt = Self::with_current_task_mut(|task| {
             task.increment_ticks();
             task.ticks_used() >= QUANTA[task.priority() as usize]
-        }).unwrap_or(false);
+        })
+        .unwrap_or(false);
 
         if need_preempt {
             Self::schedule();
@@ -539,13 +556,17 @@ impl Scheduler {
         alloy_kernel_hal::FaultAction::Terminate
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_keyboard_wake() {
+    /// Wake one task blocked on the keyboard wait queue. Registered as the
+    /// keyboard-wake handler at boot (unsafe-core invokes it from IRQ
+    /// context on every buffered keypress).
+    pub fn rust_keyboard_wake() {
         Self::wake_waiters(&KEYBOARD_WAIT, 1);
     }
 
-    #[no_mangle]
-    pub extern "C" fn rust_mouse_wake() {
+    /// Wake one task blocked on the mouse wait queue. Registered as the
+    /// mouse-wake handler at boot (unsafe-core invokes it from IRQ context
+    /// on every buffered mouse event).
+    pub fn rust_mouse_wake() {
         Self::wake_waiters(&MOUSE_WAIT, 1);
     }
 
@@ -557,9 +578,13 @@ impl Scheduler {
         // If schedule() returns, no task was available — halt.
         loop {
             #[cfg(feature = "x86_64")]
-            unsafe { core::arch::asm!("hlt"); }
+            unsafe {
+                core::arch::asm!("hlt");
+            }
             #[cfg(feature = "aarch64")]
-            unsafe { core::arch::asm!("wfi"); }
+            unsafe {
+                core::arch::asm!("wfi");
+            }
         }
     }
 }

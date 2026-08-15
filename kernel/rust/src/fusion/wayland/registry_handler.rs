@@ -6,10 +6,10 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
 use super::globals::{GlobalRegistry, InterfaceName};
 use super::protocol::{ObjectId, WaylandMessage};
+use super::{WaylandError, WaylandResult};
 
 /// Opcode for wl_registry requests
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,7 +114,8 @@ impl RegistryHandler {
         let object_id = u32::from_le_bytes(id_bytes);
 
         // Look up global
-        let global = self.globals
+        let global = self
+            .globals
             .get(global_name)
             .ok_or(WaylandError::ObjectNotFound)?;
 
@@ -123,7 +124,8 @@ impl RegistryHandler {
         let interface = global.interface();
 
         // Track the binding
-        self.client_bindings.insert((client_id, global_name), object_id);
+        self.client_bindings
+            .insert((client_id, global_name), object_id);
         self.client_objects
             .entry(client_id)
             .or_default()
@@ -142,11 +144,17 @@ impl RegistryHandler {
     }
 
     /// Generate global events for a newly connected registry client
-    pub fn get_global_events_for_client(&self, _client_id: ClientId, registry_id: u32) -> Vec<WaylandMessage> {
+    pub fn get_global_events_for_client(
+        &self,
+        _client_id: ClientId,
+        registry_id: u32,
+    ) -> Vec<WaylandMessage> {
         let mut events = Vec::new();
 
         for (name, global) in self.globals.iter() {
-            if let Ok(msg) = Self::emit_global(registry_id, *name, global.interface(), global.version()) {
+            if let Ok(msg) =
+                Self::emit_global(registry_id, *name, global.interface(), global.version())
+            {
                 events.push(msg);
             }
         }
@@ -159,7 +167,9 @@ impl RegistryHandler {
         let mut events = Vec::new();
 
         for (name, global) in self.globals.iter() {
-            if let Ok(msg) = Self::emit_global(registry_id, *name, global.interface(), global.version()) {
+            if let Ok(msg) =
+                Self::emit_global(registry_id, *name, global.interface(), global.version())
+            {
                 events.push(msg);
             }
         }
@@ -289,11 +299,18 @@ mod tests {
         let client_id = ClientId(1);
 
         // Simulate a bind creating client objects
-        handler.client_objects.entry(client_id).or_default().push(100);
+        handler
+            .client_objects
+            .entry(client_id)
+            .or_default()
+            .push(100);
         handler.client_bindings.insert((client_id, 0), 100);
 
         handler.remove_client(client_id);
         assert!(handler.client_objects.get(&client_id).is_none());
-        assert!(handler.client_bindings.keys().all(|(cid, _)| *cid != client_id));
+        assert!(handler
+            .client_bindings
+            .keys()
+            .all(|(cid, _)| *cid != client_id));
     }
 }

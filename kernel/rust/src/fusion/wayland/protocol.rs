@@ -7,12 +7,12 @@
 
 use alloc::vec::Vec;
 
-use super::{WaylandError, WaylandResult};
+use super::buffer_handler::{ShmBufferHandler, ShmPoolHandlerResponse};
 use super::client::ClientId;
 use super::compositor_handler::{CompositorHandler, CompositorResponse, SurfaceResponse};
-use super::buffer_handler::{ShmBufferHandler, ShmPoolHandlerResponse};
-use super::registry_handler::{RegistryHandler, RegistryResponse};
 use super::display_handler::{DisplayHandler, DisplayResponse};
+use super::registry_handler::{RegistryHandler, RegistryResponse};
+use super::{WaylandError, WaylandResult};
 
 /// Wayland message wire header size (in bytes)
 const MESSAGE_HEADER_SIZE: usize = 8; // object_id (4) + opcode (2) + length (2)
@@ -148,7 +148,7 @@ impl WaylandEvent {
                 payload.extend_from_slice(&callback_id.to_le_bytes());
                 Ok(WaylandMessage {
                     object_id: ObjectId(2), // Callback object
-                    opcode: 0, // done event
+                    opcode: 0,              // done event
                     payload,
                 })
             }
@@ -210,23 +210,33 @@ impl ProtocolHandler {
     ) -> WaylandResult<()> {
         match message.object_id {
             ObjectId::DISPLAY => {
-                let response = display_handler.handle_request(client_id, message.opcode, &message.payload)?;
+                let response =
+                    display_handler.handle_request(client_id, message.opcode, &message.payload)?;
                 self.handle_display_response(response);
             }
             ObjectId(2) => {
                 // wl_registry - bind requests create client-side objects
-                let response = registry_handler.handle_request(client_id, message.opcode, &message.payload)?;
+                let response =
+                    registry_handler.handle_request(client_id, message.opcode, &message.payload)?;
                 self.handle_registry_response(response);
             }
             ObjectId(3) => {
                 // wl_compositor
-                let response = compositor_handler.handle_compositor_request(client_id, message.opcode, &message.payload)?;
+                let response = compositor_handler.handle_compositor_request(
+                    client_id,
+                    message.opcode,
+                    &message.payload,
+                )?;
                 self.handle_compositor_response(response);
             }
             ObjectId(4..=100) => {
                 // Could be wl_surface or wl_shm_pool
                 // Try compositor surface handler first, then shm pool handler
-                let surface_result = compositor_handler.handle_surface_request(message.object_id.0, message.opcode, &message.payload);
+                let surface_result = compositor_handler.handle_surface_request(
+                    message.object_id.0,
+                    message.opcode,
+                    &message.payload,
+                );
                 match surface_result {
                     Ok(SurfaceResponse::DamageRecorded)
                     | Ok(SurfaceResponse::BufferAttached)
@@ -238,11 +248,19 @@ impl ProtocolHandler {
                     }
                     Err(WaylandError::ProtocolViolation) | Err(WaylandError::ObjectNotFound) => {
                         // Not a surface request, try shm pool handler
-                        let pool_result = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
+                        let pool_result = buffer_handler.handle_shm_pool_request(
+                            client_id,
+                            message.object_id.0,
+                            message.opcode,
+                            &message.payload,
+                        );
                         match pool_result {
                             Ok(ShmPoolHandlerResponse::BufferCreated { buffer_id: _ })
                             | Ok(ShmPoolHandlerResponse::Destroyed) => {
-                                self.handle_shm_pool_response(message.object_id.0, pool_result.unwrap());
+                                self.handle_shm_pool_response(
+                                    message.object_id.0,
+                                    pool_result.unwrap(),
+                                );
                             }
                             Err(e) => {
                                 unsafe {
@@ -260,7 +278,12 @@ impl ProtocolHandler {
                 unsafe {
                     crate::println!("[Wayland Protocol] Extended object routing");
                 }
-                let _ = buffer_handler.handle_shm_pool_request(client_id, message.object_id.0, message.opcode, &message.payload);
+                let _ = buffer_handler.handle_shm_pool_request(
+                    client_id,
+                    message.object_id.0,
+                    message.opcode,
+                    &message.payload,
+                );
             }
         }
         Ok(())
@@ -269,7 +292,10 @@ impl ProtocolHandler {
     /// Handle display protocol responses (send events back to client)
     fn handle_display_response(&mut self, response: DisplayResponse) {
         match response {
-            DisplayResponse::SyncAck { callback_id, callback_data } => {
+            DisplayResponse::SyncAck {
+                callback_id,
+                callback_data,
+            } => {
                 let _ = (callback_id, callback_data);
             }
             DisplayResponse::RegistryCreated { registry_id } => {
@@ -281,16 +307,21 @@ impl ProtocolHandler {
             DisplayResponse::CompositorAnnounced { name } => {
                 let _ = name;
             }
-DisplayResponse::Error { code, message } => {
-                 let _ = (code, message);
-             }
+            DisplayResponse::Error { code, message } => {
+                let _ = (code, message);
+            }
         }
     }
 
     /// Handle registry responses
     fn handle_registry_response(&mut self, response: RegistryResponse) {
         match response {
-            RegistryResponse::Bound { global_name, object_id, interface, version } => {
+            RegistryResponse::Bound {
+                global_name,
+                object_id,
+                interface,
+                version,
+            } => {
                 let _ = (global_name, object_id, interface, version);
             }
         }
@@ -299,19 +330,20 @@ DisplayResponse::Error { code, message } => {
     /// Handle compositor responses
     fn handle_compositor_response(&mut self, response: CompositorResponse) {
         match response {
-            CompositorResponse::SurfaceCreated { surface_id, object_id } => {
+            CompositorResponse::SurfaceCreated {
+                surface_id,
+                object_id,
+            } => {
                 let _ = (surface_id, object_id);
             }
         }
     }
 
     /// Handle surface responses
-    fn handle_surface_response(&mut self, _object_id: u32, _response: SurfaceResponse) {
-    }
+    fn handle_surface_response(&mut self, _object_id: u32, _response: SurfaceResponse) {}
 
     /// Handle SHM pool responses
-    fn handle_shm_pool_response(&mut self, _pool_id: u32, _response: ShmPoolHandlerResponse) {
-    }
+    fn handle_shm_pool_response(&mut self, _pool_id: u32, _response: ShmPoolHandlerResponse) {}
 
     /// Initialize the protocol handler (called when a client connects)
     pub fn initialize(&mut self) {

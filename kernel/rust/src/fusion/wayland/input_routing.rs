@@ -6,9 +6,9 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use super::surface::SurfaceId;
 use super::focus::{FocusManager, SeatId};
-use super::seat::{SeatManager, ButtonState, ModifierState};
+use super::seat::{ButtonState, ModifierState, SeatManager};
+use super::surface::SurfaceId;
 
 /// Input routing error
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,7 +57,14 @@ pub struct SurfaceGeometry {
 
 impl SurfaceGeometry {
     /// Create new surface geometry
-    pub fn new(surface_id: SurfaceId, x: i32, y: i32, width: u32, height: u32, z_order: u32) -> Self {
+    pub fn new(
+        surface_id: SurfaceId,
+        x: i32,
+        y: i32,
+        width: u32,
+        height: u32,
+        z_order: u32,
+    ) -> Self {
         Self {
             surface_id,
             x,
@@ -191,7 +198,8 @@ impl InputRouter {
         if let Some(seat) = self.focus_manager.get_seat(self.active_seat) {
             let old_focus = seat.pointer_focus();
             if old_focus != focused_surface {
-                self.focus_manager.get_seat_mut(self.active_seat)
+                self.focus_manager
+                    .get_seat_mut(self.active_seat)
                     .set_pointer_focus(focused_surface);
             }
         }
@@ -200,8 +208,7 @@ impl InputRouter {
         if let Some(surface_id) = focused_surface {
             for surface in surfaces {
                 if surface.surface_id == surface_id {
-                    if let Ok((local_x, local_y)) =
-                        surface.to_local_coordinates(screen_x, screen_y)
+                    if let Ok((local_x, local_y)) = surface.to_local_coordinates(screen_x, screen_y)
                     {
                         self.pending_events.push(PendingInputEvent::PointerMotion(
                             surface_id, local_x, local_y,
@@ -237,7 +244,8 @@ impl InputRouter {
             }
 
             if let Some(surface_id) = focused_surface {
-                self.focus_manager.get_seat_mut(self.active_seat)
+                self.focus_manager
+                    .get_seat_mut(self.active_seat)
                     .set_pointer_focus(Some(surface_id));
             }
         }
@@ -278,9 +286,8 @@ impl InputRouter {
         // Send scroll event to pointer-focused surface
         if let Some(seat) = self.focus_manager.get_seat(self.active_seat) {
             if let Some(surface_id) = seat.pointer_focus() {
-                self.pending_events.push(PendingInputEvent::PointerAxis(
-                    surface_id, vertical, amount,
-                ));
+                self.pending_events
+                    .push(PendingInputEvent::PointerAxis(surface_id, vertical, amount));
             }
         }
 
@@ -288,11 +295,7 @@ impl InputRouter {
     }
 
     /// Handle keyboard key event
-    pub fn handle_key(
-        &mut self,
-        key_code: u32,
-        pressed: bool,
-    ) -> InputRoutingResult<()> {
+    pub fn handle_key(&mut self, key_code: u32, pressed: bool) -> InputRoutingResult<()> {
         // Update keyboard state based on key (simple heuristic for modifiers)
         self.update_modifiers_from_key(key_code, pressed);
 
@@ -304,10 +307,11 @@ impl InputRouter {
                 ));
 
                 // Always send modifiers after key events
-                self.pending_events.push(PendingInputEvent::KeyboardModifiers(
-                    surface_id,
-                    self.current_modifiers,
-                ));
+                self.pending_events
+                    .push(PendingInputEvent::KeyboardModifiers(
+                        surface_id,
+                        self.current_modifiers,
+                    ));
             }
         }
 
@@ -336,7 +340,8 @@ impl InputRouter {
 
     /// Set keyboard focus
     pub fn set_keyboard_focus(&mut self, surface_id: Option<SurfaceId>) {
-        self.focus_manager.get_seat_mut(self.active_seat)
+        self.focus_manager
+            .get_seat_mut(self.active_seat)
             .set_keyboard_focus(surface_id);
     }
 
@@ -373,7 +378,7 @@ mod tests {
     #[test]
     fn test_surface_geometry_contains() {
         let surface = SurfaceGeometry::new(SurfaceId(1), 10, 20, 100, 100, 1);
-        
+
         assert!(surface.contains_point(50, 70));
         assert!(!surface.contains_point(5, 20));
         assert!(!surface.contains_point(115, 50));
@@ -382,10 +387,10 @@ mod tests {
     #[test]
     fn test_surface_geometry_conversion() {
         let surface = SurfaceGeometry::new(SurfaceId(1), 10, 20, 100, 100, 1);
-        
+
         let result = surface.to_local_coordinates(50, 70);
         assert_eq!(result, Ok((40, 50)));
-        
+
         let result = surface.to_local_coordinates(5, 20);
         assert!(result.is_err());
     }
@@ -401,9 +406,9 @@ mod tests {
     fn test_pointer_motion_routing() {
         let mut router = InputRouter::new();
         let surface = SurfaceGeometry::new(SurfaceId(1), 0, 0, 100, 100, 1);
-        
+
         router.handle_pointer_motion(&[surface], 50, 50).ok();
-        
+
         assert_eq!(router.pointer_focus(), Some(SurfaceId(1)));
         assert!(!router.pending_events().is_empty());
     }
@@ -412,21 +417,23 @@ mod tests {
     fn test_pointer_button_routing() {
         let mut router = InputRouter::new();
         let surface = SurfaceGeometry::new(SurfaceId(1), 0, 0, 100, 100, 1);
-        
-        router.handle_pointer_button(&[surface], button_codes::LEFT, true, 50, 50).ok();
-        
+
+        router
+            .handle_pointer_button(&[surface], button_codes::LEFT, true, 50, 50)
+            .ok();
+
         assert_eq!(router.pointer_focus(), Some(SurfaceId(1)));
     }
 
     #[test]
     fn test_keyboard_focus_management() {
         let mut router = InputRouter::new();
-        
+
         assert_eq!(router.keyboard_focus(), None);
-        
+
         router.set_keyboard_focus(Some(SurfaceId(1)));
         assert_eq!(router.keyboard_focus(), Some(SurfaceId(1)));
-        
+
         router.clear_surface(SurfaceId(1));
         assert_eq!(router.keyboard_focus(), None);
     }
@@ -434,12 +441,14 @@ mod tests {
     #[test]
     fn test_zorder_resolution() {
         let mut router = InputRouter::new();
-        
+
         let surface1 = SurfaceGeometry::new(SurfaceId(1), 0, 0, 100, 100, 1);
         let surface2 = SurfaceGeometry::new(SurfaceId(2), 0, 0, 100, 100, 2); // Higher z-order
-        
-        router.handle_pointer_motion(&[surface1, surface2], 50, 50).ok();
-        
+
+        router
+            .handle_pointer_motion(&[surface1, surface2], 50, 50)
+            .ok();
+
         // Should focus surface2 (higher z-order)
         assert_eq!(router.pointer_focus(), Some(SurfaceId(2)));
     }

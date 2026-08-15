@@ -8,16 +8,35 @@ pub use alloy_kernel_hal::ffi::*;
 
 use core::ffi::c_void;
 
-// === Safe wrappers ===
+// === Keyboard / mouse safe facades (x86_64) ===
+//
+// Implemented by the safe `Keyboard`/`Mouse` drivers in unsafe-core; these
+// wrappers keep the old `ffi::keyboard_*`/`ffi::mouse_*` call sites working
+// unchanged.
+
+#[cfg(feature = "x86_64")]
+pub use alloy_kernel_hal::{
+    KeyEvent, Keyboard, Mouse, MouseEvent, SPECIAL_KEY_DELETE, SPECIAL_KEY_DOWN, SPECIAL_KEY_END,
+    SPECIAL_KEY_HOME, SPECIAL_KEY_LEFT, SPECIAL_KEY_PGDN, SPECIAL_KEY_PGUP, SPECIAL_KEY_RIGHT,
+    SPECIAL_KEY_UP,
+};
+
+#[cfg(feature = "x86_64")]
+pub use alloy_kernel_hal::{
+    MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT, MOUSE_EVENT_FLAG_X_OVERFLOW,
+    MOUSE_EVENT_FLAG_Y_OVERFLOW, MOUSE_INIT_ERR_ENABLE_STREAMING,
+    MOUSE_INIT_ERR_ENABLE_STREAMING_ACK, MOUSE_INIT_ERR_INPUT_NOT_READY, MOUSE_INIT_ERR_NONE,
+    MOUSE_INIT_ERR_OUTPUT_NOT_READY, MOUSE_INIT_ERR_SET_DEFAULTS, MOUSE_INIT_ERR_SET_DEFAULTS_ACK,
+};
 
 #[cfg(feature = "x86_64")]
 pub fn keyboard_has_key() -> bool {
-    unsafe { keyboard_has_data() }
+    Keyboard::has_key()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn keyboard_read() -> u8 {
-    unsafe { keyboard_get_char() as u8 }
+    Keyboard::read().unwrap_or(0)
 }
 
 #[cfg(feature = "x86_64")]
@@ -33,28 +52,18 @@ pub fn keyboard_read_blocking() -> u8 {
 }
 
 #[cfg(feature = "x86_64")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MouseEvent {
-    pub dx: i8,
-    pub dy: i8,
-    pub wheel: i8,
-    pub buttons: u8,
-    pub flags: u8,
-}
-
-#[cfg(feature = "x86_64")]
 pub fn mouse_has_event() -> bool {
-    unsafe { mouse_has_data() }
+    Mouse::has_event()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn mouse_ready() -> bool {
-    unsafe { mouse_is_initialized() }
+    Mouse::ready()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn mouse_init_error_code() -> u8 {
-    unsafe { mouse_last_init_error() }
+    Mouse::init_error()
 }
 
 #[cfg(feature = "x86_64")]
@@ -71,46 +80,8 @@ pub fn mouse_read_blocking() -> MouseEvent {
 
 #[cfg(feature = "x86_64")]
 pub fn mouse_read() -> Option<MouseEvent> {
-    let mut dx: i8 = 0;
-    let mut dy: i8 = 0;
-    let mut wheel: i8 = 0;
-    let mut buttons: u8 = 0;
-    let mut flags: u8 = 0;
-
-    let has_event = unsafe {
-        mouse_read_event(
-            &mut dx as *mut i8,
-            &mut dy as *mut i8,
-            &mut wheel as *mut i8,
-            &mut buttons as *mut u8,
-            &mut flags as *mut u8,
-        )
-    };
-
-    if !has_event {
-        return None;
-    }
-
-    Some(MouseEvent { dx, dy, wheel, buttons, flags })
+    Mouse::read()
 }
-
-// Special key codes (match C++ keyboard.h)
-pub const SPECIAL_KEY_UP: u8 = 128;
-pub const SPECIAL_KEY_DOWN: u8 = 129;
-pub const SPECIAL_KEY_LEFT: u8 = 130;
-pub const SPECIAL_KEY_RIGHT: u8 = 131;
-pub const SPECIAL_KEY_HOME: u8 = 132;
-pub const SPECIAL_KEY_END: u8 = 133;
-pub const SPECIAL_KEY_DELETE: u8 = 134;
-pub const SPECIAL_KEY_PGUP: u8 = 135;
-pub const SPECIAL_KEY_PGDN: u8 = 136;
-
-pub const MOUSE_BUTTON_LEFT: u8 = 0x01;
-pub const MOUSE_BUTTON_RIGHT: u8 = 0x02;
-pub const MOUSE_BUTTON_MIDDLE: u8 = 0x04;
-
-pub const MOUSE_EVENT_FLAG_X_OVERFLOW: u8 = 0x01;
-pub const MOUSE_EVENT_FLAG_Y_OVERFLOW: u8 = 0x02;
 
 /// Socket convenience wrappers
 pub fn socket_create(domain: i32, socket_type: i32, protocol: i32) -> i32 {
@@ -149,207 +120,181 @@ pub const PAGE_USER: u32 = 0x004;
 // ============================================================================
 // VESA VBE Graphics Safe Wrappers (x86 only)
 // ============================================================================
+//
+// Delegated to the safe `Vesa` facade in unsafe-core. The boot main already
+// called `Vesa::init(multiboot_addr)` with the real multiboot address, so the
+// `Vesa::init(0)` here is an idempotent no-op.
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_initialize() {
-    unsafe { vesa_init() }
+    alloy_kernel_hal::Vesa::init(0);
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_set_graphics_mode(mode: u16) -> (bool, u16) {
-    unsafe {
-        let result = vesa_set_mode(mode);
-        (result == 0, result)
+    match alloy_kernel_hal::Vesa::set_mode(mode) {
+        Ok(()) => (true, 0),
+        Err(e) => (false, e as u16),
     }
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_framebuffer_addr() -> Option<u64> {
-    unsafe {
-        let addr = vesa_get_framebuffer();
-        if addr != 0 { Some(addr) } else { None }
+    let addr = alloy_kernel_hal::Vesa::framebuffer_addr();
+    if addr != 0 {
+        Some(addr)
+    } else {
+        None
     }
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_display_resolution() -> (u16, u16) {
-    unsafe {
-        let mut width: u16 = 0;
-        let mut height: u16 = 0;
-        vesa_get_resolution(&mut width, &mut height);
-        (width, height)
-    }
+    alloy_kernel_hal::Vesa::resolution()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_current_mode() -> Option<u16> {
-    unsafe {
-        let mut mode: u16 = 0;
-        let result = vesa_get_mode(&mut mode);
-        if result == 0 { Some(mode) } else { None }
-    }
+    alloy_kernel_hal::Vesa::current_mode()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_available() -> bool {
-    unsafe { vesa_is_available() != 0 }
+    alloy_kernel_hal::Vesa::available()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_controller_capabilities() -> u8 {
-    unsafe { vesa_get_capabilities() }
+    alloy_kernel_hal::Vesa::capabilities()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_color_depth() -> u8 {
-    unsafe { vesa_get_bits_per_pixel() }
+    alloy_kernel_hal::Vesa::bits_per_pixel()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_scanline_bytes() -> u16 {
-    unsafe { vesa_get_bytes_per_scanline() }
+    alloy_kernel_hal::Vesa::bytes_per_scanline()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_buffer_size() -> u64 {
-    unsafe { vesa_get_framebuffer_size() }
+    alloy_kernel_hal::Vesa::framebuffer_size()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_available() -> bool {
-    unsafe { vesa_cursor_is_available() != 0 }
+    alloy_kernel_hal::Vesa::cursor_available()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_set_enabled(enabled: bool) {
-    unsafe { vesa_cursor_enable(enabled as u8) }
+    alloy_kernel_hal::Vesa::cursor_enable(enabled);
 }
 
 #[cfg(feature = "x86_64")]
 pub fn vesa_hardware_cursor_set_position(x: u16, y: u16) {
-    unsafe { vesa_cursor_set_position(x, y) }
+    alloy_kernel_hal::Vesa::cursor_set_position(x, y);
 }
 
 // ============================================================================
 // ATA PIO Driver Safe Wrappers (x86 only)
 // ============================================================================
+//
+// Delegated to the safe `Ata` facade in unsafe-core.
 
 #[cfg(feature = "x86_64")]
-pub struct AtaDriveInfo {
-    pub present: bool,
-    pub is_lba48: bool,
-    pub num_sectors: u64,
-    pub model: [u8; 41],
-}
-
-#[cfg(feature = "x86_64")]
-impl AtaDriveInfo {
-    pub fn probe(bus: u8, drive: u8) -> Self {
-        let present = unsafe { ata_drive_present(bus, drive) != 0 };
-        if !present {
-            return AtaDriveInfo { present: false, is_lba48: false, num_sectors: 0, model: [0u8; 41] };
-        }
-        AtaDriveInfo { present: true, is_lba48: true, num_sectors: 0, model: [0u8; 41] }
-    }
-}
+pub use alloy_kernel_hal::AtaDriveInfo;
 
 #[cfg(feature = "x86_64")]
 pub fn ata_initialize() -> bool {
-    unsafe { ata_init() != 0 }
+    alloy_kernel_hal::Ata::init()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ata_drive_exists(bus: u8, drive: u8) -> bool {
-    unsafe { ata_drive_present(bus, drive) != 0 }
+    alloy_kernel_hal::Ata::drive_present(bus, drive)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ata_read(bus: u8, drive: u8, lba: u64, count: u8, buf: &mut [u8]) -> bool {
-    unsafe { ata_read_sectors(bus, drive, lba, count, buf.as_mut_ptr()) != 0 }
+    alloy_kernel_hal::Ata::read_sectors(bus, drive, lba, count, buf)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ata_write(bus: u8, drive: u8, lba: u64, count: u8, buf: &[u8]) -> bool {
-    unsafe { ata_write_sectors(bus, drive, lba, count, buf.as_ptr()) != 0 }
+    alloy_kernel_hal::Ata::write_sectors(bus, drive, lba, count, buf)
 }
 
 // ============================================================================
 // AHCI Driver Safe Wrappers (x86 only)
 // ============================================================================
+//
+// Delegated to the safe `Ahci` facade in unsafe-core.
 
 #[cfg(feature = "x86_64")]
-pub struct AhciDriveInfo {
-    pub present: bool,
-    pub port_num: u8,
-    pub num_sectors: u64,
-    pub model: [u8; 41],
-}
-
-#[cfg(feature = "x86_64")]
-impl AhciDriveInfo {
-    #[allow(unused_variables)]
-    pub fn probe(index: i32) -> Self {
-        AhciDriveInfo { present: true, port_num: 0, num_sectors: 0, model: [0u8; 41] }
-    }
-}
+pub use alloy_kernel_hal::AhciDriveInfo;
 
 #[cfg(feature = "x86_64")]
 pub fn ahci_initialize() -> bool {
-    unsafe { ahci_init() != 0 }
+    alloy_kernel_hal::Ahci::init()
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ahci_drive_count_ffi() -> i32 {
-    unsafe { ahci_drive_count() }
+    alloy_kernel_hal::Ahci::drive_count() as i32
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ahci_read(drive: i32, lba: u64, count: u8, buf: &mut [u8]) -> bool {
-    unsafe { ahci_read_sectors(drive, lba, count, buf.as_mut_ptr()) != 0 }
+    alloy_kernel_hal::Ahci::read_sectors(drive as usize, lba, count, buf)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn ahci_write(drive: i32, lba: u64, count: u8, buf: &[u8]) -> bool {
-    unsafe { ahci_write_sectors(drive, lba, count, buf.as_ptr()) != 0 }
+    alloy_kernel_hal::Ahci::write_sectors(drive as usize, lba, count, buf)
 }
 
 // ============================================================================
 // Initrd / Ramdisk Safe Wrappers (x86 only)
 // ============================================================================
+//
+// Delegated to the safe `Initrd` facade in unsafe-core. `initrd_initialize`
+// is normally superseded by the boot main's `Initrd::init(multiboot_addr)`;
+// it exists so callers without bootloader info can still drive the scan.
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_initialize(multiboot_addr: u32) {
-    unsafe { initrd_init(multiboot_addr) }
+    alloy_kernel_hal::Initrd::init(multiboot_addr);
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_module_count_ffi() -> i32 {
-    unsafe { initrd_module_count() }
+    alloy_kernel_hal::Initrd::module_count() as i32
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_module_start(index: i32) -> usize {
-    unsafe { initrd_module_start_ffi(index) }
+    alloy_kernel_hal::Initrd::get_module(index as usize).map_or(0, |m| m.start)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_module_end(index: i32) -> usize {
-    unsafe { initrd_module_end_ffi(index) }
+    alloy_kernel_hal::Initrd::get_module(index as usize).map_or(0, |m| m.end)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_module_size(index: i32) -> usize {
-    unsafe { initrd_module_size_ffi(index) }
+    alloy_kernel_hal::Initrd::get_module(index as usize).map_or(0, |m| m.size)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_module_cmdline(index: i32) -> [u8; 64] {
-    let mut buf = [0u8; 64];
-    unsafe { initrd_module_cmdline_ffi(index, buf.as_mut_ptr(), 64); }
-    buf
+    alloy_kernel_hal::Initrd::get_module(index as usize).map_or([0u8; 64], |m| m.cmdline)
 }
 
 #[cfg(feature = "x86_64")]
 pub fn initrd_has_modules() -> bool {
-    unsafe { initrd_has_modules_ffi() != 0 }
+    alloy_kernel_hal::Initrd::has_modules()
 }

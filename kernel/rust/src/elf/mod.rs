@@ -88,9 +88,11 @@ enum ElfClass {
 /// phdr_vaddr is the runtime virtual address of the program header table (AT_PHDR). If unknown, returns 0.
 ///
 /// **No heap allocations.** Uses a fixed-size stack array to track load segments.
-pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u64,u64), i32> {
+pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u64, u64), i32> {
     // Check magic
-    if image.len() < 16 { return Err(-1); }
+    if image.len() < 16 {
+        return Err(-1);
+    }
     if image[0] != 0x7f || image[1] != b'E' || image[2] != b'L' || image[3] != b'F' {
         return Err(-1);
     }
@@ -102,8 +104,10 @@ pub fn load_elf_from_bytes(image: &[u8]) -> Result<(u64,u64), i32> {
     }
 }
 
-fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
-    if image.len() < core::mem::size_of::<Elf32Ehdr>() { return Err(-1); }
+fn load_elf32(image: &[u8]) -> Result<(u64, u64), i32> {
+    if image.len() < core::mem::size_of::<Elf32Ehdr>() {
+        return Err(-1);
+    }
     let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
 
     let phoff = hdr.e_phoff as usize;
@@ -111,13 +115,19 @@ fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
     let phnum = hdr.e_phnum as usize;
 
     #[derive(Clone, Copy, Default)]
-    struct LoadSeg { p_offset: u32, p_vaddr: u32, p_filesz: u32 }
+    struct LoadSeg {
+        p_offset: u32,
+        p_vaddr: u32,
+        p_filesz: u32,
+    }
     let mut loads: [LoadSeg; MAX_LOADS] = [LoadSeg::default(); MAX_LOADS];
     let mut load_count: usize = 0;
 
     for i in 0..phnum {
         let phdr_offset = phoff + i * phentsize;
-        if phdr_offset + core::mem::size_of::<Elf32Phdr>() > image.len() { return Err(-1); }
+        if phdr_offset + core::mem::size_of::<Elf32Phdr>() > image.len() {
+            return Err(-1);
+        }
         let ph = unsafe { &*(image.as_ptr().add(phdr_offset) as *const Elf32Phdr) };
         if ph.p_type == PT_LOAD {
             let memsz = ph.p_memsz as usize;
@@ -133,8 +143,16 @@ fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
             while page_addr < aligned_start + alloc_size {
                 let frame = alloy_kernel_hal::PhysFrame::alloc().ok_or(-1)?;
                 let phys = frame.into_addr(); // owned by the page directory now
-                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys as *mut core::ffi::c_void, flags) };
-                if !ok { return Err(-1); }
+                let ok = unsafe {
+                    ffi::vmm_map(
+                        page_addr as *mut core::ffi::c_void,
+                        phys as *mut core::ffi::c_void,
+                        flags,
+                    )
+                };
+                if !ok {
+                    return Err(-1);
+                }
                 let page_offset = page_addr.saturating_sub(vaddr);
                 if page_offset < filesz {
                     let copy_from = page_offset;
@@ -149,7 +167,11 @@ fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
             }
 
             if load_count < MAX_LOADS {
-                loads[load_count] = LoadSeg { p_offset: ph.p_offset, p_vaddr: ph.p_vaddr, p_filesz: ph.p_filesz };
+                loads[load_count] = LoadSeg {
+                    p_offset: ph.p_offset,
+                    p_vaddr: ph.p_vaddr,
+                    p_filesz: ph.p_filesz,
+                };
                 load_count += 1;
             }
         }
@@ -169,8 +191,10 @@ fn load_elf32(image: &[u8]) -> Result<(u64,u64), i32> {
     Ok((hdr.e_entry as u64, phdr_vaddr))
 }
 
-fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
-    if image.len() < core::mem::size_of::<Elf64Ehdr>() as usize { return Err(-1); }
+fn load_elf64(image: &[u8]) -> Result<(u64, u64), i32> {
+    if image.len() < core::mem::size_of::<Elf64Ehdr>() as usize {
+        return Err(-1);
+    }
     let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
 
     let phoff = hdr.e_phoff as usize;
@@ -178,13 +202,19 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
     let phnum = hdr.e_phnum as usize;
 
     #[derive(Clone, Copy, Default)]
-    struct LoadSeg64 { p_offset: u64, p_vaddr: u64, p_filesz: u64 }
+    struct LoadSeg64 {
+        p_offset: u64,
+        p_vaddr: u64,
+        p_filesz: u64,
+    }
     let mut loads: [LoadSeg64; MAX_LOADS] = [LoadSeg64::default(); MAX_LOADS];
     let mut load_count: usize = 0;
 
     for i in 0..phnum {
         let phdr_offset = phoff + i * phentsize;
-        if phdr_offset + core::mem::size_of::<Elf64Phdr>() > image.len() { return Err(-1); }
+        if phdr_offset + core::mem::size_of::<Elf64Phdr>() > image.len() {
+            return Err(-1);
+        }
         let ph = unsafe { &*(image.as_ptr().add(phdr_offset) as *const Elf64Phdr) };
         if ph.p_type == PT_LOAD {
             let memsz = ph.p_memsz as usize;
@@ -200,8 +230,16 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
             while page_addr < aligned_start + alloc_size {
                 let frame = alloy_kernel_hal::PhysFrame::alloc().ok_or(-1)?;
                 let phys = frame.into_addr(); // owned by the page directory now
-                let ok = unsafe { ffi::vmm_map(page_addr as *mut core::ffi::c_void, phys as *mut core::ffi::c_void, flags) };
-                if !ok { return Err(-1); }
+                let ok = unsafe {
+                    ffi::vmm_map(
+                        page_addr as *mut core::ffi::c_void,
+                        phys as *mut core::ffi::c_void,
+                        flags,
+                    )
+                };
+                if !ok {
+                    return Err(-1);
+                }
                 let page_offset = page_addr.saturating_sub(vaddr);
                 if page_offset < filesz {
                     let copy_from = page_offset;
@@ -216,7 +254,11 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
             }
 
             if load_count < MAX_LOADS {
-                loads[load_count] = LoadSeg64 { p_offset: ph.p_offset, p_vaddr: ph.p_vaddr, p_filesz: ph.p_filesz };
+                loads[load_count] = LoadSeg64 {
+                    p_offset: ph.p_offset,
+                    p_vaddr: ph.p_vaddr,
+                    p_filesz: ph.p_filesz,
+                };
                 load_count += 1;
             }
         }
@@ -239,20 +281,26 @@ fn load_elf64(image: &[u8]) -> Result<(u64,u64), i32> {
 /// Find the PT_TLS segment and return (vaddr, memsz).
 /// The thread pointer (FS base) on x86_64 = vaddr + memsz (end of TLS block).
 pub fn find_tls_info(image: &[u8]) -> Option<(u64, u64)> {
-    if image.len() < 16 { return None; }
+    if image.len() < 16 {
+        return None;
+    }
     if image[0] != 0x7f || image[1] != b'E' || image[2] != b'L' || image[3] != b'F' {
         return None;
     }
     match image[4] {
         1 => {
-            if image.len() < core::mem::size_of::<Elf32Ehdr>() { return None; }
+            if image.len() < core::mem::size_of::<Elf32Ehdr>() {
+                return None;
+            }
             let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
             let phoff = hdr.e_phoff as usize;
             let phentsize = hdr.e_phentsize as usize;
             let phnum = hdr.e_phnum as usize;
             for i in 0..phnum {
                 let off = phoff + i * phentsize;
-                if off + core::mem::size_of::<Elf32Phdr>() > image.len() { return None; }
+                if off + core::mem::size_of::<Elf32Phdr>() > image.len() {
+                    return None;
+                }
                 let ph = unsafe { &*(image.as_ptr().add(off) as *const Elf32Phdr) };
                 if ph.p_type == PT_TLS {
                     return Some((ph.p_vaddr as u64, ph.p_memsz as u64));
@@ -261,14 +309,18 @@ pub fn find_tls_info(image: &[u8]) -> Option<(u64, u64)> {
             None
         }
         2 => {
-            if image.len() < core::mem::size_of::<Elf64Ehdr>() { return None; }
+            if image.len() < core::mem::size_of::<Elf64Ehdr>() {
+                return None;
+            }
             let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
             let phoff = hdr.e_phoff as usize;
             let phentsize = hdr.e_phentsize as usize;
             let phnum = hdr.e_phnum as usize;
             for i in 0..phnum {
                 let off = phoff + i * phentsize;
-                if off + core::mem::size_of::<Elf64Phdr>() > image.len() { return None; }
+                if off + core::mem::size_of::<Elf64Phdr>() > image.len() {
+                    return None;
+                }
                 let ph = unsafe { &*(image.as_ptr().add(off) as *const Elf64Phdr) };
                 if ph.p_type == PT_TLS {
                     return Some((ph.p_vaddr, ph.p_memsz));
@@ -282,7 +334,9 @@ pub fn find_tls_info(image: &[u8]) -> Option<(u64, u64)> {
 
 /// Parse minimal ELF header fields useful for execve auxv
 pub fn parse_elf_header(image: &[u8]) -> Option<(u64, u16, u16)> {
-    if image.len() < 16 { return None; }
+    if image.len() < 16 {
+        return None;
+    }
     if image[0] != 0x7f || image[1] != b'E' || image[2] != b'L' || image[3] != b'F' {
         return None;
     }

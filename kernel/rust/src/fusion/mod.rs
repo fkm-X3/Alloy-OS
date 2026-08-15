@@ -4,17 +4,17 @@
 //! Manages framebuffer-based rendering, Wayland protocol support, and the LXQt shell.
 
 pub mod backend;
-#[cfg(feature = "x86_64")]
-pub mod terminal;
 pub mod framebuffer;
-pub mod wayland;
 pub mod protocol_types;
 pub mod shell;
+#[cfg(feature = "x86_64")]
+pub mod terminal;
+pub mod wayland;
 
 pub use backend::FusionDisplayBackend;
+pub use framebuffer::{Color, FramebufferRenderer};
 #[cfg(feature = "x86_64")]
 pub use terminal::TerminalSurface;
-pub use framebuffer::{FramebufferRenderer, Color};
 pub use wayland::WaylandServer;
 
 /// Fusion display system marker
@@ -28,7 +28,10 @@ impl Fusion {
     }
 
     /// Create a new framebuffer renderer
-    pub fn new_renderer(width: u32, height: u32) -> Result<FramebufferRenderer, backend::FusionError> {
+    pub fn new_renderer(
+        width: u32,
+        height: u32,
+    ) -> Result<FramebufferRenderer, backend::FusionError> {
         FramebufferRenderer::new(width, height)
     }
 }

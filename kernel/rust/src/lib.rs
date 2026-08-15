@@ -1,41 +1,41 @@
 #![no_std]
 #![feature(alloc_error_handler)]
 
-extern crate core;
 extern crate alloc;
+extern crate core;
 
 // Safe console + driver facades from the HAL (which re-exports
 // `unsafe_core::api`). The kernel crate no longer touches raw `ffi::*`
 // pointers for serial/VGA/timer output.
-pub use alloy_kernel_hal::{log, print, println};
-pub use alloy_kernel_hal::{Serial, SystemTimer};
 #[cfg(feature = "x86_64")]
 pub use alloy_kernel_hal::VgaText;
+pub use alloy_kernel_hal::{log, print, println};
+pub use alloy_kernel_hal::{Serial, SystemTimer};
 
 pub mod allocator;
+pub mod ffi;
 pub mod heap;
+pub mod panic;
 pub mod slab;
 pub mod sync;
-pub mod ffi;
-pub mod panic;
 #[cfg(feature = "x86_64")]
 pub mod terminal;
 pub mod utils_rs;
 pub use utils_rs as utils;
-pub mod fs;
 pub mod block;
-pub mod process;
-pub mod syscall;
-pub mod elf;
-pub mod graphics;
-pub mod fusion;
-pub mod net;
 pub mod display_server;
+pub mod elf;
+pub mod fs;
+pub mod fusion;
+pub mod graphics;
+pub mod net;
+pub mod process;
 pub mod shm_alloc;
+pub mod syscall;
 
+use crate::graphics::Display;
 use alloc::boxed::Box;
 use core::panic::PanicInfo;
-use crate::graphics::Display;
 
 extern "C" fn display_server_entry() {
     // Disable interrupts during init so the timer can't preempt us.
@@ -106,12 +106,26 @@ pub extern "C" fn rust_main() {
     crate::syscall::register_all();
     alloy_kernel_hal::set_timer_tick_handler(process::Scheduler::rust_timer_tick);
     alloy_kernel_hal::set_page_fault_handler(process::Scheduler::rust_handle_page_fault);
+    #[cfg(feature = "x86_64")]
+    {
+        alloy_kernel_hal::set_keyboard_wake_handler(process::Scheduler::rust_keyboard_wake);
+        alloy_kernel_hal::set_mouse_wake_handler(process::Scheduler::rust_mouse_wake);
+    }
 
     crate::println!("[Rust] Kernel entry - initializing subsystems");
     crate::println!("[Rust] About to vga_clear");
     #[cfg(feature = "x86_64")]
     crate::VgaText::clear();
     crate::println!("[Rust] vga_clear done");
+
+    // Initialize the PS/2 input drivers (x86_64): the keyboard state reset
+    // prints the `[KBD]` marker and the mouse is put into streaming mode so
+    // IRQ1/IRQ12 packets start buffering.
+    #[cfg(feature = "x86_64")]
+    {
+        alloy_kernel_hal::Keyboard::init();
+        let _ = alloy_kernel_hal::Mouse::init();
+    }
 
     crate::fs::vfs_init();
     crate::println!("[VFS] initialized");
@@ -122,7 +136,9 @@ pub extern "C" fn rust_main() {
         let dev_count = fs::vfs_block_device_count();
         for dev_id in 0..dev_count {
             let ns = fs::vfs_block_device_sectors(dev_id);
-            if ns < 512 { continue; }
+            if ns < 512 {
+                continue;
+            }
             let _ = fs::vfs_mount_fat32(dev_id, "/mnt/disk");
             if let Ok(entries) = fs::vfs_list_fat32(dev_id) {
                 crate::println!("[VFS] Mounted FAT32 dev #0x{:08X}", dev_id);
@@ -138,7 +154,10 @@ pub extern "C" fn rust_main() {
     process::Scheduler::init();
 
     // Create the display server task (LXQt shell + Wayland server)
-    let display_task = Box::new(process::task::Task::new(display_server_entry, "display-server"));
+    let display_task = Box::new(process::task::Task::new(
+        display_server_entry,
+        "display-server",
+    ));
     process::Scheduler::add_task(display_task);
 
     // aarch64: no DE (x86_64-only), so exercise the EL0 svc syscall path

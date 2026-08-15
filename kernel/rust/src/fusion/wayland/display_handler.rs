@@ -6,9 +6,9 @@
 
 use alloc::vec::Vec;
 
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
 use super::protocol::{ObjectId, WaylandMessage};
+use super::{WaylandError, WaylandResult};
 
 /// Opcode for wl_display requests
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,12 +75,8 @@ impl DisplayHandler {
         let request = DisplayRequest::try_from(opcode)?;
 
         match request {
-            DisplayRequest::Sync => {
-                self.handle_sync(client_id, payload)
-            }
-            DisplayRequest::GetRegistry => {
-                self.handle_get_registry(client_id, payload)
-            }
+            DisplayRequest::Sync => self.handle_sync(client_id, payload),
+            DisplayRequest::GetRegistry => self.handle_get_registry(client_id, payload),
         }
     }
 
@@ -150,7 +146,10 @@ impl DisplayHandler {
     }
 
     /// Emit callback done event
-    pub fn emit_callback_done(callback_id: u32, callback_data: u32) -> WaylandResult<WaylandMessage> {
+    pub fn emit_callback_done(
+        callback_id: u32,
+        callback_data: u32,
+    ) -> WaylandResult<WaylandMessage> {
         let mut payload = Vec::new();
         payload.extend_from_slice(&callback_data.to_le_bytes());
 
@@ -177,22 +176,13 @@ pub enum DisplayResponse {
         callback_data: u32,
     },
     /// Registry created
-    RegistryCreated {
-        registry_id: u32,
-    },
+    RegistryCreated { registry_id: u32 },
     /// Capabilities acknowledgment
-    CapabilitiesAck {
-        capabilities: u32,
-    },
+    CapabilitiesAck { capabilities: u32 },
     /// Compositor announced
-    CompositorAnnounced {
-        name: u32,
-    },
+    CompositorAnnounced { name: u32 },
     /// Error response
-    Error {
-        code: u32,
-        message: &'static str,
-    },
+    Error { code: u32, message: &'static str },
 }
 
 #[cfg(test)]
@@ -202,7 +192,10 @@ mod tests {
     #[test]
     fn test_display_request_conversion() {
         assert_eq!(DisplayRequest::try_from(0).unwrap(), DisplayRequest::Sync);
-        assert_eq!(DisplayRequest::try_from(1).unwrap(), DisplayRequest::GetRegistry);
+        assert_eq!(
+            DisplayRequest::try_from(1).unwrap(),
+            DisplayRequest::GetRegistry
+        );
         assert!(DisplayRequest::try_from(99).is_err());
     }
 

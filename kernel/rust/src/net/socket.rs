@@ -1,8 +1,8 @@
+use crate::process::Scheduler;
+use crate::process::WaitQueue;
+use crate::sync::SpinLock;
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
-use crate::sync::SpinLock;
-use crate::process::WaitQueue;
-use crate::process::Scheduler;
 
 pub const AF_UNIX: i32 = 1;
 pub const SOCK_STREAM: i32 = 1;

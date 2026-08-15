@@ -27,6 +27,12 @@ static mut SYSCALL_TABLE: [Option<SyscallHandler>; SYSCALL_SLOTS] = [None; SYSCA
 /// Registered timer-tick handler (scheduler preemption), if any.
 static mut TIMER_TICK_HANDLER: Option<fn()> = None;
 
+/// Registered keyboard-wake handler (wakes tasks blocked on input), if any.
+static mut KEYBOARD_WAKE_HANDLER: Option<fn()> = None;
+
+/// Registered mouse-wake handler (wakes tasks blocked on input), if any.
+static mut MOUSE_WAKE_HANDLER: Option<fn()> = None;
+
 /// Registered page-fault handler (task termination policy), if any.
 static mut PAGE_FAULT_HANDLER: Option<fn(usize, u32) -> FaultAction> = None;
 
@@ -63,6 +69,18 @@ impl SyscallTable {
 /// Register the timer-tick handler. Invoked from IRQ context on every tick.
 pub fn set_timer_tick_handler(handler: fn()) {
     unsafe { TIMER_TICK_HANDLER = Some(handler); }
+}
+
+/// Register the keyboard-wake handler. Invoked from IRQ context on every
+/// buffered keypress, so blocked readers can be woken.
+pub fn set_keyboard_wake_handler(handler: fn()) {
+    unsafe { KEYBOARD_WAKE_HANDLER = Some(handler); }
+}
+
+/// Register the mouse-wake handler. Invoked from IRQ context on every
+/// buffered mouse event, so blocked readers can be woken.
+pub fn set_mouse_wake_handler(handler: fn()) {
+    unsafe { MOUSE_WAKE_HANDLER = Some(handler); }
 }
 
 /// Register the page-fault handler. Invoked from exception context.
@@ -102,6 +120,20 @@ pub(crate) fn dispatch_syscall(
 /// Invoke the registered timer-tick handler, if any.
 pub(crate) fn invoke_timer_tick() {
     if let Some(handler) = unsafe { TIMER_TICK_HANDLER } {
+        handler();
+    }
+}
+
+/// Invoke the registered keyboard-wake handler, if any.
+pub(crate) fn invoke_keyboard_wake() {
+    if let Some(handler) = unsafe { KEYBOARD_WAKE_HANDLER } {
+        handler();
+    }
+}
+
+/// Invoke the registered mouse-wake handler, if any.
+pub(crate) fn invoke_mouse_wake() {
+    if let Some(handler) = unsafe { MOUSE_WAKE_HANDLER } {
         handler();
     }
 }

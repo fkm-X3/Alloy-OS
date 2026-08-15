@@ -63,7 +63,7 @@ pub struct Task {
     /// `context.cr3`/`context.ttbr0`, which the asm context switch reads.
     address_space: AddressSpace,
     #[allow(dead_code)]
-    stack: Option<Box<[u8; KERNEL_STACK_SIZE]>>,  // kernel stack
+    stack: Option<Box<[u8; KERNEL_STACK_SIZE]>>, // kernel stack
     name: String,
     // Simple file descriptor table (map fd -> (vnode id, offset)). None means free.
     fds: [Option<(u64, usize)>; 32],
@@ -75,18 +75,17 @@ pub struct Task {
     ticks_used: u32,
 }
 
-
 impl Task {
     /// Create a new task with the given entry point
     pub fn new(entry: extern "C" fn(), name: &str) -> Self {
         let id = TaskId::new();
-        
+
         // Allocate kernel stack
         let mut stack = Box::new([0u8; KERNEL_STACK_SIZE]);
-        
+
         // Set up initial context
         let mut context = Box::new(CpuContext::new());
-        
+
         // Stack grows downward, so ESP/RSP points to the end
         let stack_top = stack.as_mut_ptr() as usize + KERNEL_STACK_SIZE;
         #[cfg(feature = "x86_64")]
@@ -117,7 +116,7 @@ impl Task {
             // Print simple message without trying to print the name (causes issues)
             crate::println!("...");
         }
-        
+
         let mut task = Task {
             id,
             parent_id: None,
@@ -178,7 +177,9 @@ impl Task {
         if (fd as usize) < self.fds.len() {
             if let Some((vid, _off)) = self.fds[fd as usize] {
                 Some(vid)
-            } else { None }
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -212,7 +213,7 @@ impl Task {
             Err(FdCloseError)
         }
     }
-    
+
     /// Create a task from raw parts (used by clone/fork)
     pub fn from_parts(
         context: Box<CpuContext>,
@@ -245,32 +246,32 @@ impl Task {
         task.priority = 3;
         task
     }
-    
+
     /// Get task ID
     pub fn id(&self) -> TaskId {
         self.id
     }
-    
+
     /// Get current state
     pub fn state(&self) -> TaskState {
         self.state
     }
-    
+
     /// Set task state
     pub fn set_state(&mut self, state: TaskState) {
         self.state = state;
     }
-    
+
     /// Get task name
     pub fn name(&self) -> &str {
         &self.name
     }
-    
+
     /// Get mutable reference to CPU context
     pub fn context_mut(&mut self) -> &mut CpuContext {
         &mut self.context
     }
-    
+
     /// Get immutable reference to CPU context
     pub fn context(&self) -> &CpuContext {
         &self.context
@@ -346,8 +347,12 @@ impl Drop for Task {
 extern "C" fn idle_task_entry() {
     loop {
         #[cfg(feature = "x86_64")]
-        unsafe { core::arch::asm!("sti; hlt", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti; hlt", options(nomem, nostack));
+        }
         #[cfg(feature = "aarch64")]
-        unsafe { core::arch::asm!("wfi"); }
+        unsafe {
+            core::arch::asm!("wfi");
+        }
     }
 }

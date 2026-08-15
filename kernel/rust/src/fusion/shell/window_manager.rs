@@ -1,7 +1,7 @@
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
 use crate::fusion::backend::{FusionDisplayBackend, FusionError};
 use crate::fusion::framebuffer::{Color, FramebufferRenderer};
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WindowId(pub u32);
@@ -93,7 +93,11 @@ impl LxqtWindowManager {
         Ok(id)
     }
 
-    pub fn destroy_window(&mut self, id: WindowId, backend: &mut FusionDisplayBackend) -> Result<(), FusionError> {
+    pub fn destroy_window(
+        &mut self,
+        id: WindowId,
+        backend: &mut FusionDisplayBackend,
+    ) -> Result<(), FusionError> {
         if let Some(win) = self.windows.remove(&id) {
             let _ = backend.destroy_surface(win.content_surface_id);
             let _ = backend.destroy_surface(win.frame_surface_id);
@@ -124,7 +128,13 @@ impl LxqtWindowManager {
         self.focus_order.push(id);
     }
 
-    pub fn move_window(&mut self, id: WindowId, dx: i32, dy: i32, backend: &mut FusionDisplayBackend) -> Result<(), FusionError> {
+    pub fn move_window(
+        &mut self,
+        id: WindowId,
+        dx: i32,
+        dy: i32,
+        backend: &mut FusionDisplayBackend,
+    ) -> Result<(), FusionError> {
         if let Some(win) = self.windows.get_mut(&id) {
             win.x = win.x.saturating_add(dx);
             win.y = win.y.saturating_add(dy);
@@ -162,7 +172,9 @@ impl LxqtWindowManager {
     }
 
     pub fn render_window_frame(&self, id: WindowId, backend: &mut FusionDisplayBackend) {
-        let Some(win) = self.windows.get(&id) else { return };
+        let Some(win) = self.windows.get(&id) else {
+            return;
+        };
         let frame_w = win.width.saturating_add(8);
         let frame_h = win.height.saturating_add(28);
         let mut r = match FramebufferRenderer::new(frame_w, frame_h) {
@@ -184,7 +196,11 @@ impl LxqtWindowManager {
         let close_x = frame_w.saturating_sub(22);
         r.fill_rect(close_x, 6, 16, 12, Color::from_rgb(200, 60, 60));
 
-        let title_color = if win.focused { Color::white() } else { Color::from_rgb(180, 190, 210) };
+        let title_color = if win.focused {
+            Color::white()
+        } else {
+            Color::from_rgb(180, 190, 210)
+        };
         let max_title_w = close_x.saturating_sub(10);
         let cw = r.char_width();
         let display_title = if win.title.len().saturating_mul(cw as usize) > max_title_w as usize {

@@ -114,7 +114,8 @@ impl TextRenderer {
         }
 
         let mut buf = alloc::vec![0u32; (width * height) as usize];
-        self.font.render_glyph(ch, &mut buf, width, height, 0, 0, color, self.bg_color);
+        self.font
+            .render_glyph(ch, &mut buf, width, height, 0, 0, color, self.bg_color);
 
         for row in 0..height {
             for col in 0..width {

@@ -1,6 +1,6 @@
-use alloc::vec::Vec;
 use crate::block::BlockDevice;
 use crate::block::SECTOR_SIZE;
+use alloc::vec::Vec;
 
 const FAT32_EOC: u32 = 0x0FFFFFF8;
 const ATTR_DIRECTORY: u8 = 0x10;
@@ -124,7 +124,12 @@ impl Fat32Fs {
         ((cluster - 2) as u64) * (self.sec_per_clus as u64) + self.first_data_sector as u64
     }
 
-    fn read_cluster(&self, cluster: u32, dev: &mut dyn BlockDevice, buf: &mut [u8]) -> Result<(), ()> {
+    fn read_cluster(
+        &self,
+        cluster: u32,
+        dev: &mut dyn BlockDevice,
+        buf: &mut [u8],
+    ) -> Result<(), ()> {
         let sector = self.cluster_to_sector(cluster);
         let bytes_per_cluster = (self.sec_per_clus as usize) * (self.bytes_per_sec as usize);
         let count = core::cmp::min(buf.len(), bytes_per_cluster);
@@ -132,7 +137,11 @@ impl Fat32Fs {
             .map_err(|_| ())
     }
 
-    fn read_dir_entries(&mut self, cluster: u32, dev: &mut dyn BlockDevice) -> Result<Vec<Fat32File>, ()> {
+    fn read_dir_entries(
+        &mut self,
+        cluster: u32,
+        dev: &mut dyn BlockDevice,
+    ) -> Result<Vec<Fat32File>, ()> {
         let mut entries = Vec::new();
         let clus_bytes = (self.sec_per_clus as usize) * (self.bytes_per_sec as usize);
         let mut buf = alloc::vec![0u8; clus_bytes];
@@ -166,17 +175,27 @@ impl Fat32Fs {
 
                 let short_name = &buf[offset..offset + 11];
                 for &c in short_name.iter() {
-                    if c == b' ' { break; }
-                    if name_len < 255 { name_buf[name_len] = c; name_len += 1; }
+                    if c == b' ' {
+                        break;
+                    }
+                    if name_len < 255 {
+                        name_buf[name_len] = c;
+                        name_len += 1;
+                    }
                 }
                 if name_len < 255 && short_name[0] != b' ' {
                     name_buf[name_len] = b'.';
                     name_len += 1;
                     let mut ext_start = false;
                     for &c in short_name[8..11].iter() {
-                        if c == b' ' { continue; }
+                        if c == b' ' {
+                            continue;
+                        }
                         ext_start = true;
-                        if name_len < 255 { name_buf[name_len] = c; name_len += 1; }
+                        if name_len < 255 {
+                            name_buf[name_len] = c;
+                            name_len += 1;
+                        }
                     }
                     if !ext_start && name_len > 0 && name_buf[name_len - 1] == b'.' {
                         name_len -= 1;
@@ -187,7 +206,10 @@ impl Fat32Fs {
                 let cluster_hi = u16::from_le_bytes([buf[offset + 20], buf[offset + 21]]);
                 let first_cluster = ((cluster_hi as u32) << 16) | (cluster_lo as u32);
                 let size = u32::from_le_bytes([
-                    buf[offset + 28], buf[offset + 29], buf[offset + 30], buf[offset + 31],
+                    buf[offset + 28],
+                    buf[offset + 29],
+                    buf[offset + 30],
+                    buf[offset + 31],
                 ]);
 
                 entries.push(Fat32File {
@@ -216,7 +238,11 @@ impl Fat32Fs {
         self.read_dir_entries(self.root_clus, dev)
     }
 
-    pub fn read_file(&mut self, file: &Fat32File, dev: &mut dyn BlockDevice) -> Result<Vec<u8>, ()> {
+    pub fn read_file(
+        &mut self,
+        file: &Fat32File,
+        dev: &mut dyn BlockDevice,
+    ) -> Result<Vec<u8>, ()> {
         if file.is_dir {
             return Err(());
         }
@@ -267,7 +293,8 @@ impl Fat32Fs {
 
             for entry in entries.iter() {
                 let entry_name = core::str::from_utf8(&entry.name[..entry.name_len])
-                    .unwrap_or("").to_lowercase();
+                    .unwrap_or("")
+                    .to_lowercase();
                 let search = part.to_lowercase();
 
                 if entry_name == search {

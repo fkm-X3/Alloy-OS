@@ -3,9 +3,9 @@
 //! Implements wl_seat, wl_pointer, and wl_keyboard interfaces for input device handling.
 //! Manages pointer motion, buttons, scroll events and keyboard key/modifiers events.
 
-use alloc::collections::BTreeMap;
-use super::surface::SurfaceId;
 use super::focus::SeatId;
+use super::surface::SurfaceId;
+use alloc::collections::BTreeMap;
 
 /// Wayland seat capabilities
 #[derive(Debug, Clone, Copy)]
@@ -329,7 +329,12 @@ impl SeatManager {
     }
 
     /// Bind a seat to a client
-    pub fn bind_seat(&mut self, client_id: u32, seat_id: SeatId, capabilities: SeatCapabilities) -> u32 {
+    pub fn bind_seat(
+        &mut self,
+        client_id: u32,
+        seat_id: SeatId,
+        capabilities: SeatCapabilities,
+    ) -> u32 {
         let binding = SeatBinding::new(seat_id, capabilities);
         let seat_binding_id = seat_id.0;
 
@@ -342,7 +347,11 @@ impl SeatManager {
     }
 
     /// Get a seat binding for a client
-    pub fn get_binding_mut(&mut self, client_id: u32, seat_binding_id: u32) -> Option<&mut SeatBinding> {
+    pub fn get_binding_mut(
+        &mut self,
+        client_id: u32,
+        seat_binding_id: u32,
+    ) -> Option<&mut SeatBinding> {
         self.bindings
             .get_mut(&client_id)
             .and_then(|bindings| bindings.get_mut(&seat_binding_id))
@@ -389,7 +398,7 @@ mod tests {
         assert!(caps.pointer);
         assert!(caps.keyboard);
         assert!(!caps.touch);
-        
+
         let mask = caps.to_bitmask();
         assert_eq!(mask, 0b11);
     }
@@ -398,14 +407,14 @@ mod tests {
     fn test_pointer_state() {
         let mut pointer = PointerState::new();
         assert_eq!(pointer.focused_surface(), None);
-        
+
         let surface = SurfaceId(1);
         pointer.set_focus(Some(surface));
         assert_eq!(pointer.focused_surface(), Some(surface));
-        
+
         pointer.set_position(100, 200);
         assert_eq!(pointer.last_position(), (100, 200));
-        
+
         pointer.set_button(button_codes::LEFT, true);
         assert!(pointer.is_button_pressed(button_codes::LEFT));
     }
@@ -414,14 +423,14 @@ mod tests {
     fn test_keyboard_state() {
         let mut keyboard = KeyboardState::new();
         assert!(!keyboard.keymap_sent());
-        
+
         keyboard.set_keymap_sent();
         assert!(keyboard.keymap_sent());
-        
+
         let surface = SurfaceId(1);
         keyboard.set_focus(Some(surface));
         assert_eq!(keyboard.focused_surface(), Some(surface));
-        
+
         keyboard.set_key(30, true); // 'a'
         assert!(keyboard.is_key_pressed(30));
     }
@@ -439,11 +448,11 @@ mod tests {
         let mut manager = SeatManager::new();
         let caps = SeatCapabilities::default_inputs();
         let seat_id = SeatId(0);
-        
+
         manager.bind_seat(1, seat_id, caps);
         let binding = manager.get_binding(1, 0);
         assert!(binding.is_some());
-        
+
         manager.remove_client(1);
         let binding = manager.get_binding(1, 0);
         assert!(binding.is_none());

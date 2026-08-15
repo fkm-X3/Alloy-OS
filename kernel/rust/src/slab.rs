@@ -1,5 +1,5 @@
 //! Slab allocator for efficient small object allocation
-//! 
+//!
 //! Manages fixed-size blocks to reduce fragmentation and improve
 //! performance for common allocation sizes.
 
@@ -47,14 +47,14 @@ impl SlabCache {
             objects_freed: 0,
         }
     }
-    
+
     /// Allocate an object from this cache
     unsafe fn alloc(&mut self) -> *mut u8 {
         // Try partial slabs first
         if !self.partial_slabs.is_null() {
             return self.alloc_from_slab(self.partial_slabs);
         }
-        
+
         // Try to reuse an empty slab
         if !self.empty_slabs.is_null() {
             let slab = self.empty_slabs;
@@ -63,53 +63,53 @@ impl SlabCache {
             self.partial_slabs = slab;
             return self.alloc_from_slab(slab);
         }
-        
+
         // Need to allocate a new slab
         let slab = self.create_slab();
         if slab.is_null() {
             return null_mut();
         }
-        
+
         (*slab).next = self.partial_slabs;
         self.partial_slabs = slab;
-        
+
         self.alloc_from_slab(slab)
     }
-    
+
     /// Allocate from a specific slab
     unsafe fn alloc_from_slab(&mut self, slab: *mut SlabHeader) -> *mut u8 {
         if (*slab).free_list.is_null() {
             return null_mut();
         }
-        
+
         let node = (*slab).free_list;
         (*slab).free_list = (*node).next;
         (*slab).free_count -= 1;
-        
+
         self.objects_allocated += 1;
-        
+
         // If slab is now full, move it to full list
         if (*slab).free_count == 0 {
             self.move_to_full(slab);
         }
-        
+
         node as *mut u8
     }
-    
+
     /// Free an object back to the cache
     unsafe fn free(&mut self, ptr: *mut u8) {
         let slab = self.find_slab(ptr);
         if slab.is_null() {
             panic!("Slab allocator: invalid pointer {:p}", ptr);
         }
-        
+
         let node = ptr as *mut FreeNode;
         (*node).next = (*slab).free_list;
         (*slab).free_list = node;
         (*slab).free_count += 1;
-        
+
         self.objects_freed += 1;
-        
+
         // Move slab to appropriate list
         if (*slab).free_count == (*slab).object_count {
             self.move_to_empty(slab);
@@ -118,23 +118,25 @@ impl SlabCache {
             self.move_to_partial(slab);
         }
     }
-    
+
     /// Create a new slab
     unsafe fn create_slab(&mut self) -> *mut SlabHeader {
-        
         // Allocate memory for slab (1 page = 4KB)
         crate::println!("[Slab] Before vmm_alloc_region");
-        let region = alloy_kernel_hal::mem::VmRegion::alloc(4096, alloy_kernel_hal::PageFlags::kernel_write());
+        let region = alloy_kernel_hal::mem::VmRegion::alloc(
+            4096,
+            alloy_kernel_hal::PageFlags::kernel_write(),
+        );
         let ptr = match region {
             Some(r) => r.leak() as *mut u8,
             None => null_mut(),
         };
         crate::println!("[Slab] After vmm_alloc_region");
-        
+
         if ptr.is_null() {
             return null_mut();
         }
-        
+
         let header = ptr as *mut SlabHeader;
         (*header).size_class = self.size;
         // Align object data start to size class to satisfy alignment guarantees.
@@ -156,40 +158,40 @@ impl SlabCache {
         (*header).free_count = object_count;
         (*header).free_list = null_mut();
         (*header).next = null_mut();
-        
+
         // Initialize free list
         let data_start = aligned_start as *mut u8;
         let mut current = data_start;
-        
+
         for i in 0..object_count {
             let node = current as *mut FreeNode;
-            
+
             if i < object_count - 1 {
                 (*node).next = current.add(self.size) as *mut FreeNode;
             } else {
                 (*node).next = null_mut();
             }
-            
+
             current = current.add(self.size);
         }
-        
+
         (*header).free_list = data_start as *mut FreeNode;
         header
     }
-    
+
     /// Find which slab contains this pointer
     unsafe fn find_slab(&self, ptr: *mut u8) -> *mut SlabHeader {
         // Align pointer to page boundary to get slab header
         let page_addr = (ptr as usize) & !0xFFF;
         page_addr as *mut SlabHeader
     }
-    
+
     /// Move slab to full list
     unsafe fn move_to_full(&mut self, slab: *mut SlabHeader) {
         // Remove from partial
         let mut prev = &mut self.partial_slabs as *mut *mut SlabHeader;
         let mut current = self.partial_slabs;
-        
+
         while !current.is_null() {
             if current == slab {
                 *prev = (*current).next;
@@ -199,18 +201,18 @@ impl SlabCache {
             prev = &mut (*current).next;
             current = (*current).next;
         }
-        
+
         // Add to full
         (*slab).next = self.full_slabs;
         self.full_slabs = slab;
     }
-    
+
     /// Move slab to partial list
     unsafe fn move_to_partial(&mut self, slab: *mut SlabHeader) {
         // Remove from full
         let mut prev = &mut self.full_slabs as *mut *mut SlabHeader;
         let mut current = self.full_slabs;
-        
+
         while !current.is_null() {
             if current == slab {
                 *prev = (*current).next;
@@ -220,18 +222,18 @@ impl SlabCache {
             prev = &mut (*current).next;
             current = (*current).next;
         }
-        
+
         // Add to partial
         (*slab).next = self.partial_slabs;
         self.partial_slabs = slab;
     }
-    
+
     /// Move slab to empty list
     unsafe fn move_to_empty(&mut self, slab: *mut SlabHeader) {
         // Remove from partial
         let mut prev = &mut self.partial_slabs as *mut *mut SlabHeader;
         let mut current = self.partial_slabs;
-        
+
         while !current.is_null() {
             if current == slab {
                 *prev = (*current).next;
@@ -241,7 +243,7 @@ impl SlabCache {
             prev = &mut (*current).next;
             current = (*current).next;
         }
-        
+
         // Add to empty
         (*slab).next = self.empty_slabs;
         self.empty_slabs = slab;
@@ -265,18 +267,18 @@ impl SlabAllocator {
     pub const fn new() -> Self {
         SlabAllocator {
             caches: [
-                SlabCache::new(SLAB_SIZES[0]),  // 8 bytes
-                SlabCache::new(SLAB_SIZES[1]),  // 16 bytes
-                SlabCache::new(SLAB_SIZES[2]),  // 32 bytes
-                SlabCache::new(SLAB_SIZES[3]),  // 64 bytes
-                SlabCache::new(SLAB_SIZES[4]),  // 128 bytes
-                SlabCache::new(SLAB_SIZES[5]),  // 256 bytes
-                SlabCache::new(SLAB_SIZES[6]),  // 512 bytes
-                SlabCache::new(SLAB_SIZES[7]),  // 1024 bytes
+                SlabCache::new(SLAB_SIZES[0]), // 8 bytes
+                SlabCache::new(SLAB_SIZES[1]), // 16 bytes
+                SlabCache::new(SLAB_SIZES[2]), // 32 bytes
+                SlabCache::new(SLAB_SIZES[3]), // 64 bytes
+                SlabCache::new(SLAB_SIZES[4]), // 128 bytes
+                SlabCache::new(SLAB_SIZES[5]), // 256 bytes
+                SlabCache::new(SLAB_SIZES[6]), // 512 bytes
+                SlabCache::new(SLAB_SIZES[7]), // 1024 bytes
             ],
         }
     }
-    
+
     /// Allocate from appropriate slab cache
     ///
     /// # Safety
@@ -293,11 +295,11 @@ impl SlabAllocator {
                 return result;
             }
         }
-        
+
         // Size too large for slab allocator
         null_mut()
     }
-    
+
     /// Free to appropriate slab cache
     ///
     /// # Safety
@@ -312,7 +314,7 @@ impl SlabAllocator {
             }
         }
     }
-    
+
     /// Check if size/alignment are suitable for slab allocation.
     pub fn can_allocate(&self, size: usize, align: usize) -> bool {
         for slab_size in &SLAB_SIZES {
@@ -322,17 +324,17 @@ impl SlabAllocator {
         }
         false
     }
-    
+
     /// Get statistics
     pub fn stats(&self) -> (usize, usize) {
         let mut total_alloc = 0;
         let mut total_free = 0;
-        
+
         for cache in &self.caches {
             total_alloc += cache.objects_allocated;
             total_free += cache.objects_freed;
         }
-        
+
         (total_alloc, total_free)
     }
 }

@@ -32,7 +32,8 @@ impl LxqtShell {
     pub fn init_surfaces(&mut self, backend: &mut FusionDisplayBackend) {
         self.desktop.create_surface(backend);
         self.panel.create_surface(backend);
-        self.panel.set_position(self.display_width, self.display_height);
+        self.panel
+            .set_position(self.display_width, self.display_height);
     }
 
     pub fn render(&mut self, backend: &mut FusionDisplayBackend, uptime_ms: u64) {

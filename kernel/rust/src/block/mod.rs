@@ -1,7 +1,7 @@
 pub mod ramdisk;
 
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 pub const SECTOR_SIZE: usize = 512;
 
@@ -24,11 +24,19 @@ impl AtaDevice {
         if !crate::ffi::ata_drive_exists(bus, drive) {
             return None;
         }
-        Some(AtaDevice { bus, drive, num_sectors: 0 })
+        let num_sectors =
+            alloy_kernel_hal::Ata::drive_info(bus, drive).map_or(0, |info| info.num_sectors);
+        Some(AtaDevice {
+            bus,
+            drive,
+            num_sectors,
+        })
     }
 
     pub fn probe(&mut self) {
-        self.num_sectors = 0;
+        if let Some(info) = alloy_kernel_hal::Ata::drive_info(self.bus, self.drive) {
+            self.num_sectors = info.num_sectors;
+        }
     }
 }
 
@@ -50,8 +58,13 @@ impl BlockDevice for AtaDevice {
         while done < count {
             let batch = core::cmp::min(count - done, 256) as u8;
             let chunk_len = (batch as usize) * SECTOR_SIZE;
-            if !crate::ffi::ata_read(self.bus, self.drive, current_lba, batch,
-                                      &mut buf[offset..offset + chunk_len]) {
+            if !crate::ffi::ata_read(
+                self.bus,
+                self.drive,
+                current_lba,
+                batch,
+                &mut buf[offset..offset + chunk_len],
+            ) {
                 return Err(());
             }
             current_lba += batch as u64;
@@ -73,8 +86,13 @@ impl BlockDevice for AtaDevice {
         while done < count {
             let batch = core::cmp::min(count - done, 256) as u8;
             let chunk_len = (batch as usize) * SECTOR_SIZE;
-            if !crate::ffi::ata_write(self.bus, self.drive, current_lba, batch,
-                                       &buf[offset..offset + chunk_len]) {
+            if !crate::ffi::ata_write(
+                self.bus,
+                self.drive,
+                current_lba,
+                batch,
+                &buf[offset..offset + chunk_len],
+            ) {
                 return Err(());
             }
             current_lba += batch as u64;
@@ -94,11 +112,18 @@ pub struct AhciDevice {
 #[cfg(feature = "x86_64")]
 impl AhciDevice {
     pub fn new(index: i32) -> Option<Self> {
-        Some(AhciDevice { index, num_sectors: 0 })
+        if index < 0 || index as usize >= alloy_kernel_hal::Ahci::drive_count() {
+            return None;
+        }
+        let num_sectors =
+            alloy_kernel_hal::Ahci::drive_info(index as usize).map_or(0, |info| info.num_sectors);
+        Some(AhciDevice { index, num_sectors })
     }
 
     pub fn probe(&mut self) {
-        self.num_sectors = 0;
+        if let Some(info) = alloy_kernel_hal::Ahci::drive_info(self.index as usize) {
+            self.num_sectors = info.num_sectors;
+        }
     }
 }
 
@@ -120,8 +145,12 @@ impl BlockDevice for AhciDevice {
         while done < count {
             let batch = core::cmp::min(count - done, 255) as u8;
             let chunk = (batch as usize) * SECTOR_SIZE;
-            if !crate::ffi::ahci_read(self.index, current_lba, batch,
-                                       &mut buf[offset..offset + chunk]) {
+            if !crate::ffi::ahci_read(
+                self.index,
+                current_lba,
+                batch,
+                &mut buf[offset..offset + chunk],
+            ) {
                 return Err(());
             }
             current_lba += batch as u64;
@@ -143,8 +172,8 @@ impl BlockDevice for AhciDevice {
         while done < count {
             let batch = core::cmp::min(count - done, 255) as u8;
             let chunk = (batch as usize) * SECTOR_SIZE;
-            if !crate::ffi::ahci_write(self.index, current_lba, batch,
-                                        &buf[offset..offset + chunk]) {
+            if !crate::ffi::ahci_write(self.index, current_lba, batch, &buf[offset..offset + chunk])
+            {
                 return Err(());
             }
             current_lba += batch as u64;
@@ -159,6 +188,11 @@ pub fn init_block_devices() -> Vec<Box<dyn BlockDevice>> {
     #[cfg(feature = "x86_64")]
     {
         let mut devices: Vec<Box<dyn BlockDevice>> = Vec::new();
+
+        // The driver facades are idempotent; ensure detection has run so
+        // `ata_drive_exists` / `ahci_drive_count_ffi` below see real state.
+        crate::ffi::ata_initialize();
+        crate::ffi::ahci_initialize();
 
         for bus in 0..=1u8 {
             for drive in 0..=1u8 {

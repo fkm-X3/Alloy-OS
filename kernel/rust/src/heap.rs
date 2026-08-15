@@ -1,10 +1,10 @@
 //! Heap allocator module
-//! 
+//!
 //! Provides a proper heap allocator with better granularity than
 //! the page-based allocator. Uses a linked list of free blocks.
 
-use core::ptr::null_mut;
 use core::alloc::Layout;
+use core::ptr::null_mut;
 
 /// Minimum allocation size (to store free list node)
 const MIN_BLOCK_SIZE: usize = 16;
@@ -31,37 +31,33 @@ impl BlockHeader {
             next: null_mut(),
         }
     }
-    
+
     /// Check if header is valid (not corrupted)
     fn is_valid(&self) -> bool {
         // Check magic number
         if self.magic != MAGIC {
             return false;
         }
-        
+
         // Check size is reasonable (not zero, not huge)
         if self.size == 0 || self.size > 1024 * 1024 * 1024 {
             return false;
         }
-        
+
         // Check size is properly aligned
         if !self.size.is_multiple_of(MIN_BLOCK_SIZE) {
             return false;
         }
-        
+
         true
     }
-    
+
     fn data_ptr(&self) -> *mut u8 {
-        unsafe {
-            (self as *const BlockHeader as *mut u8).add(core::mem::size_of::<BlockHeader>())
-        }
+        unsafe { (self as *const BlockHeader as *mut u8).add(core::mem::size_of::<BlockHeader>()) }
     }
-    
+
     fn from_data_ptr(ptr: *mut u8) -> *mut BlockHeader {
-        unsafe {
-            ptr.sub(core::mem::size_of::<BlockHeader>()) as *mut BlockHeader
-        }
+        unsafe { ptr.sub(core::mem::size_of::<BlockHeader>()) as *mut BlockHeader }
     }
 }
 
@@ -93,7 +89,7 @@ impl HeapAllocator {
             total_freed: 0,
         }
     }
-    
+
     /// Allocate a block from the heap
     ///
     /// # Safety
@@ -107,37 +103,40 @@ impl HeapAllocator {
         }
 
         let size = align_up(layout.size().max(MIN_BLOCK_SIZE), HEAP_ALIGN);
-        
+
         // Total size needed including header
         let total_size = align_up(size + core::mem::size_of::<BlockHeader>(), HEAP_ALIGN);
-        
+
         // Try to find a suitable free block
         if let Some(block) = self.find_free_block(total_size) {
             self.total_allocated += total_size;
             return block;
         }
-        
+
         // No suitable block found, allocate new pages from VMM
         let pages_needed = total_size.div_ceil(4096);
         let alloc_size = pages_needed * 4096;
 
         crate::println!("[Heap] Before vmm_alloc_region");
-        let region = alloy_kernel_hal::mem::VmRegion::alloc(alloc_size, alloy_kernel_hal::PageFlags::kernel_write());
+        let region = alloy_kernel_hal::mem::VmRegion::alloc(
+            alloc_size,
+            alloy_kernel_hal::PageFlags::kernel_write(),
+        );
         let ptr = match region {
             Some(r) => r.leak() as *mut u8,
             None => null_mut(),
         };
         crate::println!("[Heap] After vmm_alloc_region");
-        
+
         if ptr.is_null() {
             crate::println!("[Heap] ERROR: VMM allocation failed!");
             return null_mut();
         }
-        
+
         // Create header
         let header = ptr as *mut BlockHeader;
         (*header) = BlockHeader::new(size);
-        
+
         // If we allocated more than needed, add remainder to free list
         let remaining = alloc_size - total_size;
         if remaining > core::mem::size_of::<BlockHeader>() + MIN_BLOCK_SIZE {
@@ -147,11 +146,11 @@ impl HeapAllocator {
             (*remainder_header).next = self.free_list;
             self.free_list = remainder_header;
         }
-        
+
         self.total_allocated += total_size;
         (*header).data_ptr()
     }
-    
+
     /// Deallocate a block
     ///
     /// # Safety
@@ -161,9 +160,9 @@ impl HeapAllocator {
         if ptr.is_null() {
             return;
         }
-        
+
         let header = BlockHeader::from_data_ptr(ptr);
-        
+
         // Validate header before proceeding
         if !(*header).is_valid() {
             // Detailed corruption reporting
@@ -171,53 +170,54 @@ impl HeapAllocator {
             crate::print!("  Pointer: ");
             crate::println!("  Expected magic: 0xDEADBEEF");
             crate::print!("  Actual magic: ");
-            
+
             panic!("Heap corruption at {:p}", ptr);
         }
-        
+
         let size = (*header).size + core::mem::size_of::<BlockHeader>();
         self.total_freed += size;
-        
+
         // Add to free list
         (*header).next = self.free_list;
         self.free_list = header;
     }
-    
+
     /// Find a free block that can satisfy the allocation
     unsafe fn find_free_block(&mut self, size: usize) -> Option<*mut u8> {
         let mut prev: *mut *mut BlockHeader = &mut self.free_list;
         let mut current = self.free_list;
-        
+
         while !current.is_null() {
             let block_size = (*current).size + core::mem::size_of::<BlockHeader>();
-            
+
             if block_size >= size {
                 // Remove from free list
                 *prev = (*current).next;
-                
+
                 // If block is much larger, split it
                 let remaining = block_size - size;
                 if remaining > core::mem::size_of::<BlockHeader>() + MIN_BLOCK_SIZE {
                     let split_ptr = (current as *mut u8).add(size);
                     let split_header = split_ptr as *mut BlockHeader;
-                    (*split_header) = BlockHeader::new(remaining - core::mem::size_of::<BlockHeader>());
+                    (*split_header) =
+                        BlockHeader::new(remaining - core::mem::size_of::<BlockHeader>());
                     (*split_header).next = self.free_list;
                     self.free_list = split_header;
-                    
+
                     // Update current block size
                     (*current).size = size - core::mem::size_of::<BlockHeader>();
                 }
-                
+
                 return Some((*current).data_ptr());
             }
-            
+
             prev = &mut (*current).next;
             current = (*current).next;
         }
-        
+
         None
     }
-    
+
     /// Get allocation statistics
     pub fn stats(&self) -> (usize, usize) {
         (self.total_allocated, self.total_freed)

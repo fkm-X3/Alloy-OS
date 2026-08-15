@@ -1,12 +1,12 @@
-use alloc::boxed::Box;
-use alloc::string::String;
-use core::ptr;
+use crate::elf::{find_tls_info, Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr};
 #[cfg(feature = "aarch64")]
 use crate::process::task::KERNEL_STACK_SIZE;
-use crate::process::task::{Task, CpuContext};
+use crate::process::task::{CpuContext, Task};
 use crate::process::Scheduler;
-use crate::elf::{Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr, find_tls_info};
-use alloy_kernel_hal::mem::{AddressSpace, PageFlags, PhysFrame, with_temp_frame};
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloy_kernel_hal::mem::{with_temp_frame, AddressSpace, PageFlags, PhysFrame};
+use core::ptr;
 
 const STACK_BASE: u64 = 0x00C00000;
 const STACK_SIZE: u64 = 0x4000;
@@ -48,98 +48,125 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
     // x86_64: per-process page directory + user stack mapping.
     #[cfg(not(feature = "aarch64"))]
     {
-    // Allocate a fresh address space for the new process
-    let Some(mut aspace) = AddressSpace::create() else {
-        return false;
-    };
+        // Allocate a fresh address space for the new process
+        let Some(mut aspace) = AddressSpace::create() else {
+            return false;
+        };
 
-    // ── Map user stack with user+writable permissions ────────────────
-    // paging_create_directory_phys() copies kernel PD entries verbatim,
-    // so PD[6] (covering 0xC00000) is a 2MB identity-map page with NO
-    // user bit — user code cannot access it.  Allocate fresh frames and
-    // map them with user+writable flags so the stack works.
-    {
-        let stack_flags = PageFlags::user_write();
-        crate::sync::irq_disable();
-        let mut addr = STACK_BASE;
-        while addr < STACK_BASE + STACK_SIZE {
-            let Some(frame) = PhysFrame::alloc() else {
-                crate::println!("[spawn] OOM mapping stack page at 0x{addr:016X}");
-                crate::sync::irq_enable();
-                return false;
-            };
-            if !aspace.map_page(addr as usize, frame, stack_flags) {
-                crate::println!("[spawn] FAIL mapping stack page at 0x{addr:016X}");
-                crate::sync::irq_enable();
-                return false;
+        // ── Map user stack with user+writable permissions ────────────────
+        // paging_create_directory_phys() copies kernel PD entries verbatim,
+        // so PD[6] (covering 0xC00000) is a 2MB identity-map page with NO
+        // user bit — user code cannot access it.  Allocate fresh frames and
+        // map them with user+writable flags so the stack works.
+        {
+            let stack_flags = PageFlags::user_write();
+            crate::sync::irq_disable();
+            let mut addr = STACK_BASE;
+            while addr < STACK_BASE + STACK_SIZE {
+                let Some(frame) = PhysFrame::alloc() else {
+                    crate::println!("[spawn] OOM mapping stack page at 0x{addr:016X}");
+                    crate::sync::irq_enable();
+                    return false;
+                };
+                if !aspace.map_page(addr as usize, frame, stack_flags) {
+                    crate::println!("[spawn] FAIL mapping stack page at 0x{addr:016X}");
+                    crate::sync::irq_enable();
+                    return false;
+                }
+                addr += 4096u64;
             }
-            addr += 4096u64;
+            crate::sync::irq_enable();
         }
-        crate::sync::irq_enable();
-    }
 
-    // ── Load ELF segments into aspace (kernel PD stays active) ──────
-    let page_flags = PageFlags::user_write();
-    let page_size = 4096usize;
+        // ── Load ELF segments into aspace (kernel PD stays active) ──────
+        let page_flags = PageFlags::user_write();
+        let page_size = 4096usize;
 
-    // Detect ELF class
-    if image.len() < 16 { return false; }
-    let loaded = match image[4] {
-        1 => load_elf32(image, &mut aspace, page_flags, page_size),
-        2 => load_elf64(image, &mut aspace, page_flags, page_size),
-        _ => false,
-    };
-    if !loaded {
-        return false;
-    }
-
-    // ── Compute FS base from PT_TLS (thread pointer = end of TLS block) ──
-    let fs_base: u64 = match find_tls_info(image) {
-        Some((vaddr, memsz)) => {
-            let tp = vaddr + memsz;
-            // TLS details logged internally
-            tp
+        // Detect ELF class
+        if image.len() < 16 {
+            return false;
         }
-        None => 0,
-    };
+        let loaded = match image[4] {
+            1 => load_elf32(image, &mut aspace, page_flags, page_size),
+            2 => load_elf64(image, &mut aspace, page_flags, page_size),
+            _ => false,
+        };
+        if !loaded {
+            return false;
+        }
 
-    // ── Build user-mode CPU context ──────────────────────────────────
-    #[cfg(feature = "x86_64")]
-    let ctx = Box::new(CpuContext {
-        rax: 0, rbx: 0, rcx: 0, rdx: 0,
-        rsi: 0, rdi: 0, rbp: (STACK_BASE + STACK_SIZE) as u64,
-        rsp: (STACK_BASE + STACK_SIZE) as u64,
-        r8: 0, r9: 0, r10: 0, r11: 0,
-        r12: 0, r13: 0, r14: 0, r15: 0,
-        rip: entry as u64,
-        cs: 0x23, ds: 0x1B, es: 0x1B, fs: 0x1B, gs: 0x1B, ss: 0x1B,
-        rflags: 0x202,
-        cr3: aspace.addr() as u64,
-        fs_base,
-    });
-    #[cfg(feature = "aarch64")]
-    let ctx = Box::new(CpuContext {
-        x19: 0, x20: 0, x21: 0, x22: 0,
-        x23: 0, x24: 0, x25: 0, x26: 0,
-        x27: 0, x28: 0, fp: (STACK_BASE + STACK_SIZE) as u64,
-        lr: 0, sp: (STACK_BASE + STACK_SIZE) as u64,
-        elr: entry as u64,
-        spsr: 0,
-        ttbr0: aspace.addr() as u64,
-    });
+        // ── Compute FS base from PT_TLS (thread pointer = end of TLS block) ──
+        let fs_base: u64 = match find_tls_info(image) {
+            Some((vaddr, memsz)) => {
+                let tp = vaddr + memsz;
+                // TLS details logged internally
+                tp
+            }
+            None => 0,
+        };
 
-    let task = Box::new(Task::from_parts(
-        ctx,
-        None,
-        String::from("compositor"),
-        [None; 32],
-        0x01000000,
-        None,
-        aspace,
-    ));
+        // ── Build user-mode CPU context ──────────────────────────────────
+        #[cfg(feature = "x86_64")]
+        let ctx = Box::new(CpuContext {
+            rax: 0,
+            rbx: 0,
+            rcx: 0,
+            rdx: 0,
+            rsi: 0,
+            rdi: 0,
+            rbp: (STACK_BASE + STACK_SIZE) as u64,
+            rsp: (STACK_BASE + STACK_SIZE) as u64,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
+            r12: 0,
+            r13: 0,
+            r14: 0,
+            r15: 0,
+            rip: entry as u64,
+            cs: 0x23,
+            ds: 0x1B,
+            es: 0x1B,
+            fs: 0x1B,
+            gs: 0x1B,
+            ss: 0x1B,
+            rflags: 0x202,
+            cr3: aspace.addr() as u64,
+            fs_base,
+        });
+        #[cfg(feature = "aarch64")]
+        let ctx = Box::new(CpuContext {
+            x19: 0,
+            x20: 0,
+            x21: 0,
+            x22: 0,
+            x23: 0,
+            x24: 0,
+            x25: 0,
+            x26: 0,
+            x27: 0,
+            x28: 0,
+            fp: (STACK_BASE + STACK_SIZE) as u64,
+            lr: 0,
+            sp: (STACK_BASE + STACK_SIZE) as u64,
+            elr: entry as u64,
+            spsr: 0,
+            ttbr0: aspace.addr() as u64,
+        });
 
-    Scheduler::add_task(task);
-    true
+        let task = Box::new(Task::from_parts(
+            ctx,
+            None,
+            String::from("compositor"),
+            [None; 32],
+            0x01000000,
+            None,
+            aspace,
+        ));
+
+        Scheduler::add_task(task);
+        true
     }
 
     #[cfg(feature = "aarch64")]
@@ -148,7 +175,12 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
     }
 }
 
-fn load_elf32(image: &[u8], aspace: &mut AddressSpace, page_flags: PageFlags, page_size: usize) -> bool {
+fn load_elf32(
+    image: &[u8],
+    aspace: &mut AddressSpace,
+    page_flags: PageFlags,
+    page_size: usize,
+) -> bool {
     let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
     let phoff = hdr.e_phoff as usize;
     let phentsize = hdr.e_phentsize as usize;
@@ -160,17 +192,35 @@ fn load_elf32(image: &[u8], aspace: &mut AddressSpace, page_flags: PageFlags, pa
             return false;
         }
         let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf32Phdr) };
-        if ph.p_type != PT_LOAD { continue; }
+        if ph.p_type != PT_LOAD {
+            continue;
+        }
 
-        if !map_elf_segment(image, ph.p_offset as u64, ph.p_memsz as u64, ph.p_filesz as u64, ph.p_vaddr as u64, aspace, page_flags, page_size) {
+        if !map_elf_segment(
+            image,
+            ph.p_offset as u64,
+            ph.p_memsz as u64,
+            ph.p_filesz as u64,
+            ph.p_vaddr as u64,
+            aspace,
+            page_flags,
+            page_size,
+        ) {
             return false;
         }
     }
     true
 }
 
-fn load_elf64(image: &[u8], aspace: &mut AddressSpace, page_flags: PageFlags, page_size: usize) -> bool {
-    if image.len() < core::mem::size_of::<Elf64Ehdr>() { return false; }
+fn load_elf64(
+    image: &[u8],
+    aspace: &mut AddressSpace,
+    page_flags: PageFlags,
+    page_size: usize,
+) -> bool {
+    if image.len() < core::mem::size_of::<Elf64Ehdr>() {
+        return false;
+    }
     let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
     let phoff = hdr.e_phoff as usize;
     let phentsize = hdr.e_phentsize as usize;
@@ -182,9 +232,20 @@ fn load_elf64(image: &[u8], aspace: &mut AddressSpace, page_flags: PageFlags, pa
             return false;
         }
         let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf64Phdr) };
-        if ph.p_type != PT_LOAD { continue; }
+        if ph.p_type != PT_LOAD {
+            continue;
+        }
 
-        if !map_elf_segment(image, ph.p_offset, ph.p_memsz, ph.p_filesz, ph.p_vaddr, aspace, page_flags, page_size) {
+        if !map_elf_segment(
+            image,
+            ph.p_offset,
+            ph.p_memsz,
+            ph.p_filesz,
+            ph.p_vaddr,
+            aspace,
+            page_flags,
+            page_size,
+        ) {
             return false;
         }
     }
@@ -193,8 +254,13 @@ fn load_elf64(image: &[u8], aspace: &mut AddressSpace, page_flags: PageFlags, pa
 
 fn map_elf_segment(
     image: &[u8],
-    p_offset: u64, p_memsz: u64, p_filesz: u64, p_vaddr: u64,
-    aspace: &mut AddressSpace, page_flags: PageFlags, page_size: usize,
+    p_offset: u64,
+    p_memsz: u64,
+    p_filesz: u64,
+    p_vaddr: u64,
+    aspace: &mut AddressSpace,
+    page_flags: PageFlags,
+    page_size: usize,
 ) -> bool {
     let memsz = p_memsz as usize;
     let filesz = p_filesz as usize;
@@ -225,11 +291,9 @@ fn map_elf_segment(
         let page_off = page_addr.saturating_sub(vaddr);
         if page_off < filesz {
             let copy_len = core::cmp::min(page_size, filesz - page_off);
-            let copied = with_temp_frame(frame.addr(), |temp| {
-                unsafe {
-                    let src = image.as_ptr().add(p_offset as usize + page_off);
-                    ptr::copy_nonoverlapping(src, temp, copy_len);
-                }
+            let copied = with_temp_frame(frame.addr(), |temp| unsafe {
+                let src = image.as_ptr().add(p_offset as usize + page_off);
+                ptr::copy_nonoverlapping(src, temp, copy_len);
             });
             if copied.is_none() {
                 crate::println!("[spawn] temp window failed at page_addr=0x{page_addr:016X}");
@@ -273,16 +337,23 @@ fn spawn_user_elf_aarch64(image: &[u8], entry: u64) -> bool {
     let stack_top = (stack.as_mut_ptr() as usize + KERNEL_STACK_SIZE) & !15;
 
     let ctx = Box::new(CpuContext {
-        x19: 0, x20: 0, x21: 0, x22: 0,
-        x23: 0, x24: 0, x25: 0, x26: 0,
-        x27: 0, x28: 0,
+        x19: 0,
+        x20: 0,
+        x21: 0,
+        x22: 0,
+        x23: 0,
+        x24: 0,
+        x25: 0,
+        x26: 0,
+        x27: 0,
+        x28: 0,
         fp: 0,
-        lr: 0,                        // fresh-task sentinel -> load_context ERETs
-        sp: stack_top as u64,         // SP_EL1 (kernel stack)
-        elr: entry,                   // ELF entry in physical RAM
-        spsr: 0,                      // EL0t
+        lr: 0,                // fresh-task sentinel -> load_context ERETs
+        sp: stack_top as u64, // SP_EL1 (kernel stack)
+        elr: entry,           // ELF entry in physical RAM
+        spsr: 0,              // EL0t
         ttbr0: AddressSpace::kernel().addr() as u64,
-        sp0: USER_STACK_TOP,          // SP_EL0 (user stack, reserved region)
+        sp0: USER_STACK_TOP, // SP_EL0 (user stack, reserved region)
     });
 
     let task = Box::new(Task::from_parts(
@@ -303,7 +374,9 @@ fn spawn_user_elf_aarch64(image: &[u8], entry: u64) -> bool {
 /// which is the physical address under the disabled-MMU identity map.
 #[cfg(feature = "aarch64")]
 fn load_elf_direct(image: &[u8]) -> bool {
-    if image.len() < 16 { return false; }
+    if image.len() < 16 {
+        return false;
+    }
     match image[4] {
         1 => {
             let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
@@ -313,13 +386,23 @@ fn load_elf_direct(image: &[u8]) -> bool {
                     return false;
                 }
                 let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf32Phdr) };
-                if ph.p_type != PT_LOAD { continue; }
-                copy_segment_direct(image, ph.p_offset as usize, ph.p_filesz as usize, ph.p_memsz as usize, ph.p_vaddr as usize);
+                if ph.p_type != PT_LOAD {
+                    continue;
+                }
+                copy_segment_direct(
+                    image,
+                    ph.p_offset as usize,
+                    ph.p_filesz as usize,
+                    ph.p_memsz as usize,
+                    ph.p_vaddr as usize,
+                );
             }
             true
         }
         2 => {
-            if image.len() < core::mem::size_of::<Elf64Ehdr>() { return false; }
+            if image.len() < core::mem::size_of::<Elf64Ehdr>() {
+                return false;
+            }
             let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
             for i in 0..hdr.e_phnum as usize {
                 let phdr_off = hdr.e_phoff as usize + i * hdr.e_phentsize as usize;
@@ -327,8 +410,16 @@ fn load_elf_direct(image: &[u8]) -> bool {
                     return false;
                 }
                 let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf64Phdr) };
-                if ph.p_type != PT_LOAD { continue; }
-                copy_segment_direct(image, ph.p_offset as usize, ph.p_filesz as usize, ph.p_memsz as usize, ph.p_vaddr as usize);
+                if ph.p_type != PT_LOAD {
+                    continue;
+                }
+                copy_segment_direct(
+                    image,
+                    ph.p_offset as usize,
+                    ph.p_filesz as usize,
+                    ph.p_memsz as usize,
+                    ph.p_vaddr as usize,
+                );
             }
             true
         }

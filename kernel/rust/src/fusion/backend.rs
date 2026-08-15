@@ -2,15 +2,15 @@
 //!
 //! Manages surfaces, z-order compositing, and VESA framebuffer output.
 
-use alloc::vec::Vec;
-use alloc::collections::BTreeMap;
 use crate::graphics::Display;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
+#[cfg(feature = "aarch64")]
+use crate::graphics::pl110::Pl110Display;
 #[cfg(feature = "x86_64")]
 #[cfg(feature = "x86_64")]
 use crate::graphics::vesa::VesaDisplay;
-#[cfg(feature = "aarch64")]
-use crate::graphics::pl110::Pl110Display;
 
 #[cfg(feature = "x86_64")]
 type PlatformDisplay = VesaDisplay;
@@ -160,13 +160,18 @@ impl FusionDisplayBackend {
 
     /// Destroy a surface
     pub fn destroy_surface(&mut self, id: u32) -> Result<(), FusionError> {
-        self.surfaces.remove(&id).ok_or(FusionError::SurfaceNotFound)?;
+        self.surfaces
+            .remove(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
         Ok(())
     }
 
     /// Set surface position
     pub fn set_position(&mut self, id: u32, x: i32, y: i32) -> Result<(), FusionError> {
-        let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
         surface.x = x;
         surface.y = y;
         self.dirty = true;
@@ -179,7 +184,10 @@ impl FusionDisplayBackend {
             return Err(FusionError::InvalidDimensions);
         }
 
-        let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
         let new_pixel_count = (width as usize)
             .checked_mul(height as usize)
             .ok_or(FusionError::InvalidDimensions)?;
@@ -195,7 +203,10 @@ impl FusionDisplayBackend {
 
     /// Set surface visibility
     pub fn set_visibility(&mut self, id: u32, visible: bool) -> Result<(), FusionError> {
-        let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
         surface.visible = visible;
         self.dirty = true;
         Ok(())
@@ -203,7 +214,10 @@ impl FusionDisplayBackend {
 
     /// Set surface z-order (draw order)
     pub fn set_z_order(&mut self, id: u32, z_order: u32) -> Result<(), FusionError> {
-        let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
         surface.z_order = z_order;
         self.dirty = true;
         Ok(())
@@ -217,7 +231,10 @@ impl FusionDisplayBackend {
         height: u32,
         pixels: &[u32],
     ) -> Result<(), FusionError> {
-        let surface = self.surfaces.get_mut(&id).ok_or(FusionError::SurfaceNotFound)?;
+        let surface = self
+            .surfaces
+            .get_mut(&id)
+            .ok_or(FusionError::SurfaceNotFound)?;
 
         if surface.width != width || surface.height != height {
             return Err(FusionError::InvalidDimensions);
@@ -343,11 +360,7 @@ impl FusionDisplayBackend {
                     if pixel_idx < surface.pixels.len() {
                         let pixel = surface.pixels[pixel_idx];
                         if pixel != 0 {
-                            self.display.pixel_put(
-                                fb_x as u32,
-                                fb_y as u32,
-                                pixel,
-                            );
+                            self.display.pixel_put(fb_x as u32, fb_y as u32, pixel);
                         }
                     }
                 }

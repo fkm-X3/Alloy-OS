@@ -7,10 +7,11 @@
 //!   with `#[cfg(target_arch = "x86_64")]` / `#[cfg(target_arch = "aarch64")]`
 //!   on the divergent items (`vmm`, `syscall`, `serial`),
 //! - truly arch-specific C becomes `#[cfg]`-gated module pairs pointing into
-//!   `x86_64/` and `aarch64/` (`paging`, `cpu`, `timer`, gdt/idt, `boot::main`,
-//!   plus the x86-only / aarch64-only driver modules).
+//!   `x86_64/` and `aarch64/` (`paging`, `cpu`, `timer`, gdt/idt, `boot::main`).
 //!
-//! Everything here is machine output; no idiomatic rewrites.
+//! Everything here is machine output; no idiomatic rewrites. The C2Rust
+//! drivers were replaced by the safe facades in [`crate::drivers`] and
+//! deleted from the tree.
 
 pub mod arch {
     pub mod syscall {
@@ -45,43 +46,6 @@ pub mod arch {
         }
     }
 }
-
-pub mod drivers {
-    #[cfg(target_arch = "x86_64")]
-    pub mod vesa {
-        include!("x86_64/drivers/vesa.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod keyboard {
-        include!("x86_64/drivers/keyboard.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod mouse {
-        include!("x86_64/drivers/mouse.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod pci {
-        include!("x86_64/drivers/pci.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod ata {
-        include!("x86_64/drivers/ata.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod ahci {
-        include!("x86_64/drivers/ahci.rs");
-    }
-    #[cfg(target_arch = "x86_64")]
-    pub mod initrd {
-        include!("x86_64/drivers/initrd.rs");
-    }
-}
-
-// The C2Rust PMM/VMM/paging modules are replaced by the hand-written
-// `crate::mem::{pmm,vmm,paging,paging_aarch64}` and deleted
-// from the tree. The boot mains and `raw::ffi` still resolve the same
-// `#[no_mangle]` symbols (`g_pmm`, `g_vmm`, `g_paging`, `pmm_init`,
-// `vmm_init`, `paging_init`, ...) against the new modules.
 
 pub mod boot {
     #[cfg(target_arch = "x86_64")]

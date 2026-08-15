@@ -4,9 +4,9 @@
 //! to kernel framebuffer memory. Supports character-based dimensions that
 //! map to pixel coordinates using a 5x7 bitmap font.
 
-use alloc::vec::Vec;
-use crate::terminal::Terminal;
 use super::backend::FusionError;
+use crate::terminal::Terminal;
+use alloc::vec::Vec;
 
 /// Error returned when [`TerminalSurface::handle_input`] fails
 #[derive(Debug)]
@@ -68,7 +68,11 @@ impl TerminalSurface {
     ///
     /// Converts character dimensions (e.g., 80x25) to pixel dimensions using
     /// 5x7 font metrics with 9-pixel line height.
-    pub fn new(terminal: &mut Terminal, width_chars: u32, height_chars: u32) -> Result<Self, FusionError> {
+    pub fn new(
+        terminal: &mut Terminal,
+        width_chars: u32,
+        height_chars: u32,
+    ) -> Result<Self, FusionError> {
         // Convert character dimensions to pixels
         let width_pixels = width_chars * CHAR_WIDTH_PIXELS;
         let height_pixels = height_chars * LINE_HEIGHT_PIXELS;
@@ -78,7 +82,7 @@ impl TerminalSurface {
         }
 
         let pixel_count = (width_pixels * height_pixels) as usize;
-        
+
         Ok(TerminalSurface {
             width_pixels,
             height_pixels,

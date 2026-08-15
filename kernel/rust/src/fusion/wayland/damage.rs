@@ -17,12 +17,22 @@ pub struct DamageRect {
 impl DamageRect {
     /// Create a new damage rectangle
     pub fn new(x: i32, y: i32, width: i32, height: i32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Full surface damage (damage everything)
     pub fn full(width: i32, height: i32) -> Self {
-        Self { x: 0, y: 0, width, height }
+        Self {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        }
     }
 
     /// Right edge (x + width)
@@ -46,15 +56,19 @@ impl DamageRect {
     /// Check if two rectangles are adjacent (share an edge)
     pub fn adjacent(&self, other: &DamageRect) -> bool {
         // Horizontally adjacent
-        if self.y == other.y && self.height == other.height
-            && (self.right() == other.x || other.right() == self.x) {
-                return true;
-            }
+        if self.y == other.y
+            && self.height == other.height
+            && (self.right() == other.x || other.right() == self.x)
+        {
+            return true;
+        }
         // Vertically adjacent
-        if self.x == other.x && self.width == other.width
-            && (self.bottom() == other.y || other.bottom() == self.y) {
-                return true;
-            }
+        if self.x == other.x
+            && self.width == other.width
+            && (self.bottom() == other.y || other.bottom() == self.y)
+        {
+            return true;
+        }
         false
     }
 
@@ -121,7 +135,8 @@ impl DamageTracker {
         }
 
         // Check if damage covers entire surface
-        if rect.x <= 0 && rect.y <= 0 && rect.width >= self.bounds.0 && rect.height >= self.bounds.1 {
+        if rect.x <= 0 && rect.y <= 0 && rect.width >= self.bounds.0 && rect.height >= self.bounds.1
+        {
             self.full_damage = true;
             self.regions.clear();
             return;

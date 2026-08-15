@@ -139,10 +139,9 @@ impl ClientState {
         };
 
         // Add the wl_display object (ID 1)
-        state.objects.insert(
-            1,
-            ObjectEntry::new(ObjectType::Display, 1),
-        );
+        state
+            .objects
+            .insert(1, ObjectEntry::new(ObjectType::Display, 1));
 
         state
     }

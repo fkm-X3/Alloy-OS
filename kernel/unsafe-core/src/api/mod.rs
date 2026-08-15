@@ -16,6 +16,7 @@
 
 pub use crate::arch::{self, Arch, CpuContext, CpuInfo};
 pub use crate::callback::{self, FaultAction, SyscallHandler, SyscallTable};
+pub use crate::callback::{set_keyboard_wake_handler, set_mouse_wake_handler};
 pub use crate::callback::{set_page_fault_handler, set_timer_tick_handler};
 pub use crate::interrupt::{self, InterruptController, InterruptGuard, IrqHandler, IrqLine};
 pub use crate::io::{self, DefaultMmio, Mmio, MmioReg};
@@ -36,5 +37,31 @@ pub use crate::drivers::serial::Serial;
 pub use crate::drivers::timer::SystemTimer;
 #[cfg(feature = "x86_64")]
 pub use crate::drivers::vga::VgaText;
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::keyboard::{KeyEvent, Keyboard};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::keyboard::{
+    SPECIAL_KEY_DELETE, SPECIAL_KEY_DOWN, SPECIAL_KEY_END, SPECIAL_KEY_HOME,
+    SPECIAL_KEY_LEFT, SPECIAL_KEY_PGDN, SPECIAL_KEY_PGUP, SPECIAL_KEY_RIGHT, SPECIAL_KEY_UP,
+};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::mouse::{Mouse, MouseEvent};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::mouse::{
+    MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT, MOUSE_EVENT_FLAG_X_OVERFLOW,
+    MOUSE_EVENT_FLAG_Y_OVERFLOW, MOUSE_INIT_ERR_ENABLE_STREAMING,
+    MOUSE_INIT_ERR_ENABLE_STREAMING_ACK, MOUSE_INIT_ERR_INPUT_NOT_READY, MOUSE_INIT_ERR_NONE,
+    MOUSE_INIT_ERR_OUTPUT_NOT_READY, MOUSE_INIT_ERR_SET_DEFAULTS, MOUSE_INIT_ERR_SET_DEFAULTS_ACK,
+};
 #[cfg(feature = "aarch64")]
 pub use crate::drivers::pl110::Pl110;
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::pci::{Pci, PciDevice};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::ata::{Ata, AtaDriveInfo};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::ahci::{Ahci, AhciDriveInfo};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::initrd::{Initrd, InitrdModule};
+#[cfg(feature = "x86_64")]
+pub use crate::drivers::vesa::{Vesa, VesaError, VesaInfo};

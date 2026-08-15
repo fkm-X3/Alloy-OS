@@ -1,7 +1,7 @@
+use crate::sync::SpinLock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloy_kernel_hal::PhysFrame;
-use crate::sync::SpinLock;
 
 struct ShmRegion {
     width: u32,
@@ -18,7 +18,9 @@ pub fn shm_alloc(width: u32, height: u32, bpp: u32) -> i32 {
     let bpp_bytes = (bpp / 8).max(1);
     let stride = width.saturating_mul(bpp_bytes);
     let size = height.saturating_mul(stride);
-    if size == 0 || size > 256 * 1024 * 1024 { return -1; }
+    if size == 0 || size > 256 * 1024 * 1024 {
+        return -1;
+    }
 
     let num_pages = (size as usize + 4095) / 4096;
     let mut pages = Vec::with_capacity(num_pages);
@@ -41,7 +43,16 @@ pub fn shm_alloc(width: u32, height: u32, bpp: u32) -> i32 {
         *guard = Some(BTreeMap::new());
     }
     if let Some(ref mut map) = *guard {
-        map.insert(fd, ShmRegion { width, height, bpp, size, pages });
+        map.insert(
+            fd,
+            ShmRegion {
+                width,
+                height,
+                bpp,
+                size,
+                pages,
+            },
+        );
     }
 
     fd
@@ -68,18 +79,26 @@ pub fn shm_user_vaddr(fd: i32) -> u32 {
     let total_size = num_pages * 4096;
 
     let vaddr = SHM_NEXT_VADDR.fetch_add(total_size as u32, core::sync::atomic::Ordering::Relaxed);
-    if vaddr == 0 { return 0; }
+    if vaddr == 0 {
+        return 0;
+    }
 
     for (i, frame) in region.pages.iter().enumerate() {
         let page_vaddr = vaddr + (i as u32 * 4096);
-        let ok = unsafe { crate::ffi::vmm_map(
-            page_vaddr as *mut core::ffi::c_void,
-            frame.addr() as *mut core::ffi::c_void,
-            crate::ffi::PAGE_PRESENT | crate::ffi::PAGE_WRITE | crate::ffi::PAGE_USER,
-        )};
-        if !ok { return 0; }
+        let ok = unsafe {
+            crate::ffi::vmm_map(
+                page_vaddr as *mut core::ffi::c_void,
+                frame.addr() as *mut core::ffi::c_void,
+                crate::ffi::PAGE_PRESENT | crate::ffi::PAGE_WRITE | crate::ffi::PAGE_USER,
+            )
+        };
+        if !ok {
+            return 0;
+        }
     }
 
-    unsafe { core::ptr::write_bytes(vaddr as *mut u8, 0, region.size as usize); }
+    unsafe {
+        core::ptr::write_bytes(vaddr as *mut u8, 0, region.size as usize);
+    }
     vaddr
 }

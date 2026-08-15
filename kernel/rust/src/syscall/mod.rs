@@ -5,8 +5,8 @@
 use crate::process::Scheduler;
 use alloy_kernel_hal::mem::{self, AddressSpace, PageFlags, PhysFrame};
 
-pub mod table;
 pub mod dispatcher;
+pub mod table;
 
 /// Syscall numbers (must match syscall.h)
 #[repr(u32)]
@@ -74,7 +74,9 @@ pub extern "C" fn rust_sys_sleep(ms: u32) -> u32 {
 /// Minimal open syscall
 pub extern "C" fn rust_sys_open(path_ptr: u32, flags: u32, mode: u32) -> u32 {
     crate::println!("[Syscall] sys_open called");
-    if path_ptr == 0 { return u32::MAX; }
+    if path_ptr == 0 {
+        return u32::MAX;
+    }
     let mut buffer = [0u8; 256];
     unsafe {
         if crate::utils::copy_from_user(path_ptr, &mut buffer).is_ok() {
@@ -98,15 +100,21 @@ pub extern "C" fn rust_sys_open(path_ptr: u32, flags: u32, mode: u32) -> u32 {
 
 /// Minimal read syscall
 pub extern "C" fn rust_sys_read(fd: u32, buf_ptr: u32, len: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_read called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_read called");
+    }
     if let Some(result) = Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(fd) {
             let vnode_id = entry.0;
             let offset = &mut entry.1;
             crate::fs::vfs_read(vnode_id, offset, buf_ptr, len as usize)
-        } else { -1 }
+        } else {
+            -1
+        }
     }) {
-        if result >= 0 { return result as u32; }
+        if result >= 0 {
+            return result as u32;
+        }
     }
     u32::MAX
 }
@@ -117,7 +125,9 @@ pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
     if fd == 1 {
         let max = core::cmp::min(len as usize, 240usize);
         let mut buffer = [0u8; 241];
-        if buf_ptr == 0 { return u32::MAX; }
+        if buf_ptr == 0 {
+            return u32::MAX;
+        }
         unsafe {
             match crate::utils::copy_from_user(buf_ptr, &mut buffer[..max]) {
                 Ok(copied) => {
@@ -133,16 +143,22 @@ pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
             let vnode_id = entry.0;
             let offset = &mut entry.1;
             crate::fs::vfs_write(vnode_id, offset, buf_ptr, len as usize)
-        } else { -1 }
+        } else {
+            -1
+        }
     }) {
-        if result >= 0 { return result as u32; }
+        if result >= 0 {
+            return result as u32;
+        }
     }
     u32::MAX
 }
 
 /// Minimal close syscall
 pub extern "C" fn rust_sys_close(fd: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_close called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_close called");
+    }
     match Scheduler::with_current_task_mut(|task| task.close_fd(fd)) {
         Some(Ok(())) => 0,
         Some(Err(_)) => u32::MAX,
@@ -152,7 +168,9 @@ pub extern "C" fn rust_sys_close(fd: u32) -> u32 {
 
 /// Duplicate a file descriptor
 pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_dup called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_dup called");
+    }
     match Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(oldfd) {
             let vnode = entry.0;
@@ -166,9 +184,7 @@ pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
         }
         None
     }) {
-        Some(fd_opt) => {
-            fd_opt.unwrap_or(u32::MAX)
-        }
+        Some(fd_opt) => fd_opt.unwrap_or(u32::MAX),
         None => u32::MAX,
     }
 }
@@ -176,7 +192,9 @@ pub extern "C" fn rust_sys_dup(oldfd: u32) -> u32 {
 /// dup2 - Duplicate a file descriptor to a specific target fd.
 /// If newfd is already open, it is closed first.
 pub extern "C" fn rust_sys_dup2(oldfd: u32, newfd: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_dup2 called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_dup2 called");
+    }
     if oldfd == newfd {
         return newfd;
     }
@@ -197,12 +215,16 @@ pub extern "C" fn rust_sys_dup2(oldfd: u32, newfd: u32) -> u32 {
 
 /// lseek
 pub extern "C" fn rust_sys_lseek(fd: u32, offset: u32, whence: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_lseek called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_lseek called");
+    }
     let off = offset as i32;
     match Scheduler::with_current_task_mut(|task| {
         if let Some(entry) = task.get_fd_entry_mut(fd) {
             crate::fs::vfs_lseek(entry.0, &mut entry.1, off, whence)
-        } else { -1 }
+        } else {
+            -1
+        }
     }) {
         Some(val) if val >= 0 => val as u32,
         _ => u32::MAX,
@@ -211,7 +233,9 @@ pub extern "C" fn rust_sys_lseek(fd: u32, offset: u32, whence: u32) -> u32 {
 
 /// pipe
 pub extern "C" fn rust_sys_pipe(pipefd_ptr: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_pipe called"); }
+    unsafe {
+        crate::println!("[Syscall] sys_pipe called");
+    }
     match crate::fs::vfs_create_pipe() {
         Ok(vnode_id) => {
             match Scheduler::with_current_task_mut(|task| {
@@ -244,34 +268,48 @@ pub extern "C" fn rust_sys_pipe(pipefd_ptr: u32) -> u32 {
 
 /// execve
 pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
-    unsafe { crate::println!("[Syscall] sys_execve called"); }
-    if path_ptr == 0 { return u32::MAX; }
+    unsafe {
+        crate::println!("[Syscall] sys_execve called");
+    }
+    if path_ptr == 0 {
+        return u32::MAX;
+    }
     let mut buf = [0u8; 256];
     unsafe {
-        if crate::utils::copy_from_user(path_ptr, &mut buf).is_err() { return u32::MAX; }
+        if crate::utils::copy_from_user(path_ptr, &mut buf).is_err() {
+            return u32::MAX;
+        }
     }
     let len = buf.iter().position(|&c| c == 0).unwrap_or(256);
     let path = match core::str::from_utf8(&buf[..len]) {
         Ok(s) => s,
         Err(_) => return u32::MAX,
     };
-    unsafe { crate::println!("[Syscall] Opening file"); }
+    unsafe {
+        crate::println!("[Syscall] Opening file");
+    }
     let vnode = match crate::fs::vfs_open(path, 0, 0) {
         Ok(id) => id,
         Err(_) => return u32::MAX,
     };
-    unsafe { crate::println!("[Syscall] Reading file"); }
+    unsafe {
+        crate::println!("[Syscall] Reading file");
+    }
     let image = match crate::fs::vfs_read_all(vnode) {
         Some(v) => v,
         None => return u32::MAX,
     };
     crate::println!("[Syscall] Creating page directory");
-    let Some(aspace) = AddressSpace::create() else { return u32::MAX; };
+    let Some(aspace) = AddressSpace::create() else {
+        return u32::MAX;
+    };
     crate::println!("[Syscall] Loading ELF");
     match crate::elf::load_elf_from_bytes(&image) {
         Ok((entry, phdr_vaddr)) => {
             crate::println!("[Syscall] ELF loaded successfully");
-            if !aspace.switch() { return u32::MAX; }
+            if !aspace.switch() {
+                return u32::MAX;
+            }
             aspace.set_current_user();
             crate::println!("[Syscall] Switched to user directory");
 
@@ -281,8 +319,12 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
             let stack_flags = PageFlags::user_write();
             let mut page_addr = STACK_BASE;
             while page_addr < STACK_BASE + STACK_SIZE {
-                let Some(frame) = PhysFrame::alloc() else { return u32::MAX; };
-                if !mem::map_frame(page_addr as usize, frame, stack_flags) { return u32::MAX; }
+                let Some(frame) = PhysFrame::alloc() else {
+                    return u32::MAX;
+                };
+                if !mem::map_frame(page_addr as usize, frame, stack_flags) {
+                    return u32::MAX;
+                }
                 page_addr += 4096;
             }
             let stack_ptr = STACK_BASE;
@@ -296,7 +338,11 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
             let argv_ptrs_size = (argv_count + 1) * 4;
             let envp_ptrs_size = 4;
             let auxv_size = 6 * 8;
-            let total_size = 4u32 + argv_ptrs_size + (envp_ptrs_size as u32) + (auxv_size as u32) + (name_len as u32);
+            let total_size = 4u32
+                + argv_ptrs_size
+                + (envp_ptrs_size as u32)
+                + (auxv_size as u32)
+                + (name_len as u32);
 
             let mut block_start = stack_top.wrapping_sub(total_size);
             block_start &= !0xF;
@@ -307,31 +353,46 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
             let auxv_addr = envp_array_addr + (envp_ptrs_size as u32);
             let string_addr = auxv_addr + (auxv_size as u32);
 
-            if string_addr + (name_len as u32) > stack_top { return u32::MAX; }
+            if string_addr + (name_len as u32) > stack_top {
+                return u32::MAX;
+            }
 
             unsafe {
                 for (i, &b) in name_bytes.iter().enumerate() {
                     let byte_addr = string_addr + (i as u32);
                     let bytes_slice = core::slice::from_raw_parts(&b, 1);
-                    if crate::utils::copy_to_user(byte_addr, bytes_slice).is_err() { return u32::MAX; }
+                    if crate::utils::copy_to_user(byte_addr, bytes_slice).is_err() {
+                        return u32::MAX;
+                    }
                 }
                 let nul_byte: u8 = 0;
                 let nul_slice = core::slice::from_raw_parts(&nul_byte, 1);
-                if crate::utils::copy_to_user(string_addr + (name_bytes.len() as u32), nul_slice).is_err() { return u32::MAX; }
+                if crate::utils::copy_to_user(string_addr + (name_bytes.len() as u32), nul_slice)
+                    .is_err()
+                {
+                    return u32::MAX;
+                }
             }
 
             let mut ptrs = [0u32; 2];
             ptrs[0] = string_addr as u32;
             ptrs[1] = 0;
-            let ptrs_bytes = unsafe { core::slice::from_raw_parts(ptrs.as_ptr() as *const u8, argv_ptrs_size as usize) };
+            let ptrs_bytes = unsafe {
+                core::slice::from_raw_parts(ptrs.as_ptr() as *const u8, argv_ptrs_size as usize)
+            };
             unsafe {
-                if crate::utils::copy_to_user(argv_array_addr, ptrs_bytes).is_err() { return u32::MAX; }
+                if crate::utils::copy_to_user(argv_array_addr, ptrs_bytes).is_err() {
+                    return u32::MAX;
+                }
             }
 
             let zero_ptr: u32 = 0;
-            let zero_bytes = unsafe { core::slice::from_raw_parts((&zero_ptr) as *const u32 as *const u8, 4) };
+            let zero_bytes =
+                unsafe { core::slice::from_raw_parts((&zero_ptr) as *const u32 as *const u8, 4) };
             unsafe {
-                if crate::utils::copy_to_user(envp_array_addr, zero_bytes).is_err() { return u32::MAX; }
+                if crate::utils::copy_to_user(envp_array_addr, zero_bytes).is_err() {
+                    return u32::MAX;
+                }
             }
 
             let (entry_val, phentsize, phnum) = match crate::elf::parse_elf_header(&image) {
@@ -348,22 +409,46 @@ pub extern "C" fn rust_sys_execve(path_ptr: u32) -> u32 {
 
             let mut aux = [0u32; 12];
             let mut ai = 0;
-            aux[ai] = AT_PHDR; ai += 1; aux[ai] = phdr_vaddr as u32; ai += 1;
-            aux[ai] = AT_PHENT; ai += 1; aux[ai] = phentsize as u32; ai += 1;
-            aux[ai] = AT_PHNUM; ai += 1; aux[ai] = phnum as u32; ai += 1;
-            aux[ai] = AT_PAGESZ; ai += 1; aux[ai] = 4096u32; ai += 1;
-            aux[ai] = AT_ENTRY; ai += 1; aux[ai] = entry_val as u32; ai += 1;
-            aux[ai] = AT_NULL; ai += 1; aux[ai] = 0u32; ai += 1;
+            aux[ai] = AT_PHDR;
+            ai += 1;
+            aux[ai] = phdr_vaddr as u32;
+            ai += 1;
+            aux[ai] = AT_PHENT;
+            ai += 1;
+            aux[ai] = phentsize as u32;
+            ai += 1;
+            aux[ai] = AT_PHNUM;
+            ai += 1;
+            aux[ai] = phnum as u32;
+            ai += 1;
+            aux[ai] = AT_PAGESZ;
+            ai += 1;
+            aux[ai] = 4096u32;
+            ai += 1;
+            aux[ai] = AT_ENTRY;
+            ai += 1;
+            aux[ai] = entry_val as u32;
+            ai += 1;
+            aux[ai] = AT_NULL;
+            ai += 1;
+            aux[ai] = 0u32;
+            ai += 1;
 
-            let auxv_bytes = unsafe { core::slice::from_raw_parts(aux.as_ptr() as *const u8, ai * 4) };
+            let auxv_bytes =
+                unsafe { core::slice::from_raw_parts(aux.as_ptr() as *const u8, ai * 4) };
             unsafe {
-                if crate::utils::copy_to_user(auxv_addr, auxv_bytes).is_err() { return u32::MAX; }
+                if crate::utils::copy_to_user(auxv_addr, auxv_bytes).is_err() {
+                    return u32::MAX;
+                }
             }
 
             let argc_val: u32 = 1;
-            let argc_bytes = unsafe { core::slice::from_raw_parts((&argc_val) as *const u32 as *const u8, 4) };
+            let argc_bytes =
+                unsafe { core::slice::from_raw_parts((&argc_val) as *const u32 as *const u8, 4) };
             unsafe {
-                if crate::utils::copy_to_user(argc_addr, argc_bytes).is_err() { return u32::MAX; }
+                if crate::utils::copy_to_user(argc_addr, argc_bytes).is_err() {
+                    return u32::MAX;
+                }
             }
 
             let aspace_addr = aspace.addr();
@@ -401,7 +486,11 @@ pub extern "C" fn rust_sys_socket(domain: i32, socket_type: i32, protocol: i32) 
 }
 
 /// Bind syscall - binds socket to address
-pub unsafe extern "C" fn rust_sys_bind(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
+pub unsafe extern "C" fn rust_sys_bind(
+    fd: i32,
+    addr: *const core::ffi::c_void,
+    addr_len: u32,
+) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }
@@ -431,7 +520,11 @@ pub extern "C" fn rust_sys_accept(fd: i32) -> i32 {
 }
 
 /// Connect syscall - connects socket to an address
-pub unsafe extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_void, addr_len: u32) -> i32 {
+pub unsafe extern "C" fn rust_sys_connect(
+    fd: i32,
+    addr: *const core::ffi::c_void,
+    addr_len: u32,
+) -> i32 {
     if addr.is_null() || addr_len < 2 {
         return -1;
     }
@@ -451,7 +544,7 @@ pub unsafe extern "C" fn rust_sys_connect(fd: i32, addr: *const core::ffi::c_voi
 
 /// Close socket syscall
 pub extern "C" fn rust_sys_close_socket(fd: i32) -> i32 {
-     crate::net::socket_close(fd)
+    crate::net::socket_close(fd)
 }
 
 /// Has pending connections syscall
@@ -543,9 +636,8 @@ pub extern "C" fn rust_sys_kill(pid: u32, sig: u32) -> u32 {
 /// the heap to the given address. Returns the new program break on success,
 /// or !0 on failure.
 pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
-    let current_break = crate::process::Scheduler::with_current_task_mut(|task| {
-        task.heap_break()
-    }).unwrap_or(0);
+    let current_break =
+        crate::process::Scheduler::with_current_task_mut(|task| task.heap_break()).unwrap_or(0);
 
     if addr == 0 {
         return current_break;
@@ -611,7 +703,11 @@ pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
 #[allow(dead_code)]
 pub fn exit(code: u32) -> ! {
     syscall(SyscallNumber::Exit, code, 0, 0);
-    loop { unsafe { core::arch::asm!("hlt"); } }
+    loop {
+        unsafe {
+            core::arch::asm!("hlt");
+        }
+    }
 }
 
 #[cfg(feature = "x86_64")]
@@ -636,7 +732,12 @@ pub fn sleep(ms: u32) {
 #[cfg(feature = "x86_64")]
 #[allow(dead_code)]
 pub fn sys_socket(domain: i32, socket_type: i32, protocol: i32) -> i32 {
-    syscall(SyscallNumber::Socket, domain as u32, socket_type as u32, protocol as u32) as i32
+    syscall(
+        SyscallNumber::Socket,
+        domain as u32,
+        socket_type as u32,
+        protocol as u32,
+    ) as i32
 }
 
 #[cfg(feature = "x86_64")]
@@ -683,7 +784,11 @@ pub fn sbrk(incr: i32) -> u32 {
 /// Allocate shared memory buffer for Wayland SHM
 pub extern "C" fn rust_sys_alloc_shm(width: u32, height: u32, bpp: u32) -> u32 {
     let fd = crate::shm_alloc::shm_alloc(width, height, bpp);
-    if fd < 0 { u32::MAX } else { fd as u32 }
+    if fd < 0 {
+        u32::MAX
+    } else {
+        fd as u32
+    }
 }
 
 /// Get user virtual address of an SHM buffer
@@ -702,7 +807,9 @@ pub extern "C" fn rust_sys_shm_user_vaddr(fd: u32) -> u32 {
 ///   bit 1 (0x02): MAP_PRIVATE
 ///   bit 4 (0x10): MAP_ANONYMOUS
 pub extern "C" fn rust_sys_mmap(hint: u32, length: u32, flags: u32) -> u32 {
-    if length == 0 { return 0xFFFFFFFF; }
+    if length == 0 {
+        return 0xFFFFFFFF;
+    }
 
     let map_anonymous = (flags & 0x10) != 0;
     let page_ceil = |x: u32| (x + 0xFFF) & !0xFFF;
@@ -732,7 +839,9 @@ pub extern "C" fn rust_sys_mmap(hint: u32, length: u32, flags: u32) -> u32 {
 /// arg0: pointer to user timeval struct { tv_sec, tv_usec }
 /// Returns: 0 on success, -1 on error
 pub extern "C" fn rust_sys_gettimeofday(timeval_ptr: u32) -> u32 {
-    if timeval_ptr == 0 { return 0xFFFFFFFF; }
+    if timeval_ptr == 0 {
+        return 0xFFFFFFFF;
+    }
 
     let uptime_ms = crate::SystemTimer::uptime_ms();
     let tv_sec = (uptime_ms / 1000) as u32;
@@ -788,22 +897,32 @@ pub fn register_all() {
     reg(9, |a0, a1, a2, _, _| rust_sys_lseek(a0, a1, a2));
     reg(10, |a0, _, _, _, _| rust_sys_pipe(a0));
     reg(11, |a0, _, _, _, _| rust_sys_execve(a0));
-    reg(12, |a0, a1, a2, _, _| rust_sys_socket(a0 as i32, a1 as i32, a2 as i32) as u32);
+    reg(12, |a0, a1, a2, _, _| {
+        rust_sys_socket(a0 as i32, a1 as i32, a2 as i32) as u32
+    });
     reg(13, |a0, a1, a2, _, _| unsafe {
         rust_sys_bind(a0 as i32, a1 as *const core::ffi::c_void, a2) as u32
     });
-    reg(14, |a0, a1, _, _, _| rust_sys_listen(a0 as i32, a1 as i32) as u32);
+    reg(14, |a0, a1, _, _, _| {
+        rust_sys_listen(a0 as i32, a1 as i32) as u32
+    });
     reg(15, |a0, _, _, _, _| rust_sys_accept(a0 as i32) as u32);
     reg(16, |a0, a1, a2, _, _| unsafe {
         rust_sys_connect(a0 as i32, a1 as *const core::ffi::c_void, a2) as u32
     });
     reg(17, |a0, _, _, _, _| rust_sys_close_socket(a0 as i32) as u32);
-    reg(18, |a0, _, _, _, _| rust_sys_has_pending_connections(a0 as i32) as u32);
+    reg(18, |a0, _, _, _, _| {
+        rust_sys_has_pending_connections(a0 as i32) as u32
+    });
     reg(20, |_, _, _, _, _| rust_sys_fork());
     reg(21, |a0, a1, a2, _, _| rust_sys_clone(a0, a1, a2));
     reg(22, |a0, a1, _, _, _| rust_sys_waitpid(a0, a1));
-    reg(23, |a0, a1, a2, _, _| rust_sys_socket_read(a0 as i32, a1, a2) as u32);
-    reg(24, |a0, a1, a2, _, _| rust_sys_socket_write(a0 as i32, a1, a2) as u32);
+    reg(23, |a0, a1, a2, _, _| {
+        rust_sys_socket_read(a0 as i32, a1, a2) as u32
+    });
+    reg(24, |a0, a1, a2, _, _| {
+        rust_sys_socket_write(a0 as i32, a1, a2) as u32
+    });
     reg(29, |a0, a1, _, _, _| rust_sys_dup2(a0, a1));
     reg(30, |a0, a1, _, _, _| rust_sys_kill(a0, a1));
 }

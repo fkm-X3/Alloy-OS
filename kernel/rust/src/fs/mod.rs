@@ -1,17 +1,17 @@
-pub mod vnode;
-pub mod tmpfs;
 pub mod fat32;
 pub mod mount;
+pub mod tmpfs;
+pub mod vnode;
 
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::vec;
-use alloc::boxed::Box;
+use crate::block::BlockDevice;
 use crate::sync::SpinLock;
 use crate::utils::{copy_from_user, copy_to_user};
-use mount::{MountTable, FsType};
-use crate::block::BlockDevice;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
+use mount::{FsType, MountTable};
 
 struct FsState {
     next_id: u64,
@@ -24,16 +24,26 @@ struct FsState {
 
 impl FsState {
     fn new() -> Self {
-        unsafe { crate::println!("[VFS] FsState::new start"); }
-        unsafe { crate::println!("[VFS] Creating BTreeMaps"); }
+        unsafe {
+            crate::println!("[VFS] FsState::new start");
+        }
+        unsafe {
+            crate::println!("[VFS] Creating BTreeMaps");
+        }
         let path_id = BTreeMap::new();
         let dat = BTreeMap::new();
         let fat = BTreeMap::new();
         let devs = Vec::new();
-        unsafe { crate::println!("[VFS] Calling MountTable::new"); }
+        unsafe {
+            crate::println!("[VFS] Calling MountTable::new");
+        }
         let mt = mount::make_mount_table();
-        unsafe { crate::println!("[VFS] MountTable returned"); }
-        unsafe { crate::println!("[VFS] Building FsState struct"); }
+        unsafe {
+            crate::println!("[VFS] MountTable returned");
+        }
+        unsafe {
+            crate::println!("[VFS] Building FsState struct");
+        }
         let fs = FsState {
             next_id: 1,
             path_to_id: path_id,
@@ -42,7 +52,9 @@ impl FsState {
             block_devices: devs,
             fat32_filesystems: fat,
         };
-        unsafe { crate::println!("[VFS] FsState constructed"); }
+        unsafe {
+            crate::println!("[VFS] FsState constructed");
+        }
         fs
     }
 
@@ -63,13 +75,18 @@ impl FsState {
             crate::println!("[FAT32] Mounting at {mount_path}");
             for entry in &root_entries {
                 let name_str = core::str::from_utf8(&entry.name[..entry.name_len]).unwrap_or("?");
-                if entry.is_dir { crate::println!("  [DIR]  {name_str}"); }
-                else { crate::println!("  [FILE] {name_str}"); }
+                if entry.is_dir {
+                    crate::println!("  [DIR]  {name_str}");
+                } else {
+                    crate::println!("  [FILE] {name_str}");
+                }
             }
         }
 
         self.fat32_filesystems.insert(key, fs);
-        self.mount_table.mount(mount_path, FsType::Fat32, Some(dev_id)).map_err(|_| ())?;
+        self.mount_table
+            .mount(mount_path, FsType::Fat32, Some(dev_id))
+            .map_err(|_| ())?;
 
         let vnode_id = self.next_id;
         self.next_id += 1;
@@ -99,34 +116,52 @@ fn normalize_path(path: &str) -> String {
     if out.len() > 1 && out.ends_with('/') {
         out.pop();
     }
-    if out.is_empty() { out.push('/') }
+    if out.is_empty() {
+        out.push('/')
+    }
     out
 }
 
 pub fn vfs_init() {
-    unsafe { crate::println!("[VFS] vfs_init entered"); }
-    
+    unsafe {
+        crate::println!("[VFS] vfs_init entered");
+    }
+
     // Test: simple integer on stack, no allocation
     let x: u64 = 42;
     let y = x + 1;
     if y > 0 {
-        unsafe { crate::println!("[VFS] Stack test ok"); }
+        unsafe {
+            crate::println!("[VFS] Stack test ok");
+        }
     }
 
     // Test: simplest lock acquire
     {
         let mut guard = VFS_STATE.lock();
-        unsafe { crate::println!("[VFS] Lock acquired"); }
-        unsafe { crate::println!("[VFS] About to call FsState::new"); }
+        unsafe {
+            crate::println!("[VFS] Lock acquired");
+        }
+        unsafe {
+            crate::println!("[VFS] About to call FsState::new");
+        }
         let new_state = FsState::new();
-        unsafe { crate::println!("[VFS] FsState::new returned, about to assign"); }
+        unsafe {
+            crate::println!("[VFS] FsState::new returned, about to assign");
+        }
         *guard = Some(new_state);
-        unsafe { crate::println!("[VFS] FsState created"); }
+        unsafe {
+            crate::println!("[VFS] FsState created");
+        }
     }
-    unsafe { crate::println!("[VFS] Lock released"); }
+    unsafe {
+        crate::println!("[VFS] Lock released");
+    }
 
     if let Ok(_id) = vfs_open("/dev/console", 0, 0) {
-        unsafe { crate::println!("[VFS] /dev/console created"); }
+        unsafe {
+            crate::println!("[VFS] /dev/console created");
+        }
     }
 
     let hello_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../hello"));
@@ -135,7 +170,9 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, hello_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /hello embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /hello embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/hello", 0, 0) {
@@ -152,7 +189,9 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, compositor_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /compositor embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /compositor embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/compositor", 0, 0) {
@@ -163,13 +202,16 @@ pub fn vfs_init() {
         }
     }
 
-    let test_wl_client_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_wl_client"));
+    let test_wl_client_bytes =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_wl_client"));
     if !test_wl_client_bytes.is_empty() {
         if let Ok(id) = vfs_open("/test_wl_client", 0, 0) {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, test_wl_client_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /test_wl_client embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /test_wl_client embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/test_wl_client", 0, 0) {
@@ -186,7 +228,9 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, hello_cpp_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /hello_cpp embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /hello_cpp embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/hello_cpp", 0, 0) {
@@ -203,7 +247,9 @@ pub fn vfs_init() {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, forktest_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /forktest embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /forktest embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/forktest", 0, 0) {
@@ -214,13 +260,16 @@ pub fn vfs_init() {
         }
     }
 
-    let test_window_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_window"));
+    let test_window_bytes =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_window"));
     if !test_window_bytes.is_empty() {
         if let Ok(id) = vfs_open("/test_window", 0, 0) {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, test_window_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /test_window embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /test_window embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/test_window", 0, 0) {
@@ -231,13 +280,16 @@ pub fn vfs_init() {
         }
     }
 
-    let alloy_de_qml_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../alloy_de_qml"));
+    let alloy_de_qml_bytes =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../alloy_de_qml"));
     if !alloy_de_qml_bytes.is_empty() {
         if let Ok(id) = vfs_open("/alloy_de_qml", 0, 0) {
             let mut g = VFS_STATE.lock();
             if let Some(state) = g.as_mut() {
                 state.data.insert(id, alloy_de_qml_bytes.to_vec());
-                unsafe { crate::println!("[VFS] /alloy_de_qml embedded into VFS"); }
+                unsafe {
+                    crate::println!("[VFS] /alloy_de_qml embedded into VFS");
+                }
             }
         }
         if let Ok(id2) = vfs_open("/bin/alloy_de_qml", 0, 0) {
@@ -248,7 +300,9 @@ pub fn vfs_init() {
         }
     }
 
-    unsafe { crate::println!("[VFS] Initializing block devices..."); }
+    unsafe {
+        crate::println!("[VFS] Initializing block devices...");
+    }
 
     let devices = crate::block::init_block_devices();
     let mut guard = VFS_STATE.lock();
@@ -288,11 +342,13 @@ pub fn vfs_read(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usize
         None => return -1,
     };
     if let Some(vec) = state.data.get(&vnode_id) {
-        if *offset >= vec.len() { return 0; }
+        if *offset >= vec.len() {
+            return 0;
+        }
         let available = vec.len() - *offset;
         let to_copy = core::cmp::min(available, len);
         unsafe {
-            if copy_to_user(user_buf_ptr, &vec[*offset..(*offset+to_copy)]).is_ok() {
+            if copy_to_user(user_buf_ptr, &vec[*offset..(*offset + to_copy)]).is_ok() {
                 *offset += to_copy;
                 return to_copy as isize;
             }
@@ -307,18 +363,24 @@ pub fn vfs_write(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usiz
         Some(s) => s,
         None => return -1,
     };
-    if let Some(typ) = state.path_to_id.iter().find_map(|(p,&id)| if id==vnode_id { Some(p.clone()) } else { None }) {
+    if let Some(typ) = state.path_to_id.iter().find_map(|(p, &id)| {
+        if id == vnode_id {
+            Some(p.clone())
+        } else {
+            None
+        }
+    }) {
         if typ == "/dev/console" {
-                let mut tmp = vec![0u8; len];
-                unsafe {
-                    if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
-                        return -1;
-                    }
+            let mut tmp = vec![0u8; len];
+            unsafe {
+                if copy_from_user(user_buf_ptr, &mut tmp).is_err() {
+                    return -1;
                 }
-                let cpy = core::cmp::min(len, 512);
-                crate::Serial::write_bytes(&tmp[..cpy]);
-                *offset += len;
-                return len as isize;
+            }
+            let cpy = core::cmp::min(len, 512);
+            crate::Serial::write_bytes(&tmp[..cpy]);
+            *offset += len;
+            return len as isize;
         }
     }
     if let Some(vec) = state.data.get_mut(&vnode_id) {
@@ -334,7 +396,7 @@ pub fn vfs_write(vnode_id: u64, offset: &mut usize, user_buf_ptr: u32, len: usiz
         if *offset + len > vec.len() {
             vec.resize(*offset + len, 0);
         }
-        vec[*offset..*offset+len].copy_from_slice(&tmp[..len]);
+        vec[*offset..*offset + len].copy_from_slice(&tmp[..len]);
         *offset += len;
         return len as isize;
     }
@@ -367,7 +429,9 @@ pub fn vfs_lseek(vnode_id: u64, offset: &mut usize, off: i32, whence: u32) -> is
             2 => (vec.len() as isize) + (off as isize),
             _ => return -1,
         };
-        if newpos < 0 { return -1; }
+        if newpos < 0 {
+            return -1;
+        }
         *offset = newpos as usize;
         return *offset as isize;
     }
@@ -394,7 +458,9 @@ pub fn vfs_block_device_sectors(dev_id: usize) -> u64 {
         Some(state) => {
             if let Some(Some(dev)) = state.block_devices.get(dev_id) {
                 dev.num_sectors()
-            } else { 0 }
+            } else {
+                0
+            }
         }
         None => 0,
     }

@@ -1,5 +1,5 @@
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
+use super::{WaylandError, WaylandResult};
 
 pub struct XdgOutputManagerHandler;
 

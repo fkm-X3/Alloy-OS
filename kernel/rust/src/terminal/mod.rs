@@ -1,11 +1,11 @@
 //! Terminal module for Alloy OS
-//! 
+//!
 //! Provides a full-featured terminal with command parsing, line editing,
 //! history, and built-in commands.
 
 pub mod buffer;
-pub mod command;
 pub mod colors;
+pub mod command;
 pub mod history;
 
 use crate::ffi;
@@ -31,7 +31,7 @@ pub fn println_cstr(buf: &[u8]) {
 
 pub struct Terminal {
     buffer: LineBuffer,
-    commands: Option<CommandRegistry>,  // Make optional for lazy init
+    commands: Option<CommandRegistry>, // Make optional for lazy init
     commands_initialized: bool,
     history: CommandHistory,
 }
@@ -52,7 +52,7 @@ impl Terminal {
             history: CommandHistory::new(),
         }
     }
-    
+
     fn ensure_commands_initialized(&mut self) {
         if !self.commands_initialized {
             let mut registry = CommandRegistry::new();
@@ -61,11 +61,11 @@ impl Terminal {
             self.commands_initialized = true;
         }
     }
-    
+
     fn register_builtin_commands(&self, registry: &mut CommandRegistry) {
         use alloc::boxed::Box;
         use command::*;
-        
+
         registry.register(Box::new(HelpCommand));
         registry.register(Box::new(ClearCommand));
         registry.register(Box::new(EchoCommand));
@@ -78,69 +78,69 @@ impl Terminal {
         registry.register(Box::new(CpuInfoCommand));
         registry.register(Box::new(UptimeCommand));
     }
-    
+
     pub fn show_prompt(&self) {
         colors::print_prompt(PROMPT);
     }
-    
+
     /// Redraw the current line from cursor position to end
     fn redraw_from_cursor(&self, start_x: u8) {
         unsafe {
             let line = self.buffer.get_line();
             let cursor_pos = self.buffer.cursor_pos();
-            
+
             // Save current cursor position
             let _save_x = crate::VgaText::cursor_x();
             let save_y = crate::VgaText::cursor_y();
-            
+
             // Move to start position
             crate::VgaText::set_cursor(start_x, save_y);
-            
+
             // Print from cursor position to end
             for ch in line[cursor_pos..].chars() {
                 crate::VgaText::putchar(ch as u8);
             }
-            
+
             // Clear to end of line (in case line got shorter)
             let _current_x = crate::VgaText::cursor_x();
             while crate::VgaText::cursor_x() < 80 {
                 crate::VgaText::putchar(b' ');
             }
-            
+
             // Restore cursor to correct position
             let _final_x = start_x + (self.buffer.len() - cursor_pos) as u8;
             crate::VgaText::set_cursor(start_x + (cursor_pos as u8), save_y);
         }
     }
-    
+
     /// Fully redraw the current line
     fn redraw_line(&self, prompt_len: usize) {
         unsafe {
             let save_y = crate::VgaText::cursor_y();
-            
+
             // Move to start of line (after prompt)
             crate::VgaText::set_cursor(prompt_len as u8, save_y);
-            
+
             // Clear the entire line from prompt onward
             while crate::VgaText::cursor_x() < 80 {
                 crate::VgaText::putchar(b' ');
             }
-            
+
             // Move back to prompt position
             crate::VgaText::set_cursor(prompt_len as u8, save_y);
-            
+
             // Print the buffer
             let line = self.buffer.get_line();
             for ch in line.chars() {
                 crate::VgaText::putchar(ch as u8);
             }
-            
+
             // Position cursor correctly
             let cursor_pos = self.buffer.cursor_pos();
             crate::VgaText::set_cursor(prompt_len as u8 + cursor_pos as u8, save_y);
         }
     }
-    
+
     /// Load command from history into buffer
     fn load_history_command(&mut self, cmd: &str, prompt_len: usize) {
         self.buffer.clear();
@@ -149,10 +149,10 @@ impl Terminal {
         }
         self.redraw_line(prompt_len);
     }
-    
+
     pub fn handle_input(&mut self, key: u8) -> bool {
         const PROMPT_LEN: usize = PROMPT.len();
-        
+
         // Handle special keys
         if key >= ffi::SPECIAL_KEY_UP {
             match key {
@@ -164,7 +164,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // Down arrow - next history
                 ffi::SPECIAL_KEY_DOWN => {
                     if let Some(cmd) = self.history.next() {
@@ -177,7 +177,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // Left arrow - move cursor left
                 ffi::SPECIAL_KEY_LEFT => {
                     if self.buffer.cursor_left() {
@@ -191,7 +191,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // Right arrow - move cursor right
                 ffi::SPECIAL_KEY_RIGHT => {
                     if self.buffer.cursor_right() {
@@ -203,7 +203,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // Home - jump to start of line
                 ffi::SPECIAL_KEY_HOME => {
                     self.buffer.cursor_home();
@@ -213,7 +213,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // End - jump to end of line
                 ffi::SPECIAL_KEY_END => {
                     self.buffer.cursor_end();
@@ -224,7 +224,7 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 // Delete - remove character at cursor
                 ffi::SPECIAL_KEY_DELETE => {
                     if self.buffer.delete() {
@@ -233,20 +233,20 @@ impl Terminal {
                     }
                     return false;
                 }
-                
+
                 _ => return false, // Unknown special key
             }
         }
-        
+
         // Handle regular ASCII keys
         match key as char {
             '\n' => {
                 // Execute command
                 let cmd_line = alloc::string::String::from(self.buffer.get_line());
-                
+
                 // Add to history before executing
                 self.history.add(&cmd_line);
-                
+
                 self.execute_command(&cmd_line);
                 self.buffer.clear();
                 true // Show new prompt
@@ -257,11 +257,11 @@ impl Terminal {
                     unsafe {
                         let x = crate::VgaText::cursor_x();
                         let y = crate::VgaText::cursor_y();
-                        
+
                         if x > 0 {
                             // Move cursor back
                             crate::VgaText::set_cursor(x - 1, y);
-                            
+
                             // Redraw from new cursor position
                             self.redraw_from_cursor(x - 1);
                         }
@@ -274,7 +274,7 @@ impl Terminal {
                 if self.buffer.insert(c) {
                     let cursor_pos = self.buffer.cursor_pos();
                     let line_len = self.buffer.len();
-                    
+
                     if cursor_pos == line_len {
                         // At end of line - just print character
                         unsafe {
@@ -297,57 +297,56 @@ impl Terminal {
             _ => false, // Ignore other control characters
         }
     }
-    
+
     fn execute_command(&mut self, cmd_line: &str) {
         if cmd_line.trim().is_empty() {
             return;
         }
-        
+
         // Ensure commands are initialized before executing
         self.ensure_commands_initialized();
-        
+
         // Parse command and arguments
         let parts: alloc::vec::Vec<&str> = cmd_line.split_whitespace().collect();
         if parts.is_empty() {
             return;
         }
-        
+
         let cmd_name = parts[0];
         let args = &parts[1..];
-        
+
         // Execute command
         if let Some(ref commands) = self.commands {
             commands.execute(cmd_name, args);
         }
     }
-    
+
     /// Get reference to the line buffer for external rendering
     pub fn get_buffer(&self) -> &LineBuffer {
         &self.buffer
     }
-    
+
     /// Get mutable reference to the line buffer
     pub fn get_buffer_mut(&mut self) -> &mut LineBuffer {
         &mut self.buffer
     }
-    
+
     pub fn run(&mut self) {
         colors::print_banner();
 
         crate::VgaText::putchar(b'\n');
 
         self.show_prompt();
-        
+
         // Main terminal loop
         loop {
             if ffi::keyboard_has_key() {
                 let key = ffi::keyboard_read();
-                if key != 0
-                    && self.handle_input(key) {
-                        // Show new prompt
-                        crate::VgaText::putchar(b'\n');
-                        self.show_prompt();
-                    }
+                if key != 0 && self.handle_input(key) {
+                    // Show new prompt
+                    crate::VgaText::putchar(b'\n');
+                    self.show_prompt();
+                }
             } else {
                 // Halt CPU until next interrupt to save power and prevent busy-waiting
                 unsafe {

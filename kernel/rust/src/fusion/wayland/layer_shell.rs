@@ -1,6 +1,6 @@
-use alloc::collections::BTreeMap;
-use super::{WaylandError, WaylandResult};
 use super::client::ClientId;
+use super::{WaylandError, WaylandResult};
+use alloc::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Layer {
@@ -78,7 +78,10 @@ impl LayerShellHandler {
             _ => Layer::Overlay,
         };
 
-        let ns_end = payload.iter().position(|&b| b == 0).unwrap_or(payload.len());
+        let ns_end = payload
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(payload.len());
         let namespace = alloc::string::String::from_utf8_lossy(&payload[16..ns_end]).into_owned();
 
         let state = LayerSurfaceState {
@@ -117,12 +120,19 @@ impl LayerShellHandler {
         }
     }
 
-    fn handle_layer_surface_destroy(&mut self, object_id: u32) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_layer_surface_destroy(
+        &mut self,
+        object_id: u32,
+    ) -> WaylandResult<LayerSurfaceResponse> {
         self.surfaces.remove(&object_id);
         Ok(LayerSurfaceResponse::Destroyed)
     }
 
-    fn handle_set_size(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_set_size(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         if payload.len() < 8 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -134,7 +144,11 @@ impl LayerShellHandler {
         Ok(LayerSurfaceResponse::SizeSet)
     }
 
-    fn handle_set_anchor(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_set_anchor(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         if payload.len() < 4 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -145,7 +159,11 @@ impl LayerShellHandler {
         Ok(LayerSurfaceResponse::AnchorSet)
     }
 
-    fn handle_set_exclusive_zone(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_set_exclusive_zone(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         if payload.len() < 4 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -156,7 +174,11 @@ impl LayerShellHandler {
         Ok(LayerSurfaceResponse::ExclusiveZoneSet)
     }
 
-    fn handle_set_margin(&mut self, object_id: u32, payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_set_margin(
+        &mut self,
+        object_id: u32,
+        payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         if payload.len() < 16 {
             return Err(WaylandError::ProtocolViolation);
         }
@@ -170,20 +192,31 @@ impl LayerShellHandler {
         Ok(LayerSurfaceResponse::MarginSet)
     }
 
-    fn handle_set_keyboard_interactivity(&mut self, _object_id: u32, _payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_set_keyboard_interactivity(
+        &mut self,
+        _object_id: u32,
+        _payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         Ok(LayerSurfaceResponse::KeyboardInteractivitySet)
     }
 
-    fn handle_get_popup(&mut self, _object_id: u32, _payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_get_popup(
+        &mut self,
+        _object_id: u32,
+        _payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         Ok(LayerSurfaceResponse::PopupCreated)
     }
 
-    fn handle_ack_configure(&mut self, _object_id: u32, _payload: &[u8]) -> WaylandResult<LayerSurfaceResponse> {
+    fn handle_ack_configure(
+        &mut self,
+        _object_id: u32,
+        _payload: &[u8],
+    ) -> WaylandResult<LayerSurfaceResponse> {
         Ok(LayerSurfaceResponse::ConfigureAcknowledged)
     }
 
-    pub fn remove_surfaces_for_client(&mut self, _client_id: ClientId) {
-    }
+    pub fn remove_surfaces_for_client(&mut self, _client_id: ClientId) {}
 }
 
 pub enum LayerShellResponse {

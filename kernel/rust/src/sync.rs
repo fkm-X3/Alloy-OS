@@ -1,10 +1,10 @@
 //! Synchronization primitives for the kernel
-//! 
+//!
 //! Provides interrupt-safe spinlocks and other synchronization tools
 
-use core::sync::atomic::{AtomicBool, Ordering, fence};
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
+use core::sync::atomic::{fence, AtomicBool, Ordering};
 
 /// Simple spinlock (without interrupt handling)
 /// Use this for data that's only accessed with interrupts already disabled
@@ -21,20 +21,22 @@ impl<T> SpinLock<T> {
             data: UnsafeCell::new(data),
         }
     }
-    
+
     /// Acquire lock
     pub fn lock(&self) -> SpinLockGuard<'_, T> {
         // Acquire spinlock
-        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        while self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             core::hint::spin_loop();
         }
-        
+
         // Memory barrier
         fence(Ordering::Acquire);
-        
-        SpinLockGuard {
-            lock: self,
-        }
+
+        SpinLockGuard { lock: self }
     }
 }
 
@@ -45,7 +47,7 @@ pub struct SpinLockGuard<'a, T> {
 
 impl<'a, T> Deref for SpinLockGuard<'a, T> {
     type Target = T;
-    
+
     fn deref(&self) -> &T {
         unsafe { &*self.lock.data.get() }
     }
@@ -61,7 +63,7 @@ impl<'a, T> Drop for SpinLockGuard<'a, T> {
     fn drop(&mut self) {
         // Memory barrier before releasing
         fence(Ordering::Release);
-        
+
         // Release lock
         self.lock.locked.store(false, Ordering::Release);
     }
@@ -72,7 +74,7 @@ unsafe impl<T> Sync for SpinLock<T> where T: Send {}
 unsafe impl<T> Send for SpinLock<T> where T: Send {}
 
 /// Interrupt-safe spinlock that disables IRQs while held
-/// 
+///
 /// This prevents deadlocks when the same lock is acquired from
 /// interrupt context (e.g., allocator called from IRQ handler)
 pub struct SpinlockIRQ<T> {
@@ -88,27 +90,28 @@ impl<T> SpinlockIRQ<T> {
             data: UnsafeCell::new(data),
         }
     }
-    
+
     /// Acquire lock (disables interrupts)
     /// Returns previous interrupt state and lock guard
     pub fn lock(&self) -> SpinlockIRQGuard<'_, T> {
         // Disable interrupts
         let flags = self.disable_interrupts();
-        
+
         // Acquire spinlock
-        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        while self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             core::hint::spin_loop();
         }
-        
+
         // Memory barrier
         fence(Ordering::Acquire);
-        
-        SpinlockIRQGuard {
-            lock: self,
-            flags,
-        }
+
+        SpinlockIRQGuard { lock: self, flags }
     }
-    
+
     /// Disable interrupts and return previous state
     #[cfg(feature = "x86_64")]
     #[inline]
@@ -124,7 +127,7 @@ impl<T> SpinlockIRQ<T> {
         }
         rflags as u32
     }
-    
+
     /// Restore interrupt state (x86)
     #[cfg(feature = "x86_64")]
     #[inline]
@@ -201,10 +204,10 @@ impl<'a, T> Drop for SpinlockIRQGuard<'a, T> {
     fn drop(&mut self) {
         // Memory barrier before releasing
         fence(Ordering::Release);
-        
+
         // Release lock
         self.lock.locked.store(false, Ordering::Release);
-        
+
         // Restore interrupts
         self.lock.restore_interrupts(self.flags);
     }
@@ -262,16 +265,24 @@ pub fn irq_restore(flags: u64) {
 #[inline]
 pub fn irq_disable() {
     #[cfg(feature = "x86_64")]
-    unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("cli", options(nomem, nostack));
+    }
     #[cfg(feature = "aarch64")]
-    unsafe { core::arch::asm!("msr daifset, #2"); }
+    unsafe {
+        core::arch::asm!("msr daifset, #2");
+    }
 }
 
 /// Re-enable interrupts (unmask IRQ) — arch-specific.
 #[inline]
 pub fn irq_enable() {
     #[cfg(feature = "x86_64")]
-    unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("sti", options(nomem, nostack));
+    }
     #[cfg(feature = "aarch64")]
-    unsafe { core::arch::asm!("msr daifclr, #2"); }
+    unsafe {
+        core::arch::asm!("msr daifclr, #2");
+    }
 }

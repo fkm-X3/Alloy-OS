@@ -120,7 +120,11 @@ pub struct OutputBinding {
 
 impl OutputBinding {
     /// Create new output binding
-    pub fn new(output_id: u32, geometry: OutputGeometry, mut modes: alloc::vec::Vec<OutputMode>) -> Self {
+    pub fn new(
+        output_id: u32,
+        geometry: OutputGeometry,
+        mut modes: alloc::vec::Vec<OutputMode>,
+    ) -> Self {
         // Mark first mode as preferred and current
         if !modes.is_empty() {
             modes[0].preferred = true;
@@ -217,7 +221,11 @@ impl OutputManager {
     }
 
     /// Get an output binding for a client
-    pub fn get_binding_mut(&mut self, client_id: u32, output_id: u32) -> Option<&mut OutputBinding> {
+    pub fn get_binding_mut(
+        &mut self,
+        client_id: u32,
+        output_id: u32,
+    ) -> Option<&mut OutputBinding> {
         self.bindings
             .get_mut(&client_id)
             .and_then(|bindings| bindings.get_mut(&output_id))
@@ -241,7 +249,10 @@ impl OutputManager {
     }
 
     /// Get all mutable bindings for a client
-    pub fn get_client_bindings_mut(&mut self, client_id: u32) -> Option<&mut BTreeMap<u32, OutputBinding>> {
+    pub fn get_client_bindings_mut(
+        &mut self,
+        client_id: u32,
+    ) -> Option<&mut BTreeMap<u32, OutputBinding>> {
         self.bindings.get_mut(&client_id)
     }
 }
@@ -254,9 +265,9 @@ impl Default for OutputManager {
 
 /// Helper to create output modes from display dimensions
 pub fn create_display_modes(width: u32, height: u32) -> alloc::vec::Vec<OutputMode> {
-    alloc::vec![
-        OutputMode::new(width, height, 60000).with_preferred().with_current(),
-    ]
+    alloc::vec![OutputMode::new(width, height, 60000)
+        .with_preferred()
+        .with_current(),]
 }
 
 /// Helper to create physical dimensions from pixel dimensions and DPI
@@ -265,12 +276,12 @@ pub fn calculate_physical_dimensions(width_px: u32, height_px: u32, dpi: u32) ->
     if dpi == 0 {
         return (254, 190); // Default ~10" display
     }
-    
+
     // Convert pixels to mm: pixel_count * 25.4 / dpi
     // Approximate: mm ≈ pixels * 254 / dpi
     let width_mm = ((width_px as i32 * 254) / dpi as i32).max(1);
     let height_mm = ((height_px as i32 * 254) / dpi as i32).max(1);
-    
+
     (width_mm, height_mm)
 }
 
@@ -283,13 +294,13 @@ mod tests {
         let mode = OutputMode::new(1024, 768, 60000)
             .with_preferred()
             .with_current();
-        
+
         assert_eq!(mode.width, 1024);
         assert_eq!(mode.height, 768);
         assert_eq!(mode.refresh, 60000);
         assert!(mode.preferred);
         assert!(mode.current);
-        
+
         let flags = mode.to_flags();
         assert_eq!(flags, 0b11);
     }
@@ -308,11 +319,11 @@ mod tests {
         let geom = OutputGeometry::new(300, 225);
         let modes = alloc::vec![OutputMode::new(1024, 768, 60000)];
         let binding = OutputBinding::new(0, geom, modes);
-        
+
         assert_eq!(binding.output_id(), 0);
         assert_eq!(binding.scale(), 1);
         assert!(!binding.is_initialized());
-        
+
         let current_mode = binding.current_mode();
         assert!(current_mode.is_some());
     }
@@ -322,13 +333,13 @@ mod tests {
         let mut manager = OutputManager::new();
         let geom = OutputGeometry::new(300, 225);
         let modes = alloc::vec![OutputMode::new(1024, 768, 60000)];
-        
+
         let output_id = manager.bind_output(1, geom, modes);
         assert_eq!(output_id, 0);
-        
+
         let binding = manager.get_binding(1, 0);
         assert!(binding.is_some());
-        
+
         manager.remove_client(1);
         let binding = manager.get_binding(1, 0);
         assert!(binding.is_none());

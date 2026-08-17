@@ -4,7 +4,7 @@ pub mod tmpfs;
 pub mod vnode;
 
 use crate::block::BlockDevice;
-use crate::sync::SpinLock;
+use alloy_kernel_hal::sync::SpinLock;
 use crate::utils::{copy_from_user, copy_to_user};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;

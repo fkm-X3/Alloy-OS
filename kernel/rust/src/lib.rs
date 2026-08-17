@@ -12,12 +12,8 @@ pub use alloy_kernel_hal::VgaText;
 pub use alloy_kernel_hal::{log, print, println};
 pub use alloy_kernel_hal::{Serial, SystemTimer};
 
-pub mod allocator;
 pub mod ffi;
-pub mod heap;
 pub mod panic;
-pub mod slab;
-pub mod sync;
 #[cfg(feature = "x86_64")]
 pub mod terminal;
 pub mod utils_rs;
@@ -35,7 +31,24 @@ pub mod syscall;
 
 use crate::graphics::Display;
 use alloc::boxed::Box;
+use core::alloc::Layout;
 use core::panic::PanicInfo;
+
+/// The kernel's global allocator (slab + heap tiers live in
+/// `alloy-kernel-unsafe-core`; the `unsafe impl GlobalAlloc` never appears in
+/// this crate).
+#[global_allocator]
+static ALLOCATOR: alloy_kernel_hal::alloc::KernelAllocator = alloy_kernel_hal::alloc::KernelAllocator;
+
+/// Allocation error handler (the final crate must provide one).
+#[alloc_error_handler]
+fn alloc_error_handler(layout: Layout) -> ! {
+    panic!(
+        "Allocation error: failed to allocate {} bytes with {} byte alignment",
+        layout.size(),
+        layout.align()
+    );
+}
 
 extern "C" fn display_server_entry() {
     // Disable interrupts during init so the timer can't preempt us.

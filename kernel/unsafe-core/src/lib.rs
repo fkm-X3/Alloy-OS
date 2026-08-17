@@ -65,6 +65,12 @@ pub mod io;
 /// VmRegion, AddressSpace, and validated user copies
 pub mod mem;
 
+/// Kernel global allocator (KernelAllocator, Slab, heap free list).
+pub mod alloc;
+
+/// Synchronization primitives (SpinLock, SpinLockIrq, irq_* helpers).
+pub mod sync;
+
 /// Interrupt controller abstractions (InterruptController trait, Pic8259,
 /// Gic).
 pub mod interrupt;

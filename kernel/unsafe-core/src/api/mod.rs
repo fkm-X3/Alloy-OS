@@ -14,6 +14,7 @@
 //! Submodules: io, mem, interrupt, serial, time, drivers, alloc, sync,
 //! arch, callback.
 
+pub use crate::alloc::{self, get_stats, KernelAllocator, Slab};
 pub use crate::arch::{self, Arch, CpuContext, CpuInfo};
 pub use crate::callback::{self, FaultAction, SyscallHandler, SyscallTable};
 pub use crate::callback::{set_keyboard_wake_handler, set_mouse_wake_handler};
@@ -30,6 +31,9 @@ pub use crate::mem::user::{copy_from_user, copy_to_user};
 pub use crate::ported::arch::syscall::{current_user_syscall_frame, UserSyscallFrame};
 pub use crate::memory::{self, MemoryManager};
 pub use crate::serial::{self, SerialPort};
+pub use crate::sync::{
+    self, irq_disable, irq_enable, irq_restore, irq_save, SpinLock, SpinLockIrq,
+};
 pub use crate::time::{self, Timer};
 
 // --- Safe driver facades ---

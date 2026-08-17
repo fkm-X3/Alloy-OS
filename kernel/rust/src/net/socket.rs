@@ -1,6 +1,6 @@
 use crate::process::Scheduler;
 use crate::process::WaitQueue;
-use crate::sync::SpinLock;
+use alloy_kernel_hal::sync::SpinLock;
 use alloc::collections::VecDeque;
 use alloc::string::{String, ToString};
 

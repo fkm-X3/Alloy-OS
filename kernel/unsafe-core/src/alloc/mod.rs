@@ -1,14 +1,27 @@
-//! Global allocator implementation for Rust kernel
+//! Kernel global allocator.
 //!
-//! This allocator uses a two-tier strategy:
-//! - Slab allocator for small objects (<= 1024 bytes)
-//! - Heap allocator for larger objects
+//! The `unsafe impl GlobalAlloc` that backs `#[global_allocator]` in the
+//! kernel crate lives here, behind a two-tier strategy:
+//! - [`Slab`] for small objects (<= 1024 bytes)
+//! - a free-list [`HeapAllocator`] for larger objects
+//!
+//! Moved verbatim from the kernel crate's `allocator.rs`; the IRQ-mask lock
+//! now uses the [`crate::sync`] primitives. The lock masks IRQs while held
+//! because the timer IRQ handler can allocate (the scheduler re-enqueues the
+//! preempted task, growing the ready queue), so a plain spinlock would
+//! deadlock if an IRQ fired mid-allocation.
 
-use crate::heap::HeapAllocator;
-use crate::slab::SlabAllocator;
+pub mod heap;
+pub mod slab;
+
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::UnsafeCell;
 use core::sync::atomic::{fence, AtomicBool, Ordering};
+
+use crate::sync::{irq_restore, irq_save};
+
+use heap::HeapAllocator;
+pub use slab::Slab;
 
 /// Wrapper to make `UnsafeCell` `Sync` when access is guarded by `ALLOC_LOCK`.
 struct AllocCell<T>(UnsafeCell<T>);
@@ -20,24 +33,24 @@ impl<T> AllocCell<T> {
     }
 }
 
-/// Global lock for allocator.
+/// Global lock for the allocator.
 ///
-/// Must mask IRQs while held: the timer IRQ handler can allocate (the
-/// scheduler re-enqueues the preempted task, growing the ready queue), so a
-/// plain spinlock would deadlock if an IRQ fired mid-allocation. `lock()`
-/// returns the saved interrupt state, which `unlock()` restores.
+/// Masks IRQs while held: the timer IRQ handler can allocate (the scheduler
+/// re-enqueues the preempted task, growing the ready queue), so a plain
+/// spinlock would deadlock if an IRQ fired mid-allocation. `lock()` returns
+/// the saved interrupt state, which `unlock()` restores.
 static ALLOC_LOCK: AtomicBool = AtomicBool::new(false);
 
 /// Slab allocator for small objects
-static SLAB_ALLOCATOR: AllocCell<SlabAllocator> = AllocCell(UnsafeCell::new(SlabAllocator::new()));
+static SLAB_ALLOCATOR: AllocCell<Slab> = AllocCell(UnsafeCell::new(Slab::new()));
 
 /// Heap allocator for larger objects
 static HEAP_ALLOCATOR: AllocCell<HeapAllocator> = AllocCell(UnsafeCell::new(HeapAllocator::new()));
 
-/// Acquire allocator lock with memory barriers, masking IRQs while held.
+/// Acquire the allocator lock with memory barriers, masking IRQs while held.
 /// Returns the previous interrupt state for [`unlock`].
 fn lock() -> u64 {
-    let flags = crate::sync::irq_save();
+    let flags = irq_save();
     while ALLOC_LOCK
         .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
         .is_err()
@@ -49,18 +62,22 @@ fn lock() -> u64 {
     flags
 }
 
-/// Release allocator lock with memory barriers, restoring the saved IRQ state.
+/// Release the allocator lock with memory barriers, restoring the saved IRQ
+/// state.
 fn unlock(flags: u64) {
     // Ensure all our writes complete before releasing
     fence(Ordering::Release);
     ALLOC_LOCK.store(false, Ordering::Release);
-    crate::sync::irq_restore(flags);
+    irq_restore(flags);
 }
 
-/// Alloy kernel allocator with slab and heap tiers
-pub struct AllocatorVMM;
+/// The Alloy kernel allocator with slab and heap tiers.
+///
+/// Used by the kernel crate's `#[global_allocator]` static; also exposes the
+/// combined allocation statistics for the `stats` shell command.
+pub struct KernelAllocator;
 
-unsafe impl GlobalAlloc for AllocatorVMM {
+unsafe impl GlobalAlloc for KernelAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let flags = lock();
 
@@ -94,44 +111,20 @@ unsafe impl GlobalAlloc for AllocatorVMM {
     }
 }
 
-/// Global allocator instance
-#[global_allocator]
-static ALLOCATOR: AllocatorVMM = AllocatorVMM;
-
-/// Allocation error handler
-#[alloc_error_handler]
-fn alloc_error_handler(layout: Layout) -> ! {
-    panic!(
-        "Allocation error: failed to allocate {} bytes with {} byte alignment",
-        layout.size(),
-        layout.align()
-    );
-}
-
-/// Get allocation statistics
-pub fn get_stats() -> ((usize, usize), (usize, usize)) {
-    unsafe {
+impl KernelAllocator {
+    /// Get allocation statistics:
+    /// `((slab_allocated, slab_freed), (heap_allocated, heap_freed))`.
+    pub fn get_stats() -> ((usize, usize), (usize, usize)) {
         let flags = lock();
-        let slab_stats = (*SLAB_ALLOCATOR.get()).stats();
-        let heap_stats = (*HEAP_ALLOCATOR.get()).stats();
+        let slab_stats = unsafe { (*SLAB_ALLOCATOR.get()).stats() };
+        let heap_stats = unsafe { (*HEAP_ALLOCATOR.get()).stats() };
         unlock(flags);
         (slab_stats, heap_stats)
     }
 }
 
-/// Print allocation statistics to serial (non-intrusive)
-pub fn print_stats() {
-    let _ = get_stats();
-
-    crate::println!("\n=== Allocator Statistics ===");
-    crate::println!("Slab allocator:");
-    crate::print!("  Objects allocated: ");
-    crate::print!("  Objects freed: ");
-    crate::print!("  Net objects: ");
-
-    crate::println!("\nHeap allocator:");
-    crate::print!("  Bytes allocated: ");
-    crate::print!("  Bytes freed: ");
-    crate::print!("  Net bytes: ");
-    crate::println!("===========================\n");
+/// Get allocation statistics for the `stats` shell command
+/// (`((slab_allocated, slab_freed), (heap_allocated, heap_freed))`).
+pub fn get_stats() -> ((usize, usize), (usize, usize)) {
+    KernelAllocator::get_stats()
 }

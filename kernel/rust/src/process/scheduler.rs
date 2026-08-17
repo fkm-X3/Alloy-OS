@@ -1,18 +1,18 @@
 use crate::ffi;
 use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
-use crate::sync::SpinlockIRQ;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloy_kernel_hal::mem::AddressSpace;
+use alloy_kernel_hal::sync::SpinLockIrq;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-/// Global scheduler instance — must use SpinlockIRQ because timer interrupts
+/// Global scheduler instance — must use SpinLockIrq because timer interrupts
 /// call rust_timer_tick() which acquires this lock from interrupt context.
-static SCHEDULER: SpinlockIRQ<Option<Scheduler>> = SpinlockIRQ::new(None);
+static SCHEDULER: SpinLockIrq<Option<Scheduler>> = SpinLockIrq::new(None);
 
 const NUM_PRIORITIES: usize = 4;
 const QUANTA: [u32; NUM_PRIORITIES] = [5, 10, 20, 40];
@@ -193,10 +193,6 @@ impl Scheduler {
                         // double-free (the real Box is in the ready queue).
                         SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
                         core::mem::forget(old_box);
-                        // Re-enable interrupts before returning so that the
-                        // IRQ handler (which will iretq back to the task)
-                        // runs with correct IF state.
-                        crate::sync::irq_enable();
                     }
                 }
             }
@@ -205,6 +201,9 @@ impl Scheduler {
 
     pub fn yield_cpu() {
         Self::schedule();
+        // schedule() returns with IRQs disabled (SpinLockIrq held IRQs off).
+        // Re-enable them so the task can receive timer interrupts again.
+        alloy_kernel_hal::sync::irq_enable();
     }
 
     /// Block the current task on a wait queue.
@@ -219,6 +218,9 @@ impl Scheduler {
         }
         drop(scheduler);
         Self::schedule();
+        // schedule() returns with IRQs disabled (SpinLockIrq held IRQs off).
+        // Re-enable them so the resumed task can receive timer interrupts again.
+        alloy_kernel_hal::sync::irq_enable();
     }
 
     /// Wake up to `count` tasks from a wait queue, putting them into the
@@ -420,6 +422,9 @@ impl Scheduler {
         }
 
         Self::schedule();
+        // schedule() returns with IRQs disabled (SpinLockIrq held IRQs off).
+        // Re-enable them so the resumed task can receive timer interrupts again.
+        alloy_kernel_hal::sync::irq_enable();
     }
 
     /// Terminate a task by PID. Returns 0 on success, u32::MAX on error.

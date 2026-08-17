@@ -1,10 +1,15 @@
-//! Heap allocator module
+//! Heap allocator module.
 //!
-//! Provides a proper heap allocator with better granularity than
-//! the page-based allocator. Uses a linked list of free blocks.
+//! Provides a proper heap allocator with better granularity than the
+//! page-based allocator. Uses a linked list of free blocks. Moved verbatim
+//! from the kernel crate's `heap.rs`; only the VMM/console paths were
+//! rewritten to the sibling `crate::mem` / `crate::drivers::serial` APIs.
 
 use core::alloc::Layout;
 use core::ptr::null_mut;
+
+use crate::drivers::serial::Serial;
+use crate::mem::{PageFlags, VmRegion};
 
 /// Minimum allocation size (to store free list node)
 const MIN_BLOCK_SIZE: usize = 16;
@@ -67,7 +72,7 @@ const fn align_up(value: usize, align: usize) -> usize {
 }
 
 /// Heap allocator with free list
-pub struct HeapAllocator {
+pub(crate) struct HeapAllocator {
     free_list: *mut BlockHeader,
     total_allocated: usize,
     total_freed: usize,
@@ -98,7 +103,7 @@ impl HeapAllocator {
     pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let align = layout.align().max(HEAP_ALIGN);
         if align > HEAP_ALIGN {
-            crate::println!("[Heap] ERROR: Unsupported allocation alignment");
+            Serial::write_str("[Heap] ERROR: Unsupported allocation alignment\n");
             return null_mut();
         }
 
@@ -117,19 +122,16 @@ impl HeapAllocator {
         let pages_needed = total_size.div_ceil(4096);
         let alloc_size = pages_needed * 4096;
 
-        crate::println!("[Heap] Before vmm_alloc_region");
-        let region = alloy_kernel_hal::mem::VmRegion::alloc(
-            alloc_size,
-            alloy_kernel_hal::PageFlags::kernel_write(),
-        );
+        Serial::write_str("[Heap] Before vmm_alloc_region\n");
+        let region = VmRegion::alloc(alloc_size, PageFlags::kernel_write());
         let ptr = match region {
             Some(r) => r.leak() as *mut u8,
             None => null_mut(),
         };
-        crate::println!("[Heap] After vmm_alloc_region");
+        Serial::write_str("[Heap] After vmm_alloc_region\n");
 
         if ptr.is_null() {
-            crate::println!("[Heap] ERROR: VMM allocation failed!");
+            Serial::write_str("[Heap] ERROR: VMM allocation failed!\n");
             return null_mut();
         }
 
@@ -166,10 +168,10 @@ impl HeapAllocator {
         // Validate header before proceeding
         if !(*header).is_valid() {
             // Detailed corruption reporting
-            crate::println!("[Heap] CRITICAL: Heap corruption detected!");
-            crate::print!("  Pointer: ");
-            crate::println!("  Expected magic: 0xDEADBEEF");
-            crate::print!("  Actual magic: ");
+            Serial::write_str("[Heap] CRITICAL: Heap corruption detected!\n");
+            Serial::write_str("  Pointer: \n");
+            Serial::write_str("  Expected magic: 0xDEADBEEF\n");
+            Serial::write_str("  Actual magic: \n");
 
             panic!("Heap corruption at {:p}", ptr);
         }
@@ -224,6 +226,7 @@ impl HeapAllocator {
     }
 }
 
-// Thread-safety: In a single-threaded kernel, we don't need synchronization
+// Thread-safety: access is serialized by the allocator lock (`ALLOC_LOCK` in
+// the parent module), which masks IRQs while held.
 unsafe impl Send for HeapAllocator {}
 unsafe impl Sync for HeapAllocator {}

@@ -1,7 +1,7 @@
-use crate::sync::SpinLock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use alloy_kernel_hal::PhysFrame;
+use alloy_kernel_hal::sync::SpinLock;
 
 struct ShmRegion {
     width: u32,

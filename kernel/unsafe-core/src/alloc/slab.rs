@@ -1,9 +1,15 @@
-//! Slab allocator for efficient small object allocation
+//! Slab allocator for efficient small object allocation.
 //!
-//! Manages fixed-size blocks to reduce fragmentation and improve
-//! performance for common allocation sizes.
+//! Manages fixed-size blocks to reduce fragmentation and improve performance
+//! for common allocation sizes. Moved verbatim from the kernel crate's
+//! `slab.rs` (renamed `SlabAllocator` → `Slab`); only the VMM/console paths
+//! were rewritten to the sibling `crate::mem` / `crate::drivers::serial`
+//! APIs.
 
 use core::ptr::null_mut;
+
+use crate::drivers::serial::Serial;
+use crate::mem::{PageFlags, VmRegion};
 
 /// Size classes for slab allocator (powers of 2)
 const SLAB_SIZES: [usize; 8] = [8, 16, 32, 64, 128, 256, 512, 1024];
@@ -122,16 +128,13 @@ impl SlabCache {
     /// Create a new slab
     unsafe fn create_slab(&mut self) -> *mut SlabHeader {
         // Allocate memory for slab (1 page = 4KB)
-        crate::println!("[Slab] Before vmm_alloc_region");
-        let region = alloy_kernel_hal::mem::VmRegion::alloc(
-            4096,
-            alloy_kernel_hal::PageFlags::kernel_write(),
-        );
+        Serial::write_str("[Slab] Before vmm_alloc_region\n");
+        let region = VmRegion::alloc(4096, PageFlags::kernel_write());
         let ptr = match region {
             Some(r) => r.leak() as *mut u8,
             None => null_mut(),
         };
-        crate::println!("[Slab] After vmm_alloc_region");
+        Serial::write_str("[Slab] After vmm_alloc_region\n");
 
         if ptr.is_null() {
             return null_mut();
@@ -250,22 +253,27 @@ impl SlabCache {
     }
 }
 
-/// Main slab allocator managing multiple size classes
-pub struct SlabAllocator {
+/// A slab allocator managing multiple fixed size classes.
+///
+/// Allocates small objects (8–1024 bytes) out of per-size-class slab caches.
+/// The methods operate on raw memory (uninitialized bytes in, uninitialized
+/// bytes out); they are used by the [`KernelAllocator`](crate::alloc::KernelAllocator)
+/// under the global allocator lock.
+pub struct Slab {
     caches: [SlabCache; 8],
 }
 
-impl Default for SlabAllocator {
+impl Default for Slab {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SlabAllocator {
+impl Slab {
     /// Create a new slab allocator with all caches initialized to empty state
     /// All pointers are null, all counters are zero
     pub const fn new() -> Self {
-        SlabAllocator {
+        Slab {
             caches: [
                 SlabCache::new(SLAB_SIZES[0]), // 8 bytes
                 SlabCache::new(SLAB_SIZES[1]), // 16 bytes
@@ -279,7 +287,7 @@ impl SlabAllocator {
         }
     }
 
-    /// Allocate from appropriate slab cache
+    /// Allocate from the appropriate slab cache.
     ///
     /// # Safety
     /// Caller must ensure `size` and `align` are non-zero. Returns a pointer to
@@ -290,7 +298,7 @@ impl SlabAllocator {
             if size <= cache.size && align <= cache.size {
                 let result = cache.alloc();
                 if result.is_null() {
-                    crate::println!("[Slab] ERROR: Cache allocation failed!");
+                    Serial::write_str("[Slab] ERROR: Cache allocation failed!\n");
                 }
                 return result;
             }
@@ -300,10 +308,10 @@ impl SlabAllocator {
         null_mut()
     }
 
-    /// Free to appropriate slab cache
+    /// Free an object to the appropriate slab cache.
     ///
     /// # Safety
-    /// `ptr` must have been returned by a previous call to [`SlabAllocator::alloc`]
+    /// `ptr` must have been returned by a previous call to [`Slab::alloc`]
     /// with matching `size` and `align`, and must not have been freed already.
     pub unsafe fn free(&mut self, ptr: *mut u8, size: usize, align: usize) {
         // Find appropriate size class
@@ -339,5 +347,7 @@ impl SlabAllocator {
     }
 }
 
-unsafe impl Send for SlabAllocator {}
-unsafe impl Sync for SlabAllocator {}
+// Thread-safety: access is serialized by the allocator lock (`ALLOC_LOCK` in
+// the parent module), which masks IRQs while held.
+unsafe impl Send for Slab {}
+unsafe impl Sync for Slab {}

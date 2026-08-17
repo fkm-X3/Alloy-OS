@@ -236,7 +236,7 @@ pub mod aarch64 {
     }
 
     /// Mask IRQs only (DAIF immediate I bit), leaving FIQ untouched. Matches
-    /// the IRQ-only masking used by the kernel's `SpinlockIRQ`/`irq_save`.
+    /// the IRQ-only masking used by the kernel's `SpinLockIrq`/`irq_save`.
     #[inline]
     pub fn disable_irqs() {
         unsafe { core::arch::asm!("msr daifset, #2"); }

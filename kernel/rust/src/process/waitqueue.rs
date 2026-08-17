@@ -1,5 +1,5 @@
 use crate::process::task::Task;
-use crate::sync::SpinLock;
+use alloy_kernel_hal::sync::SpinLock;
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;

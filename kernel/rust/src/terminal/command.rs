@@ -527,7 +527,7 @@ impl Command for MeminfoCommand {
         crate::VgaText::println("");
 
         // Get allocator statistics
-        let (slab_stats, heap_stats) = crate::allocator::get_stats();
+        let (slab_stats, heap_stats) = alloy_kernel_hal::alloc::get_stats();
 
         crate::VgaText::println("Rust Allocators:");
 

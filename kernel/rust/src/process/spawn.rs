@@ -60,22 +60,22 @@ pub fn spawn_user_elf(image: &[u8]) -> bool {
         // map them with user+writable flags so the stack works.
         {
             let stack_flags = PageFlags::user_write();
-            crate::sync::irq_disable();
+            alloy_kernel_hal::sync::irq_disable();
             let mut addr = STACK_BASE;
             while addr < STACK_BASE + STACK_SIZE {
                 let Some(frame) = PhysFrame::alloc() else {
                     crate::println!("[spawn] OOM mapping stack page at 0x{addr:016X}");
-                    crate::sync::irq_enable();
+                    alloy_kernel_hal::sync::irq_enable();
                     return false;
                 };
                 if !aspace.map_page(addr as usize, frame, stack_flags) {
                     crate::println!("[spawn] FAIL mapping stack page at 0x{addr:016X}");
-                    crate::sync::irq_enable();
+                    alloy_kernel_hal::sync::irq_enable();
                     return false;
                 }
                 addr += 4096u64;
             }
-            crate::sync::irq_enable();
+            alloy_kernel_hal::sync::irq_enable();
         }
 
         // ── Load ELF segments into aspace (kernel PD stays active) ──────
@@ -279,12 +279,12 @@ fn map_elf_segment(
     // context switches from clobbering the shared window slot (PT_TEMP_IDX)
     // used by win_map/win_unmap inside paging_map_page_in_pd and
     // paging_temp_map_frame.  Serial I/O is polled so it works without ints.
-    crate::sync::irq_disable();
+    alloy_kernel_hal::sync::irq_disable();
 
     while page_addr < aligned_start + alloc_size {
         let Some(frame) = PhysFrame::alloc() else {
             crate::println!("[spawn] OOM at page_addr=0x{page_addr:016X}");
-            crate::sync::irq_enable();
+            alloy_kernel_hal::sync::irq_enable();
             return false;
         };
 
@@ -297,14 +297,14 @@ fn map_elf_segment(
             });
             if copied.is_none() {
                 crate::println!("[spawn] temp window failed at page_addr=0x{page_addr:016X}");
-                crate::sync::irq_enable();
+                alloy_kernel_hal::sync::irq_enable();
                 return false;
             }
         }
 
         if !aspace.map_page(page_addr, frame, page_flags) {
             crate::println!("[spawn] MAP FAIL page_addr=0x{page_addr:016X}");
-            crate::sync::irq_enable();
+            alloy_kernel_hal::sync::irq_enable();
             return false;
         }
         page_addr += page_size;
@@ -314,7 +314,7 @@ fn map_elf_segment(
         }
     }
 
-    crate::sync::irq_enable();
+    alloy_kernel_hal::sync::irq_enable();
     crate::println!("[spawn] segment mapped vaddr=0x{vaddr:016X}");
     true
 }

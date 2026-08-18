@@ -2,6 +2,15 @@
 //!
 //! Moved from `hal/src/arch/mod.rs`; the HAL re-exports this
 //! module.
+//!
+//! This module provides the **safe arch API** that the kernel and boot
+//! sequence use.  The implementations live in the arch-specific submodules
+//! and call into `crate::raw::asm` / `crate::raw::ffi` for the actual
+//! hardware operations.
+//!
+//! Session 3.6: GDT/IDT/syscall/context-switch moved here from the
+//! ported C2Rust modules.  Exception/IRQ handlers remain `#[no_mangle]`
+//! for the asm stubs but are now authored (not translated) Rust.
 
 #[cfg(feature = "x86_64")]
 pub mod x86_64;
@@ -58,6 +67,73 @@ pub trait Arch {
 
     /// Switch page directory / translation table base
     unsafe fn switch_page_directory(pd_phys: usize);
+}
+
+/// Safe context switch. Takes `&mut` references guaranteeing exclusive
+/// ownership — no aliasing is possible. The asm `context_switch` reads
+/// `old` and writes both `old` (saves) and `new` (restores).
+pub fn context_switch(old: &mut CpuContext, new: &mut CpuContext) {
+    unsafe {
+        crate::raw::ffi::context_switch(old as *mut CpuContext, new as *mut CpuContext);
+    }
+}
+
+/// Syscall number constants — shared across architectures.
+pub mod syscall_no {
+    pub const SYS_EXIT: u32 = 0;
+    pub const SYS_YIELD: u32 = 1;
+    pub const SYS_GETPID: u32 = 2;
+    pub const SYS_SLEEP: u32 = 3;
+    pub const SYS_OPEN: u32 = 4;
+    pub const SYS_READ: u32 = 5;
+    pub const SYS_WRITE: u32 = 6;
+    pub const SYS_CLOSE: u32 = 7;
+    pub const SYS_DUP: u32 = 8;
+    pub const SYS_LSEEK: u32 = 9;
+    pub const SYS_PIPE: u32 = 10;
+    pub const SYS_EXECVE: u32 = 11;
+    pub const SYS_SOCKET: u32 = 12;
+    pub const SYS_BIND: u32 = 13;
+    pub const SYS_LISTEN: u32 = 14;
+    pub const SYS_ACCEPT: u32 = 15;
+    pub const SYS_CONNECT: u32 = 16;
+    pub const SYS_CLOSE_SOCKET: u32 = 17;
+    pub const SYS_HAS_PENDING_CONNECTIONS: u32 = 18;
+    pub const SYS_FORK: u32 = 20;
+    pub const SYS_CLONE: u32 = 21;
+    pub const SYS_WAITPID: u32 = 22;
+    pub const SYS_SOCKET_READ: u32 = 23;
+    pub const SYS_SOCKET_WRITE: u32 = 24;
+    pub const SYS_DUP2: u32 = 29;
+    pub const SYS_KILL: u32 = 30;
+}
+
+/// Central syscall dispatcher — called from `syscall_entry` (asm) and
+/// `svc_handler` (aarch64). Delegates to the kernel crate's registered
+/// handlers via the callback API.
+#[no_mangle]
+pub unsafe extern "C" fn syscall_dispatcher(
+    syscall_no: u32,
+    arg0: u32,
+    arg1: u32,
+    arg2: u32,
+    arg3: u32,
+    arg4: u32,
+) -> u32 {
+    match crate::api::callback::dispatch_syscall(syscall_no, arg0, arg1, arg2, arg3, arg4) {
+        crate::api::callback::SyscallDispatch::Handled(result) => result,
+        crate::api::callback::SyscallDispatch::Unhandled => {
+            crate::drivers::serial::Serial::write_str(
+                "[Syscall] Unknown syscall number: 0x",
+            );
+            // serial_print_hex is still extern "C" from ported — but we can
+            // just format here instead.  For now keep the raw symbol.
+            extern "C" { fn serial_print_hex(v: u32); }
+            serial_print_hex(syscall_no);
+            crate::drivers::serial::Serial::write_str("\n");
+            u32::MAX
+        }
+    }
 }
 
 /// CPU context for task switching - architecture-specific

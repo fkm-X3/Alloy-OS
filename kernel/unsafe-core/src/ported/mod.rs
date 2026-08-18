@@ -1,51 +1,8 @@
 //! C2Rust-translated kernel C, merged under `#[cfg(target_arch)]`.
 //!
-//! Merge rule:
-//! - files byte-identical in both transpile outputs are kept once in
-//!   `common/` (`pmm`),
-//! - files that differ only where the C had arch `#if`s become a single file
-//!   with `#[cfg(target_arch = "x86_64")]` / `#[cfg(target_arch = "aarch64")]`
-//!   on the divergent items (`vmm`, `syscall`, `serial`),
-//! - truly arch-specific C becomes `#[cfg]`-gated module pairs pointing into
-//!   `x86_64/` and `aarch64/` (`paging`, `cpu`, `timer`, gdt/idt, `boot::main`).
-//!
-//! Everything here is machine output; no idiomatic rewrites. The C2Rust
-//! drivers were replaced by the safe facades in [`crate::drivers`] and
-//! deleted from the tree.
-
-pub mod arch {
-    pub mod syscall {
-        include!("common/arch_syscall.rs");
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    pub mod cpu {
-        include!("x86_64/arch/cpu.rs");
-    }
-    #[cfg(target_arch = "aarch64")]
-    pub mod cpu {
-        include!("aarch64/arch/cpu.rs");
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    pub mod x86_64 {
-        pub mod gdt {
-            include!("x86_64/arch/x86_64/gdt.rs");
-        }
-        pub mod idt {
-            include!("x86_64/arch/x86_64/idt.rs");
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    pub mod aarch64 {
-        pub mod gdt {
-            include!("aarch64/arch/aarch64/gdt.rs");
-        }
-        pub mod idt {
-            include!("aarch64/arch/aarch64/idt.rs");
-        }
-    }
-}
+//! Session 3.6: arch (gdt/idt/cpu/syscall) modules moved to
+//! [`crate::arch`]. Only the boot entry points remain here — they are
+//! `#[no_mangle] extern "C"` because the asm loader calls them.
 
 pub mod boot {
     #[cfg(target_arch = "x86_64")]

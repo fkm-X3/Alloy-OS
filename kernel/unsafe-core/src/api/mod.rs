@@ -27,8 +27,9 @@ pub use crate::io::X86IoPort;
 pub use crate::io::IoPort;
 pub use crate::mem::{self, AddressSpace, PageFlags, PhysFrame, VmRegion};
 pub use crate::mem::user::{copy_from_user, copy_to_user};
+pub use crate::arch::syscall_no;
 #[cfg(feature = "x86_64")]
-pub use crate::ported::arch::syscall::{current_user_syscall_frame, UserSyscallFrame};
+pub use crate::arch::x86_64::{current_user_syscall_frame, UserSyscallFrame};
 pub use crate::memory::{self, MemoryManager};
 pub use crate::serial::{self, SerialPort};
 pub use crate::sync::{

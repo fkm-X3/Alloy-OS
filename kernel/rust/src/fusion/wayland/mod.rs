@@ -256,9 +256,7 @@ impl WaylandServer {
 
         self.socket = Some(socket);
 
-        unsafe {
-            crate::println!("[Wayland] Server initialized at /tmp/wayland-0");
-        }
+        crate::println!("[Wayland] Server initialized at /tmp/wayland-0");
 
         Ok(())
     }
@@ -288,9 +286,7 @@ impl WaylandServer {
             // Send initial registry globals to new client
             self.send_initial_globals(client_id);
 
-            unsafe {
-                crate::println!("[Wayland] Accepted client connection");
-            }
+            crate::println!("[Wayland] Accepted client connection");
 
             Ok(())
         } else {
@@ -655,9 +651,7 @@ impl WaylandServer {
             self.output_manager.remove_client(client_id.0);
             self.compositor_handler.clear_surface_for_client(client_id);
 
-            unsafe {
-                crate::println!("[Wayland] Client disconnected");
-            }
+            crate::println!("[Wayland] Client disconnected");
             Ok(())
         } else {
             Err(WaylandError::ObjectNotFound)

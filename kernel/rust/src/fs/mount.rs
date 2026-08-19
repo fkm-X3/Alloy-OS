@@ -19,25 +19,17 @@ pub struct MountTable {
 
 impl MountTable {
     pub fn new() -> Self {
-        unsafe {
-            crate::println!("[Mount] MountTable::new start");
-        }
+        crate::println!("[Mount] MountTable::new start");
         let mut mounts = BTreeMap::new();
         let key = String::from("/");
         let val = MountPoint {
             fs_type: FsType::TmpFs,
             device_id: None,
         };
-        unsafe {
-            crate::println!("[Mount] About to insert");
-        }
+        crate::println!("[Mount] About to insert");
         mounts.insert(key, val);
-        unsafe {
-            crate::println!("[Mount] Insert done");
-        }
-        unsafe {
-            crate::println!("[Mount] Building struct");
-        }
+        crate::println!("[Mount] Insert done");
+        crate::println!("[Mount] Building struct");
         MountTable { mounts }
     }
 
@@ -94,9 +86,7 @@ impl MountTable {
 }
 
 pub fn make_mount_table() -> Box<MountTable> {
-    unsafe {
-        crate::println!("[Mount] make_mount_table start");
-    }
+    crate::println!("[Mount] make_mount_table start");
     let mut mounts = BTreeMap::new();
     let key = String::from("/");
     let val = MountPoint {
@@ -104,25 +94,9 @@ pub fn make_mount_table() -> Box<MountTable> {
         device_id: None,
     };
     mounts.insert(key, val);
-    unsafe {
-        crate::println!("[Mount] make_mount_table insert done");
-    }
-    // Build MountTable using unsafe pointer write to avoid compiler issues
-    let layout = core::alloc::Layout::new::<MountTable>();
-    let ptr = unsafe { alloc::alloc::alloc(layout) as *mut MountTable };
-    unsafe {
-        crate::println!("[Mount] Raw alloc done");
-    }
-    unsafe {
-        core::ptr::write(&mut (*ptr).mounts, mounts);
-    }
-    unsafe {
-        crate::println!("[Mount] Ptr write done");
-    }
-    let mt = unsafe { Box::from_raw(ptr) };
-    unsafe {
-        crate::println!("[Mount] Box created");
-    }
+    crate::println!("[Mount] make_mount_table insert done");
+    let mt = Box::new(MountTable { mounts });
+    crate::println!("[Mount] MountTable created");
     mt
 }
 

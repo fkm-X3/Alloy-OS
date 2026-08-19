@@ -6,8 +6,6 @@
 
 pub use alloy_kernel_hal::ffi::*;
 
-use core::ffi::c_void;
-
 // === Keyboard / mouse safe facades (x86_64) ===
 //
 // Implemented by the safe `Keyboard`/`Mouse` drivers in unsafe-core; these
@@ -83,34 +81,11 @@ pub fn mouse_read() -> Option<MouseEvent> {
     Mouse::read()
 }
 
-/// Socket convenience wrappers
-pub fn socket_create(domain: i32, socket_type: i32, protocol: i32) -> i32 {
-    unsafe { socket(domain, socket_type, protocol) }
-}
+// Socket functions — the kernel crate implements these in safe Rust
+// (`net::socket`). The raw extern declarations remain in the HAL for
+// compatibility but are not called from this crate.
 
-/// # Safety
-/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
-pub unsafe fn socket_bind(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
-    bind_socket(fd, addr, addr_len)
-}
-
-pub fn socket_listen(fd: i32, backlog: i32) -> i32 {
-    unsafe { listen_socket(fd, backlog) }
-}
-
-pub fn socket_accept(fd: i32) -> i32 {
-    unsafe { accept_socket(fd) }
-}
-
-/// # Safety
-/// `addr` must be a valid pointer to a sockaddr structure of at least `addr_len` bytes.
-pub unsafe fn socket_connect(fd: i32, addr: *const c_void, addr_len: u32) -> i32 {
-    connect_socket(fd, addr, addr_len)
-}
-
-pub fn socket_close(fd: i32) -> i32 {
-    unsafe { close_socket(fd) }
-}
+pub use crate::net::socket::{socket_create, socket_close};
 
 // Page flags for memory mapping
 pub const PAGE_PRESENT: u32 = 0x001;

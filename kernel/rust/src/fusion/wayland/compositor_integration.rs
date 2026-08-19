@@ -165,11 +165,6 @@ impl CompositorIntegration {
             return Ok(());
         }
 
-        let base = match buffer.kernel_vaddr {
-            Some(vaddr) => vaddr as *const u8,
-            None => return Ok(()),
-        };
-
         let bpp = buffer.format.bytes_per_pixel() as u32;
 
         for damage_rect in damage {
@@ -197,13 +192,18 @@ impl CompositorIntegration {
                 ShmFormat::Argb8888 => {
                     let mut pixels = alloc::vec![0u32; (w * h) as usize];
                     for row in 0..h {
-                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        let row_bytes = buffer.read_row_bytes(
+                            base_offset + row as usize * row_stride,
+                            w as usize * 4,
+                        );
                         for col in 0..w {
-                            let pixel = unsafe {
-                                core::ptr::read_unaligned(
-                                    row_ptr.add(col as usize * 4) as *const u32
-                                )
-                            };
+                            let off = col as usize * 4;
+                            let pixel = u32::from_le_bytes([
+                                row_bytes[off],
+                                row_bytes[off + 1],
+                                row_bytes[off + 2],
+                                row_bytes[off + 3],
+                            ]);
                             pixels[(row * w + col) as usize] = pixel;
                         }
                     }
@@ -212,13 +212,18 @@ impl CompositorIntegration {
                 ShmFormat::Xrgb8888 => {
                     let mut pixels = alloc::vec![0u32; (w * h) as usize];
                     for row in 0..h {
-                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        let row_bytes = buffer.read_row_bytes(
+                            base_offset + row as usize * row_stride,
+                            w as usize * 4,
+                        );
                         for col in 0..w {
-                            let pixel = unsafe {
-                                core::ptr::read_unaligned(
-                                    row_ptr.add(col as usize * 4) as *const u32
-                                )
-                            };
+                            let off = col as usize * 4;
+                            let pixel = u32::from_le_bytes([
+                                row_bytes[off],
+                                row_bytes[off + 1],
+                                row_bytes[off + 2],
+                                row_bytes[off + 3],
+                            ]);
                             pixels[(row * w + col) as usize] = pixel | 0xFF000000;
                         }
                     }
@@ -227,13 +232,13 @@ impl CompositorIntegration {
                 ShmFormat::Rgb565 => {
                     let mut pixels = alloc::vec![0u32; (w * h) as usize];
                     for row in 0..h {
-                        let row_ptr = base.wrapping_add(base_offset + row as usize * row_stride);
+                        let row_bytes = buffer.read_row_bytes(
+                            base_offset + row as usize * row_stride,
+                            w as usize * 2,
+                        );
                         for col in 0..w {
-                            let pixel16 = unsafe {
-                                core::ptr::read_unaligned(
-                                    row_ptr.add(col as usize * 2) as *const u16
-                                )
-                            };
+                            let off = col as usize * 2;
+                            let pixel16 = u16::from_le_bytes([row_bytes[off], row_bytes[off + 1]]);
                             let r = ((pixel16 >> 11) & 0x1F) as u32;
                             let g = ((pixel16 >> 5) & 0x3F) as u32;
                             let b = (pixel16 & 0x1F) as u32;

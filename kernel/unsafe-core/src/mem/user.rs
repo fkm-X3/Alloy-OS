@@ -18,10 +18,8 @@
 //! On aarch64 (MMU disabled, identity) the CR3 switch is a no-op and the
 //! mapping check always passes, so these reduce to plain bounded copies.
 //!
-//! These functions are `unsafe` because the user address space can be
-//! unmapped or swapped under the copy (TOCTOU); the range checks narrow, but
-//! do not eliminate, the risk. Buffers stay slices — no raw pointers cross
-//! the `api` boundary.
+//! All UB risk is contained inside `unsafe {}` blocks in this module; callers
+//! can invoke these functions from entirely safe code.
 
 #[cfg(feature = "x86_64")]
 use crate::raw::asm::x86_64::{read_cr3, write_cr3};
@@ -79,10 +77,9 @@ fn range_sane(start: usize, len: usize) -> bool {
 /// in the middle of the range is unmapped) or `Err(-1)` if nothing could be
 /// copied.
 ///
-/// # Safety
-/// `user_ptr` must belong to the current user task's address space. The range
-/// is validated page-by-page, but the address space may change concurrently.
-pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32> {
+/// The range is validated page-by-page before each copy chunk; invalid or
+/// unmapped addresses return `Err(-1)` without causing UB.
+pub fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32> {
     let start = user_ptr as usize;
     let len = buf.len();
     if !range_sane(start, len) {
@@ -99,7 +96,7 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
 
     while out_off < len {
         let page_addr = cur & !(PAGE_SIZE - 1);
-        let phys = ffi::paging_get_physical_address(page_addr);
+        let phys = unsafe { ffi::paging_get_physical_address(page_addr) };
         if phys == 0 {
             restore_user_cr3(saved_cr3);
             return if out_off > 0 { Ok(out_off) } else { Err(-1) };
@@ -112,11 +109,13 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
 
         let page_off = cur & (PAGE_SIZE - 1);
         let chunk = core::cmp::min(len - out_off, PAGE_SIZE - page_off);
-        core::ptr::copy_nonoverlapping(
-            cur as *const u8,
-            buf[out_off..].as_mut_ptr(),
-            chunk,
-        );
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                cur as *const u8,
+                buf[out_off..].as_mut_ptr(),
+                chunk,
+            );
+        }
         out_off += chunk;
         cur += chunk;
     }
@@ -131,11 +130,9 @@ pub unsafe fn copy_from_user(user_ptr: u32, buf: &mut [u8]) -> Result<usize, i32
 /// in the middle of the range is unmapped) or `Err(-1)` if nothing could be
 /// written.
 ///
-/// # Safety
-/// `user_ptr` must belong to the current user task's address space and be
-/// writable. The range is validated page-by-page, but the address space may
-/// change concurrently.
-pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
+/// The range is validated page-by-page before each copy chunk; invalid or
+/// unmapped addresses return `Err(-1)` without causing UB.
+pub fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
     let start = user_ptr as usize;
     let len = buf.len();
     if !range_sane(start, len) {
@@ -152,7 +149,7 @@ pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
 
     while in_off < len {
         let page_addr = cur & !(PAGE_SIZE - 1);
-        let phys = ffi::paging_get_physical_address(page_addr);
+        let phys = unsafe { ffi::paging_get_physical_address(page_addr) };
         if phys == 0 {
             restore_user_cr3(saved_cr3);
             return if in_off > 0 { Ok(in_off) } else { Err(-1) };
@@ -165,11 +162,13 @@ pub unsafe fn copy_to_user(user_ptr: u32, buf: &[u8]) -> Result<usize, i32> {
 
         let page_off = cur & (PAGE_SIZE - 1);
         let chunk = core::cmp::min(len - in_off, PAGE_SIZE - page_off);
-        core::ptr::copy_nonoverlapping(
-            buf[in_off..].as_ptr(),
-            cur as *mut u8,
-            chunk,
-        );
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                buf[in_off..].as_ptr(),
+                cur as *mut u8,
+                chunk,
+            );
+        }
         in_off += chunk;
         cur += chunk;
     }

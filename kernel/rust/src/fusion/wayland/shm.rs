@@ -104,6 +104,24 @@ impl ShmBuffer {
         self.offset
             .saturating_add(self.height.saturating_mul(self.stride))
     }
+
+    /// Read `len` bytes from the SHM buffer starting at `byte_offset`.
+    ///
+    /// The only `unsafe` in the SHM read path is the conversion from
+    /// `kernel_vaddr` (a kernel-mapped virtual address) to a `&[u8]` slice.
+    /// All downstream pixel reads are safe byte-slice operations.
+    pub fn read_row_bytes(&self, byte_offset: usize, len: usize) -> alloc::vec::Vec<u8> {
+        let vaddr = match self.kernel_vaddr {
+            Some(va) => va as usize,
+            None => return alloc::vec![0u8; len],
+        };
+        let src = vaddr as *const u8;
+        let mut buf = alloc::vec![0u8; len];
+        unsafe {
+            core::ptr::copy_nonoverlapping(src.add(byte_offset), buf.as_mut_ptr(), len);
+        }
+        buf
+    }
 }
 
 /// Shared memory pool containing multiple buffers

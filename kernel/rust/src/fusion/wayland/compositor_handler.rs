@@ -155,9 +155,7 @@ impl CompositorHandler {
             .insert(surface_id, ());
         self.surface_to_client.insert(surface_id, client_id);
 
-        unsafe {
-            crate::println!("[Wayland Compositor] Created surface");
-        }
+        crate::println!("[Wayland Compositor] Created surface");
 
         Ok(CompositorResponse::SurfaceCreated {
             surface_id,

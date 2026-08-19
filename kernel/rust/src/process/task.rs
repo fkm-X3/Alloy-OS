@@ -111,11 +111,8 @@ impl Task {
             context.spsr = 0x5; // M[3:0]=EL1h, DAIF F/I/A/D all unmasked
             context.ttbr0 = AddressSpace::kernel().addr() as u64;
         }
-        unsafe {
-            crate::print!("[Task] Created task with ID ");
-            // Print simple message without trying to print the name (causes issues)
-            crate::println!("...");
-        }
+        crate::print!("[Task] Created task with ID ");
+        crate::println!("...");
 
         let mut task = Task {
             id,
@@ -331,14 +328,10 @@ impl Task {
 
 impl Drop for Task {
     fn drop(&mut self) {
-        unsafe {
-            crate::println!("[Task] Dropping task");
-        }
+        crate::println!("[Task] Dropping task");
 
         if !self.address_space.is_kernel() {
-            unsafe {
-                crate::println!("[Task] Destroying task page directory");
-            }
+            crate::println!("[Task] Destroying task page directory");
         }
     }
 }

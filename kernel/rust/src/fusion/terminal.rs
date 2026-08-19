@@ -54,22 +54,21 @@ impl Surface {
 ///
 /// Provides an interface for rendering terminal and UI elements to a fixed framebuffer.
 /// Maps character-based coordinates to pixel coordinates using 5x7 bitmap font metrics.
-#[derive(Debug)]
-pub struct TerminalSurface {
+pub struct TerminalSurface<'a> {
     width_pixels: u32,
     height_pixels: u32,
     pixels: Vec<u32>,
     surface: Surface,
-    _terminal: *mut Terminal,
+    terminal: &'a mut Terminal,
 }
 
-impl TerminalSurface {
+impl<'a> TerminalSurface<'a> {
     /// Create a new terminal surface from character dimensions
     ///
     /// Converts character dimensions (e.g., 80x25) to pixel dimensions using
     /// 5x7 font metrics with 9-pixel line height.
     pub fn new(
-        terminal: &mut Terminal,
+        terminal: &'a mut Terminal,
         width_chars: u32,
         height_chars: u32,
     ) -> Result<Self, FusionError> {
@@ -88,7 +87,7 @@ impl TerminalSurface {
             height_pixels,
             pixels: alloc::vec![0x000000u32; pixel_count],
             surface: Surface::new(width_pixels, height_pixels),
-            _terminal: terminal as *mut Terminal,
+            terminal,
         })
     }
 
@@ -150,14 +149,8 @@ impl TerminalSurface {
 
     /// Handle terminal input
     pub fn handle_input(&mut self, key: u8) -> Result<(), TerminalInputError> {
-        if !self._terminal.is_null() {
-            unsafe {
-                (*self._terminal).handle_input(key);
-            }
-            Ok(())
-        } else {
-            Err(TerminalInputError)
-        }
+        self.terminal.handle_input(key);
+        Ok(())
     }
 
     /// Fill a rectangle with color

@@ -78,6 +78,24 @@ pub fn context_switch(old: &mut CpuContext, new: &mut CpuContext) {
     }
 }
 
+/// Halt the CPU until the next interrupt (safe wrapper).
+#[cfg(feature = "x86_64")]
+pub fn cpu_halt() {
+    unsafe { core::arch::asm!("hlt") };
+}
+
+/// Halt the CPU until the next interrupt (safe wrapper).
+#[cfg(feature = "aarch64")]
+pub fn cpu_halt() {
+    unsafe { core::arch::asm!("wfi") };
+}
+
+/// Enable interrupts and halt (safe wrapper, x86 idle pattern).
+#[cfg(feature = "x86_64")]
+pub fn cpu_sti_halt() {
+    unsafe { core::arch::asm!("sti; hlt", options(nomem, nostack)) };
+}
+
 /// Syscall number constants — shared across architectures.
 pub mod syscall_no {
     pub const SYS_EXIT: u32 = 0;

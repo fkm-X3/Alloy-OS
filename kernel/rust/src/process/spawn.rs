@@ -325,9 +325,7 @@ fn map_elf_segment(
 #[cfg(feature = "aarch64")]
 fn spawn_user_elf_aarch64(image: &[u8], entry: u64) -> bool {
     if !load_elf_direct(image) {
-        unsafe {
-            crate::println!("[spawn] aarch64 ELF segment load failed");
-        }
+        crate::println!("[spawn] aarch64 ELF segment load failed");
         return false;
     }
 
@@ -429,13 +427,11 @@ fn load_elf_direct(image: &[u8]) -> bool {
 
 #[cfg(feature = "aarch64")]
 fn copy_segment_direct(image: &[u8], offset: usize, filesz: usize, memsz: usize, vaddr: usize) {
-    if filesz > 0 {
-        unsafe {
+    unsafe {
+        if filesz > 0 {
             ptr::copy_nonoverlapping(image.as_ptr().add(offset), vaddr as *mut u8, filesz);
         }
-    }
-    if memsz > filesz {
-        unsafe {
+        if memsz > filesz {
             ptr::write_bytes((vaddr + filesz) as *mut u8, 0, memsz - filesz);
         }
     }

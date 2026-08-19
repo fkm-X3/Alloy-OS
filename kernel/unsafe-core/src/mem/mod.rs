@@ -425,3 +425,22 @@ pub fn used_frames() -> u32 {
 pub fn free_frames() -> u32 {
     total_frames().saturating_sub(used_frames())
 }
+
+// ----------------------------------------------------------------------------
+// VMM statistics (safe accessors over the raw getters).
+// ----------------------------------------------------------------------------
+
+/// Start address of the kernel heap.
+pub fn heap_start() -> usize {
+    unsafe { ffi::vmm_get_heap_start() }
+}
+
+/// Size of the kernel heap in bytes.
+pub fn heap_size() -> usize {
+    unsafe { ffi::vmm_get_heap_size() }
+}
+
+/// Number of virtual pages currently allocated by the VMM.
+pub fn allocated_pages() -> u32 {
+    unsafe { ffi::vmm_get_allocated_pages() }
+}

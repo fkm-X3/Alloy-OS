@@ -131,9 +131,7 @@ impl RegistryHandler {
             .or_default()
             .push(object_id);
 
-        unsafe {
-            crate::println!("[Wayland Registry] Handled bind request");
-        }
+        crate::println!("[Wayland Registry] Handled bind request");
 
         Ok(RegistryResponse::Bound {
             global_name,

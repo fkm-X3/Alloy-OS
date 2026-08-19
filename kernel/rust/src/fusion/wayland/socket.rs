@@ -31,9 +31,7 @@ impl UnixSocket {
     /// Create a new Unix domain socket
     pub fn new() -> Result<Self, WaylandError> {
         // Attempt to use syscall first
-        #[allow(unused_unsafe)]
-        let fd = unsafe {
-            // socket(AF_UNIX, SOCK_STREAM, 0)
+        let fd = {
             let result = crate::syscall::rust_sys_socket(AF_UNIX as i32, SOCK_STREAM as i32, 0);
             if result >= 0 {
                 Some(result as u32)
@@ -44,9 +42,7 @@ impl UnixSocket {
 
         match fd {
             Some(f) => {
-                unsafe {
-                    crate::println!("[Wayland Socket] Created Unix domain socket via syscall");
-                }
+                crate::println!("[Wayland Socket] Created Unix domain socket via syscall");
                 Ok(Self {
                     fd: Some(f),
                     bound: false,
@@ -55,9 +51,7 @@ impl UnixSocket {
                 })
             }
             None => {
-                unsafe {
-                    crate::println!("[Wayland Socket] Falling back to placeholder socket");
-                }
+                crate::println!("[Wayland Socket] Falling back to placeholder socket");
                 // Fallback for environments without full syscall support
                 Ok(Self {
                     fd: Some(0), // Placeholder FD
@@ -84,18 +78,10 @@ impl UnixSocket {
         sockaddr[1] = (AF_UNIX >> 8) as u8;
         sockaddr[2..2 + path.len()].copy_from_slice(path.as_bytes());
 
-        let result = unsafe {
-            crate::syscall::rust_sys_bind(
-                fd as i32,
-                sockaddr.as_ptr() as *const core::ffi::c_void,
-                (path.len() + 2) as u32,
-            )
-        };
+        let result = crate::syscall::sys_bind_inner(fd as i32, &sockaddr, (path.len() + 2) as u32);
 
         if result < 0 {
-            unsafe {
-                crate::println!("[Wayland Socket] bind() syscall failed, using fallback");
-            }
+            crate::println!("[Wayland Socket] bind() syscall failed, using fallback");
             // Mark as bound anyway for fallback mode
         }
 
@@ -119,20 +105,15 @@ impl UnixSocket {
 
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
-        #[allow(unused_unsafe)]
-        let result = unsafe { crate::syscall::rust_sys_listen(fd as i32, LISTEN_BACKLOG as i32) };
+        let result = crate::syscall::rust_sys_listen(fd as i32, LISTEN_BACKLOG as i32);
 
         if result < 0 {
-            unsafe {
-                crate::println!("[Wayland Socket] listen() syscall failed, using fallback");
-            }
+            crate::println!("[Wayland Socket] listen() syscall failed, using fallback");
         }
 
         self.listening = true;
 
-        unsafe {
-            crate::println!("[Wayland Socket] Listening for connections");
-        }
+        crate::println!("[Wayland Socket] Listening for connections");
 
         Ok(())
     }
@@ -145,16 +126,13 @@ impl UnixSocket {
 
         let fd = self.fd.ok_or(WaylandError::InvalidFd)?;
 
-        #[allow(unused_unsafe)]
-        let client_fd = unsafe { crate::syscall::rust_sys_accept(fd as i32) };
+        let client_fd = crate::syscall::rust_sys_accept(fd as i32);
 
         if client_fd < 0 {
             return Err(WaylandError::AcceptFailed);
         }
 
-        unsafe {
-            crate::print!("[Wayland Socket] Accepted connection on fd ");
-        }
+        crate::print!("[Wayland Socket] Accepted connection on fd ");
 
         Ok(client_fd as u32)
     }
@@ -166,8 +144,7 @@ impl UnixSocket {
             None => return false,
         };
 
-        #[allow(unused_unsafe)]
-        let result = unsafe { crate::syscall::rust_sys_has_pending_connections(fd as i32) };
+        let result = crate::syscall::rust_sys_has_pending_connections(fd as i32);
 
         result == 1
     }
@@ -181,13 +158,7 @@ impl UnixSocket {
         sockaddr[1] = (AF_UNIX >> 8) as u8;
         sockaddr[2..2 + path.len()].copy_from_slice(path.as_bytes());
 
-        let result = unsafe {
-            crate::syscall::rust_sys_connect(
-                fd as i32,
-                sockaddr.as_ptr() as *const core::ffi::c_void,
-                (path.len() + 2) as u32,
-            )
-        };
+        let result = crate::syscall::sys_connect_inner(fd as i32, &sockaddr, (path.len() + 2) as u32);
 
         if result < 0 {
             return Err(WaylandError::SocketCreationFailed);
@@ -217,10 +188,8 @@ impl Drop for UnixSocket {
     /// Close the socket when dropped
     fn drop(&mut self) {
         if let Some(fd) = self.fd {
-            unsafe {
-                crate::syscall::rust_sys_close_socket(fd as i32);
-                crate::println!("[Wayland Socket] Closed socket");
-            }
+            crate::syscall::rust_sys_close_socket(fd as i32);
+            crate::println!("[Wayland Socket] Closed socket");
         }
     }
 }

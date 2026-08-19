@@ -58,9 +58,7 @@ extern "C" fn display_server_entry() {
     // run loop.
     let mut irq_guard = alloy_kernel_hal::InterruptGuard::new();
 
-    unsafe {
-        crate::println!("[DisplayServer] Entry reached");
-    }
+    crate::println!("[DisplayServer] Entry reached");
     match graphics::PlatformDisplay::new() {
         None => {
             crate::println!("[DisplayServer] FATAL: PlatformDisplay::new() returned None");
@@ -180,13 +178,9 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/hello", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading hello (EL0 svc syscall test)");
-                    }
+                    crate::println!("[Spawn] Loading hello (EL0 svc syscall test)");
                     if process::spawn_user_elf(&image) {
-                        unsafe {
-                            crate::println!("[Spawn] hello task created");
-                        }
+                        crate::println!("[Spawn] hello task created");
                     }
                 }
             }
@@ -200,13 +194,9 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/forktest", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading forktest (COW fork smoke)");
-                    }
+                    crate::println!("[Spawn] Loading forktest (COW fork smoke)");
                     if process::spawn_user_elf(&image) {
-                        unsafe {
-                            crate::println!("[Spawn] forktest task created");
-                        }
+                        crate::println!("[Spawn] forktest task created");
                     }
                 }
             }
@@ -219,9 +209,7 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/test_wl_client", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading test_wl_client (Wayland client test)");
-                    }
+                    crate::println!("[Spawn] Loading test_wl_client (Wayland client test)");
                     process::spawn_user_elf(&image);
                 }
             }
@@ -234,9 +222,7 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/hello_cpp", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading hello_cpp (C++ test)");
-                    }
+                    crate::println!("[Spawn] Loading hello_cpp (C++ test)");
                     process::spawn_user_elf(&image);
                 }
             }
@@ -249,13 +235,9 @@ pub extern "C" fn rust_main() {
         if let Ok(comp_vnode) = fs::vfs_open("/bin/compositor", 0, 0) {
             if let Some(image) = fs::vfs_read_all(comp_vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading compositor");
-                    }
+                    crate::println!("[Spawn] Loading compositor");
                     if process::spawn_user_elf(&image) {
-                        unsafe {
-                            crate::println!("[Spawn] Compositor task created");
-                        }
+                        crate::println!("[Spawn] Compositor task created");
                     }
                 }
             }
@@ -268,9 +250,7 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/test_window", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading test_window (Qt6 QPA test)");
-                    }
+                    crate::println!("[Spawn] Loading test_window (Qt6 QPA test)");
                     process::spawn_user_elf(&image);
                 }
             }
@@ -283,9 +263,7 @@ pub extern "C" fn rust_main() {
         if let Ok(vnode) = fs::vfs_open("/bin/alloy_de_qml", 0, 0) {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
-                    unsafe {
-                        crate::println!("[Spawn] Loading alloy_de_qml (QML desktop environment)");
-                    }
+                    crate::println!("[Spawn] Loading alloy_de_qml (QML desktop environment)");
                     process::spawn_user_elf(&image);
                 }
             }

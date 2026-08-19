@@ -15,7 +15,9 @@
 //! arch, callback.
 
 pub use crate::alloc::{self, get_stats, KernelAllocator, Slab};
-pub use crate::arch::{self, Arch, CpuContext, CpuInfo};
+pub use crate::arch::{self, Arch, CpuContext, CpuInfo, cpu_halt};
+#[cfg(feature = "x86_64")]
+pub use crate::arch::cpu_sti_halt;
 pub use crate::callback::{self, FaultAction, SyscallHandler, SyscallTable};
 pub use crate::callback::{set_keyboard_wake_handler, set_mouse_wake_handler};
 pub use crate::callback::{set_page_fault_handler, set_timer_tick_handler};
@@ -26,6 +28,7 @@ pub use crate::io::X86IoPort;
 #[cfg(feature = "x86_64")]
 pub use crate::io::IoPort;
 pub use crate::mem::{self, AddressSpace, PageFlags, PhysFrame, VmRegion};
+pub use crate::mem::{heap_start, heap_size, allocated_pages};
 pub use crate::mem::user::{copy_from_user, copy_to_user};
 pub use crate::arch::syscall_no;
 #[cfg(feature = "x86_64")]

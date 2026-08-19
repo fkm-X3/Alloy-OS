@@ -104,9 +104,7 @@ impl DisplayHandler {
             callback_data,
         });
 
-        unsafe {
-            crate::println!("[Wayland Display] Handled sync request");
-        }
+        crate::println!("[Wayland Display] Handled sync request");
 
         Ok(DisplayResponse::SyncAck {
             callback_id,
@@ -129,9 +127,7 @@ impl DisplayHandler {
         let registry_id_bytes = [payload[0], payload[1], payload[2], payload[3]];
         let registry_id = u32::from_le_bytes(registry_id_bytes);
 
-        unsafe {
-            crate::println!("[Wayland Display] Handled get_registry request");
-        }
+        crate::println!("[Wayland Display] Handled get_registry request");
 
         Ok(DisplayResponse::RegistryCreated { registry_id })
     }

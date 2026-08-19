@@ -23,16 +23,15 @@ pub fn dispatch_syscall(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
         Some(table::SyscallNumber::Socket) => {
             crate::syscall::rust_sys_socket(ebx as i32, ecx as i32, edx as i32) as u32
         }
-        Some(table::SyscallNumber::Bind) => unsafe {
-            crate::syscall::rust_sys_bind(ebx as i32, ecx as *const core::ffi::c_void, edx) as u32
+        Some(table::SyscallNumber::Bind) => {
+            crate::syscall::rust_sys_bind(ebx as i32, ecx, edx) as u32
         },
         Some(table::SyscallNumber::Listen) => {
             crate::syscall::rust_sys_listen(ebx as i32, ecx as i32) as u32
         }
         Some(table::SyscallNumber::Accept) => crate::syscall::rust_sys_accept(ebx as i32) as u32,
-        Some(table::SyscallNumber::Connect) => unsafe {
-            crate::syscall::rust_sys_connect(ebx as i32, ecx as *const core::ffi::c_void, edx)
-                as u32
+        Some(table::SyscallNumber::Connect) => {
+            crate::syscall::rust_sys_connect(ebx as i32, ecx, edx) as u32
         },
         Some(table::SyscallNumber::CloseSocket) => {
             crate::syscall::rust_sys_close_socket(ebx as i32) as u32

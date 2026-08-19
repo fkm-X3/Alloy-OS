@@ -21,9 +21,7 @@ fn print_u32_decimal_line(label: &str, value: u32) {
     let value_buf = format::u32_to_decimal(value);
     let value_start = format::trim_leading_spaces(&value_buf);
     crate::VgaText::print(label);
-    unsafe {
-        crate::terminal::println_cstr(&value_buf[value_start..]);
-    }
+    crate::terminal::println_cstr(&value_buf[value_start..]);
 }
 
 fn print_u64_decimal_line(label: &str, value: u64) {
@@ -32,9 +30,7 @@ fn print_u64_decimal_line(label: &str, value: u64) {
     let value_buf = format::u64_to_decimal(value);
     let value_start = format::trim_leading_spaces(&value_buf);
     crate::VgaText::print(label);
-    unsafe {
-        crate::terminal::println_cstr(&value_buf[value_start..]);
-    }
+    crate::terminal::println_cstr(&value_buf[value_start..]);
 }
 
 fn print_size_line(label: &str, bytes: u64) {
@@ -43,11 +39,9 @@ fn print_size_line(label: &str, bytes: u64) {
     let (value_buf, unit_buf) = format::format_bytes(bytes);
     let value_start = format::trim_leading_spaces(&value_buf);
     crate::VgaText::print(label);
-    unsafe {
-        crate::terminal::print_cstr(&value_buf[value_start..]);
-        crate::VgaText::print_bytes(b" ");
-        crate::terminal::println_cstr(&unit_buf[0..]);
-    }
+    crate::terminal::print_cstr(&value_buf[value_start..]);
+    crate::VgaText::print_bytes(b" ");
+    crate::terminal::println_cstr(&unit_buf[0..]);
 }
 
 fn print_uptime_value(uptime_ms: u64) {
@@ -64,13 +58,11 @@ fn print_uptime_value(uptime_ms: u64) {
     if days > 0 {
         let days_str = format::u32_to_decimal(days as u32);
         let days_start = format::trim_leading_spaces(&days_str);
-        unsafe {
-            crate::terminal::print_cstr(&days_str[days_start..]);
-            if days == 1 {
-                crate::VgaText::print_bytes(b" day, ");
-            } else {
-                crate::VgaText::print_bytes(b" days, ");
-            }
+        crate::terminal::print_cstr(&days_str[days_start..]);
+        if days == 1 {
+            crate::VgaText::print_bytes(b" day, ");
+        } else {
+            crate::VgaText::print_bytes(b" days, ");
         }
     }
 
@@ -78,21 +70,19 @@ fn print_uptime_value(uptime_ms: u64) {
     let minutes_str = format::u32_to_decimal(minutes as u32);
     let seconds_str = format::u32_to_decimal(seconds as u32);
 
-    unsafe {
-        crate::terminal::print_cstr(&hours_str[format::trim_leading_spaces(&hours_str)..]);
-        crate::VgaText::print_bytes(b":");
+    crate::terminal::print_cstr(&hours_str[format::trim_leading_spaces(&hours_str)..]);
+    crate::VgaText::print_bytes(b":");
 
-        if minutes < 10 {
-            crate::VgaText::print_bytes(b"0");
-        }
-        crate::terminal::print_cstr(&minutes_str[format::trim_leading_spaces(&minutes_str)..]);
-        crate::VgaText::print_bytes(b":");
-
-        if seconds < 10 {
-            crate::VgaText::print_bytes(b"0");
-        }
-        crate::terminal::println_cstr(&seconds_str[format::trim_leading_spaces(&seconds_str)..]);
+    if minutes < 10 {
+        crate::VgaText::print_bytes(b"0");
     }
+    crate::terminal::print_cstr(&minutes_str[format::trim_leading_spaces(&minutes_str)..]);
+    crate::VgaText::print_bytes(b":");
+
+    if seconds < 10 {
+        crate::VgaText::print_bytes(b"0");
+    }
+    crate::terminal::println_cstr(&seconds_str[format::trim_leading_spaces(&seconds_str)..]);
 }
 
 /// Command trait for terminal commands
@@ -210,14 +200,12 @@ impl Command for ClearCommand {
     }
 
     fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
-        unsafe {
-            // Clear screen by printing 25 empty lines
-            crate::VgaText::set_color(0, 0);
-            for _ in 0..25 {
-                crate::VgaText::println_bytes(b"");
-            }
-            crate::VgaText::set_color(7, 0);
+        // Clear screen by printing 25 empty lines
+        crate::VgaText::set_color(0, 0);
+        for _ in 0..25 {
+            crate::VgaText::println_bytes(b"");
         }
+        crate::VgaText::set_color(7, 0);
         Ok(())
     }
 }
@@ -299,11 +287,9 @@ impl Command for SysinfoCommand {
         crate::VgaText::println(&alloc::format!("Architecture: {}", OS_ARCH));
 
         let mut vendor = [0u8; 13];
-        unsafe {
-            crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::VgaText::print_bytes(b"CPU Vendor: ");
-            crate::terminal::println_cstr(&vendor[..]);
-        }
+        unsafe { crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr()) };
+        crate::VgaText::print_bytes(b"CPU Vendor: ");
+        crate::terminal::println_cstr(&vendor[..]);
 
         let total_memory = alloy_kernel_hal::mem::total_memory();
         let available_memory = alloy_kernel_hal::mem::available_memory();
@@ -312,7 +298,7 @@ impl Command for SysinfoCommand {
         print_size_line("Memory Used:  ", used_memory);
         print_size_line("Memory Free:  ", available_memory);
 
-        let uptime_ms = unsafe { crate::SystemTimer::uptime_ms() };
+        let uptime_ms = crate::SystemTimer::uptime_ms();
         crate::VgaText::print("Uptime: ");
         print_uptime_value(uptime_ms);
         Ok(())
@@ -375,8 +361,8 @@ impl Command for FreeCommand {
         let total_memory = alloy_kernel_hal::mem::total_memory();
         let available_memory = alloy_kernel_hal::mem::available_memory();
         let used_memory = total_memory.saturating_sub(available_memory);
-        let heap_size = unsafe { crate::ffi::vmm_get_heap_size() };
-        let allocated_pages = unsafe { crate::ffi::vmm_get_allocated_pages() };
+        let heap_size = crate::utils::heap_size();
+        let allocated_pages = crate::utils::allocated_pages();
 
         crate::VgaText::println("Physical:");
         print_size_line("  Total: ", total_memory);
@@ -412,9 +398,9 @@ impl Command for TicksCommand {
         colors::print_info("Timer Statistics");
         crate::VgaText::println("");
 
-        let tick_count = unsafe { crate::SystemTimer::ticks() };
-        let uptime_ms = unsafe { crate::SystemTimer::uptime_ms() };
-        let frequency_hz = unsafe { crate::SystemTimer::frequency() };
+        let tick_count = crate::SystemTimer::ticks();
+        let uptime_ms = crate::SystemTimer::uptime_ms();
+        let frequency_hz = crate::SystemTimer::frequency();
 
         print_u64_decimal_line("Tick count:     ", tick_count);
         print_u64_decimal_line("Uptime (ms):    ", uptime_ms);
@@ -496,20 +482,20 @@ impl Command for MeminfoCommand {
         crate::VgaText::println("");
 
         // Get VMM statistics
-        unsafe {
-            let heap_start = crate::ffi::vmm_get_heap_start();
-            let heap_size = crate::ffi::vmm_get_heap_size();
-            let allocated_pages = crate::ffi::vmm_get_allocated_pages();
+        {
+            let heap_start_val = crate::utils::heap_start();
+            let heap_size_val = crate::utils::heap_size();
+            let allocated_pages_val = crate::utils::allocated_pages();
 
             crate::VgaText::println("Virtual Memory Manager:");
 
             // Heap start address
-            let heap_start_hex = format::u32_to_hex(heap_start as u32);
+            let heap_start_hex = format::u32_to_hex(heap_start_val as u32);
             crate::VgaText::print_bytes(b"  Heap start:       ");
             crate::terminal::println_cstr(&heap_start_hex[0..]);
 
             // Heap size
-            let (val_buf, unit_buf) = format::format_bytes(heap_size as u64);
+            let (val_buf, unit_buf) = format::format_bytes(heap_size_val as u64);
             let val_start = format::trim_leading_spaces(&val_buf);
             crate::VgaText::print_bytes(b"  Heap size:        ");
             crate::terminal::print_cstr(&val_buf[val_start..]);
@@ -517,7 +503,7 @@ impl Command for MeminfoCommand {
             crate::terminal::println_cstr(&unit_buf[0..]);
 
             // Allocated pages
-            let allocated_pages_str = format::u32_to_decimal(allocated_pages);
+            let allocated_pages_str = format::u32_to_decimal(allocated_pages_val);
             crate::VgaText::print_bytes(b"  Allocated pages:  ");
             crate::terminal::println_cstr(
                 &allocated_pages_str[format::trim_leading_spaces(&allocated_pages_str)..],
@@ -536,36 +522,28 @@ impl Command for MeminfoCommand {
         let slab_freed_str = format::u32_to_decimal(slab_stats.1 as u32);
 
         crate::VgaText::print("  Slab allocated:   ");
-        unsafe {
-            crate::terminal::println_cstr(
-                &slab_alloc_str[format::trim_leading_spaces(&slab_alloc_str)..],
-            );
-        }
+        crate::terminal::println_cstr(
+            &slab_alloc_str[format::trim_leading_spaces(&slab_alloc_str)..],
+        );
 
         crate::VgaText::print("  Slab freed:       ");
-        unsafe {
-            crate::terminal::println_cstr(
-                &slab_freed_str[format::trim_leading_spaces(&slab_freed_str)..],
-            );
-        }
+        crate::terminal::println_cstr(
+            &slab_freed_str[format::trim_leading_spaces(&slab_freed_str)..],
+        );
 
         // Heap allocator
         let heap_alloc_str = format::u32_to_decimal(heap_stats.0 as u32);
         let heap_freed_str = format::u32_to_decimal(heap_stats.1 as u32);
 
         crate::VgaText::print("  Heap allocated:   ");
-        unsafe {
-            crate::terminal::println_cstr(
-                &heap_alloc_str[format::trim_leading_spaces(&heap_alloc_str)..],
-            );
-        }
+        crate::terminal::println_cstr(
+            &heap_alloc_str[format::trim_leading_spaces(&heap_alloc_str)..],
+        );
 
         crate::VgaText::print("  Heap freed:       ");
-        unsafe {
-            crate::terminal::println_cstr(
-                &heap_freed_str[format::trim_leading_spaces(&heap_freed_str)..],
-            );
-        }
+        crate::terminal::println_cstr(
+            &heap_freed_str[format::trim_leading_spaces(&heap_freed_str)..],
+        );
 
         Ok(())
     }
@@ -598,36 +576,35 @@ impl Command for CpuInfoCommand {
         colors::print_info("CPU Information");
         crate::VgaText::println("");
 
-        unsafe {
-            // Get CPU vendor
-            let mut vendor = [0u8; 13];
-            crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr());
-            crate::VgaText::print_bytes(b"Vendor:   ");
-            crate::terminal::println_cstr(&vendor[..]);
+        // Get CPU vendor
+        let mut vendor = [0u8; 13];
+        unsafe { crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr()) };
+        crate::VgaText::print_bytes(b"Vendor:   ");
+        crate::terminal::println_cstr(&vendor[..]);
 
-            // Get model info
-            let mut family: u32 = 0;
-            let mut model: u32 = 0;
-            let mut stepping: u32 = 0;
-            crate::ffi::cpu_get_model_info_ffi(&mut family, &mut model, &mut stepping);
+        // Get model info
+        let mut family: u32 = 0;
+        let mut model: u32 = 0;
+        let mut stepping: u32 = 0;
+        unsafe { crate::ffi::cpu_get_model_info_ffi(&mut family, &mut model, &mut stepping) };
 
-            let family_str = format::u32_to_decimal(family);
-            let model_str = format::u32_to_decimal(model);
-            let stepping_str = format::u32_to_decimal(stepping);
+        let family_str = format::u32_to_decimal(family);
+        let model_str = format::u32_to_decimal(model);
+        let stepping_str = format::u32_to_decimal(stepping);
 
-            crate::VgaText::print_bytes(b"Family:   ");
-            crate::terminal::println_cstr(&family_str[format::trim_leading_spaces(&family_str)..]);
+        crate::VgaText::print_bytes(b"Family:   ");
+        crate::terminal::println_cstr(&family_str[format::trim_leading_spaces(&family_str)..]);
 
-            crate::VgaText::print_bytes(b"Model:    ");
-            crate::terminal::println_cstr(&model_str[format::trim_leading_spaces(&model_str)..]);
+        crate::VgaText::print_bytes(b"Model:    ");
+        crate::terminal::println_cstr(&model_str[format::trim_leading_spaces(&model_str)..]);
 
-            crate::VgaText::print_bytes(b"Stepping: ");
-            crate::terminal::println_cstr(
-                &stepping_str[format::trim_leading_spaces(&stepping_str)..],
-            );
+        crate::VgaText::print_bytes(b"Stepping: ");
+        crate::terminal::println_cstr(
+            &stepping_str[format::trim_leading_spaces(&stepping_str)..],
+        );
 
-            // Get features
-            let features = crate::ffi::cpu_get_features_ffi();
+        // Get features
+        let features = unsafe { crate::ffi::cpu_get_features_ffi() };
 
             crate::VgaText::println_bytes(b"\nFeatures:");
 
@@ -654,7 +631,6 @@ impl Command for CpuInfoCommand {
             if features & CPU_FEATURE_SSE2 != 0 {
                 crate::VgaText::println_bytes(b"  [x] SSE2  - Streaming SIMD Extensions 2");
             }
-        }
 
         Ok(())
     }
@@ -673,12 +649,10 @@ impl Command for UptimeCommand {
     }
 
     fn execute(&self, _args: &[&str], _registry: &CommandRegistry) -> Result<(), &str> {
-        unsafe {
-            let uptime_ms = crate::SystemTimer::uptime_ms();
+        let uptime_ms = crate::SystemTimer::uptime_ms();
 
-            colors::print_info("System Uptime");
-            print_uptime_value(uptime_ms);
-        }
+        colors::print_info("System Uptime");
+        print_uptime_value(uptime_ms);
 
         Ok(())
     }

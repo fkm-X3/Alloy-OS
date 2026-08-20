@@ -16,7 +16,7 @@ ifeq ($(ARCH),x86_64)
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
     RUST_TARGET = x86_64-alloy.json
-    RUST_FEATURES = --no-default-features --features x86_64,ported
+    RUST_FEATURES = --no-default-features --features x86_64
     LINKER = kernel/linker_x86_64.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
     ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
@@ -40,7 +40,7 @@ else ifeq ($(ARCH),aarch64)
             if [ -f "$$f" ]; then echo "-bios $$f"; break; fi; \
         done)
     RUST_TARGET = aarch64-alloy.json
-    RUST_FEATURES = --no-default-features --features aarch64,ported
+    RUST_FEATURES = --no-default-features --features aarch64
     LINKER = kernel/linker_aarch64.ld
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
     ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S

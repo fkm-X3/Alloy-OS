@@ -22,12 +22,6 @@
 /// the inline-asm helpers previously scattered through the HAL.
 pub mod raw;
 
-/// C2Rust bulk translation of `kernel/c/`. Gated behind the
-/// `ported` feature so the crate baseline still builds without it; the
-/// Makefile swap turns the feature on when the C is removed from the build.
-#[cfg(feature = "ported")]
-pub mod ported;
-
 /// The safe public boundary of this crate.
 ///
 /// Every item here must be callable from safe code with no UB possible.

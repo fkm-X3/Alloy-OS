@@ -444,3 +444,188 @@ pub fn heap_size() -> usize {
 pub fn allocated_pages() -> u32 {
     unsafe { ffi::vmm_get_allocated_pages() }
 }
+
+// ----------------------------------------------------------------------------
+// Safe physical-memory byte access (identity-mapped or temp-window).
+// ----------------------------------------------------------------------------
+
+/// Read `buf.len()` bytes from physical address `phys`. Assumes the region is
+/// identity-mapped (e.g. ramdisk region, aarch64 identity mapping).
+pub fn read_phys_bytes(phys: usize, buf: &mut [u8]) {
+    unsafe {
+        let src = core::slice::from_raw_parts(phys as *const u8, buf.len());
+        buf.copy_from_slice(src);
+    }
+}
+
+/// Write `buf` bytes to physical address `phys`. Assumes identity mapping.
+pub fn write_phys_bytes(phys: usize, buf: &[u8]) {
+    unsafe {
+        let dst = core::slice::from_raw_parts_mut(phys as *mut u8, buf.len());
+        dst.copy_from_slice(buf);
+    }
+}
+
+/// Zero `len` bytes at physical address `phys`. Assumes identity mapping.
+pub fn zero_phys_bytes(phys: usize, len: usize) {
+    unsafe {
+        let dst = core::slice::from_raw_parts_mut(phys as *mut u8, len);
+        dst.fill(0);
+    }
+}
+
+/// Copy `src` bytes into the mapped virtual address `dst_vaddr`.
+/// The destination must be valid, mapped, writable memory of at least `src.len()` bytes.
+pub fn copy_to_mapped(dst_vaddr: usize, src: &[u8]) {
+    unsafe {
+        let dst = core::slice::from_raw_parts_mut(dst_vaddr as *mut u8, src.len());
+        dst.copy_from_slice(src);
+    }
+}
+
+/// Zero `len` bytes at the mapped virtual address `dst_vaddr`.
+pub fn zero_mapped(dst_vaddr: usize, len: usize) {
+    unsafe {
+        let dst = core::slice::from_raw_parts_mut(dst_vaddr as *mut u8, len);
+        dst.fill(0);
+    }
+}
+
+/// Copy `src` bytes into the physical frame at `phys` via the shared temp
+/// window. Returns `true` on success.
+pub fn copy_to_temp_frame(phys: usize, src: &[u8]) -> bool {
+    let ptr = unsafe { ffi::paging_temp_map_frame(phys) };
+    if ptr.is_null() {
+        return false;
+    }
+    unsafe {
+        core::ptr::copy_nonoverlapping(src.as_ptr(), ptr as *mut u8, src.len());
+        ffi::paging_temp_unmap_frame();
+    }
+    true
+}
+
+/// Convert an ARGB8888 color to the native format for the given bpp.
+pub fn convert_color(argb8888: u32, bpp: u8) -> u32 {
+    match bpp {
+        8 => {
+            let r = (argb8888 >> 16) & 0xFF;
+            let g = (argb8888 >> 8) & 0xFF;
+            let b = argb8888 & 0xFF;
+            let gray = ((r + g + b) / 3) as u8;
+            (gray / 16) as u32
+        }
+        16 => {
+            let r = ((argb8888 >> 16) & 0xFF) >> 3;
+            let g = ((argb8888 >> 8) & 0xFF) >> 2;
+            let b = (argb8888 & 0xFF) >> 3;
+            ((r << 11) | (g << 5) | b) & 0xFFFF
+        }
+        24 => argb8888 & 0x00FFFFFF,
+        32 => argb8888,
+        _ => 0,
+    }
+}
+
+/// Copy ARGB8888 pixels from `back_buffer` to the framebuffer at `fb_base`.
+/// Handles 16/24/32 bpp conversion. `fb_base` is a framebuffer physical or
+/// identity-mapped address.
+pub fn present_back_buffer(
+    fb_base: usize,
+    back_buffer: &[u32],
+    width: usize,
+    height: usize,
+    pitch: usize,
+    bpp: u8,
+) {
+    unsafe {
+        let base = fb_base as *mut u8;
+        match bpp {
+            32 => {
+                for row in 0..height {
+                    let dst = base.add(row.saturating_mul(pitch)) as *mut u32;
+                    let src_offset = row.saturating_mul(width);
+                    core::ptr::copy_nonoverlapping(
+                        back_buffer[src_offset..].as_ptr(),
+                        dst,
+                        width,
+                    );
+                }
+            }
+            24 => {
+                for row in 0..height {
+                    let row_dst = base.add(row.saturating_mul(pitch));
+                    let src_offset = row.saturating_mul(width);
+                    for col in 0..width {
+                        let color = back_buffer[src_offset + col];
+                        let native = convert_color(color, 24);
+                        let pixel_dst = row_dst.add(col.saturating_mul(3));
+                        *pixel_dst = (native & 0xFF) as u8;
+                        *pixel_dst.add(1) = ((native >> 8) & 0xFF) as u8;
+                        *pixel_dst.add(2) = ((native >> 16) & 0xFF) as u8;
+                    }
+                }
+            }
+            16 => {
+                for row in 0..height {
+                    let dst = base.add(row.saturating_mul(pitch)) as *mut u16;
+                    let src_offset = row.saturating_mul(width);
+                    for col in 0..width {
+                        let color = back_buffer[src_offset + col];
+                        let native = convert_color(color, 16);
+                        *dst.add(col) = (native & 0xFFFF) as u16;
+                    }
+                }
+            }
+            8 => {
+                for row in 0..height {
+                    let dst = base.add(row.saturating_mul(pitch));
+                    let src_offset = row.saturating_mul(width);
+                    for col in 0..width {
+                        let color = back_buffer[src_offset + col];
+                        let native = convert_color(color, 8);
+                        *dst.add(col) = (native & 0xFF) as u8;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Write a single pixel to a framebuffer at `fb_base`.
+pub fn write_framebuffer_pixel(
+    fb_base: usize,
+    x: u32,
+    y: u32,
+    color: u32,
+    bpp: u8,
+    pitch: usize,
+    width: u32,
+) {
+    let offset = (y as usize).saturating_mul(pitch)
+        + (x as usize).saturating_mul(bpp as usize / 8);
+    unsafe {
+        let base = fb_base as *mut u8;
+        match bpp {
+            8 => {
+                *base.add(offset) = (color & 0xFF) as u8;
+            }
+            16 => {
+                let ptr = base.add(offset) as *mut u16;
+                *ptr = (color & 0xFFFF) as u16;
+            }
+            24 => {
+                let ptr = base.add(offset);
+                *ptr = (color & 0xFF) as u8;
+                *ptr.add(1) = ((color >> 8) & 0xFF) as u8;
+                *ptr.add(2) = ((color >> 16) & 0xFF) as u8;
+            }
+            32 => {
+                let ptr = base.add(offset) as *mut u32;
+                *ptr = color;
+            }
+            _ => {}
+        }
+    }
+}

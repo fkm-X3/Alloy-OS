@@ -316,33 +316,17 @@ impl Framebuffer {
     /// - **24-bit**: RGB888 format (0x00RRGGBB)
     /// - **32-bit**: ARGB8888 format (0xAARRGGBB)
     pub fn put_pixel(&self, x: u32, y: u32, color: u32) -> Result<(), FramebufferError> {
-        let offset = self.info.pixel_offset(x, y)?;
         let native_color = self.convert_color(color);
 
-        unsafe {
-            let base = self.info.address as *mut u8;
-            match self.info.bits_per_pixel {
-                8 => {
-                    let ptr = base.add(offset);
-                    *ptr = (native_color & 0xFF) as u8;
-                }
-                16 => {
-                    let ptr = base.add(offset) as *mut u16;
-                    *ptr = (native_color & 0xFFFF) as u16;
-                }
-                24 => {
-                    let ptr = base.add(offset);
-                    *ptr = (native_color & 0xFF) as u8;
-                    *ptr.add(1) = ((native_color >> 8) & 0xFF) as u8;
-                    *ptr.add(2) = ((native_color >> 16) & 0xFF) as u8;
-                }
-                32 => {
-                    let ptr = base.add(offset) as *mut u32;
-                    *ptr = native_color;
-                }
-                _ => return Err(FramebufferError::InvalidColorDepth),
-            }
-        }
+        alloy_kernel_hal::write_framebuffer_pixel(
+            self.info.address as usize,
+            x,
+            y,
+            native_color,
+            self.info.bits_per_pixel,
+            self.info.pitch as usize,
+            self.info.width,
+        );
 
         Ok(())
     }

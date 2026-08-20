@@ -12,9 +12,6 @@
 
 pub use alloy_kernel_unsafe_core::api::*;
 
-/// Raw C FFI declarations, re-exported from `unsafe_core::raw::ffi`.
-pub mod ffi;
-
 /// Safe console output: `println!`/`print!`/`log!` macros and helpers.
 pub mod console;
 

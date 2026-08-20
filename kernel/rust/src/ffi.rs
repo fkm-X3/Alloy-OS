@@ -1,10 +1,9 @@
-//! Foreign Function Interface (FFI) to C kernel functions
+//! Safe wrappers for legacy FFI call sites.
 //!
-//! Raw extern "C" declarations are consolidated in the HAL crate
-//! (`alloy_kernel_hal::ffi`). This module re-exports them and adds
-//! safe Rust wrappers, constants, and convenience functions.
-
-pub use alloy_kernel_hal::ffi::*;
+//! Raw extern "C" declarations live in `alloy-kernel-unsafe-core::raw::ffi`.
+//! This module provides safe Rust wrappers that delegate to the HAL driver
+//! facades so existing `crate::keyboard_has_key()` / `crate::vesa_*()` /
+//! `crate::ata_*()` call sites keep working.
 
 // === Keyboard / mouse safe facades (x86_64) ===
 //
@@ -86,11 +85,6 @@ pub fn mouse_read() -> Option<MouseEvent> {
 // compatibility but are not called from this crate.
 
 pub use crate::net::socket::{socket_create, socket_close};
-
-// Page flags for memory mapping
-pub const PAGE_PRESENT: u32 = 0x001;
-pub const PAGE_WRITE: u32 = 0x002;
-pub const PAGE_USER: u32 = 0x004;
 
 // ============================================================================
 // VESA VBE Graphics Safe Wrappers (x86 only)

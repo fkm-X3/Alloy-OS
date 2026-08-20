@@ -4,7 +4,6 @@ use core::fmt::Debug;
 
 use super::framebuffer::{Framebuffer, FramebufferInfo};
 use super::{Display, FramebufferBuffer as FramebufferBufferTrait};
-use crate::ffi;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pl110Error {
@@ -63,22 +62,19 @@ impl Debug for Pl110Display {
 
 impl Pl110Display {
     pub fn new() -> Option<Self> {
-        if unsafe { ffi::pl110_is_available() } == 0 {
+        if !alloy_kernel_hal::Pl110::is_available() {
             return None;
         }
 
-        let fb_addr = unsafe { ffi::pl110_get_framebuffer() };
+        let fb_addr = alloy_kernel_hal::Pl110::framebuffer_addr() as u64;
         if fb_addr == 0 {
             return None;
         }
 
-        let mut width: u32 = 0;
-        let mut height: u32 = 0;
-        unsafe {
-            ffi::pl110_get_resolution(&mut width, &mut height);
-        }
-
-        let bpp = unsafe { ffi::pl110_get_bits_per_pixel() };
+        let (w, h) = alloy_kernel_hal::Pl110::resolution();
+        let width = w;
+        let height = h;
+        let bpp = alloy_kernel_hal::Pl110::bits_per_pixel();
 
         if width == 0 || height == 0 || bpp == 0 {
             return None;
@@ -144,32 +140,16 @@ impl Pl110Display {
         let height = self.framebuffer.height() as usize;
         let pitch = self.framebuffer.pitch() as usize;
         let bpp = self.framebuffer.bits_per_pixel();
-        let base = self.framebuffer.as_raw_ptr();
+        let base = self.framebuffer.as_raw_ptr() as usize;
 
-        unsafe {
-            match bpp {
-                32 => {
-                    for row in 0..height {
-                        let dst = base.add(row.saturating_mul(pitch)) as *mut u32;
-                        let src_offset = row.saturating_mul(width);
-                        let src = &self.back_buffer[src_offset..src_offset.saturating_add(width)];
-                        core::ptr::copy_nonoverlapping(src.as_ptr(), dst, width);
-                    }
-                }
-                16 => {
-                    for row in 0..height {
-                        let dst = base.add(row.saturating_mul(pitch)) as *mut u16;
-                        let src_offset = row.saturating_mul(width);
-                        for col in 0..width {
-                            let color = self.back_buffer[src_offset + col];
-                            let native = self.framebuffer.convert_color(color);
-                            *dst.add(col) = (native & 0xFFFF) as u16;
-                        }
-                    }
-                }
-                _ => return Err(Pl110Error::InvalidOperation),
-            }
-        }
+        alloy_kernel_hal::mem::present_back_buffer(
+            base,
+            &self.back_buffer,
+            width,
+            height,
+            pitch,
+            bpp,
+        );
 
         Ok(())
     }

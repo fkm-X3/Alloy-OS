@@ -1,4 +1,3 @@
-use crate::ffi;
 use crate::process::task::{Task, TaskState};
 use crate::process::WaitQueue;
 use alloc::boxed::Box;
@@ -123,17 +122,13 @@ impl Scheduler {
                 None => {
                     // No old task to save — just load the new one
                     SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
-                    unsafe {
-                        ffi::load_context(new_ctx_ptr);
-                    }
+                    alloy_kernel_hal::load_context(new_ctx_ptr);
                 }
                 Some(mut old_box) => {
                     let old_ctx_ptr = old_box.context_mut() as *mut _;
 
                     // Step 1: Save old context — returns normally
-                    unsafe {
-                        ffi::save_context(old_ctx_ptr);
-                    }
+                    alloy_kernel_hal::save_context(old_box.context_mut());
 
                     // Step 2: Check if this is the initial path or a resume
                     let current_depth = SCHEDULE_DEPTH.load(Ordering::Relaxed);
@@ -183,9 +178,7 @@ impl Scheduler {
 
                         // Reset depth and load new context — never returns
                         SCHEDULE_DEPTH.store(0, Ordering::Relaxed);
-                        unsafe {
-                            ffi::load_context(new_ctx_ptr);
-                        }
+                        alloy_kernel_hal::load_context(new_ctx_ptr);
                     } else {
                         // ── Resume path ─────────────────────────────────
                         // Task was already re-enqueued on the initial path.
@@ -582,14 +575,7 @@ impl Scheduler {
 
         // If schedule() returns, no task was available — halt.
         loop {
-            #[cfg(feature = "x86_64")]
-            unsafe {
-                core::arch::asm!("hlt");
-            }
-            #[cfg(feature = "aarch64")]
-            unsafe {
-                core::arch::asm!("wfi");
-            }
+            alloy_kernel_hal::cpu_halt();
         }
     }
 }

@@ -1,12 +1,12 @@
-use crate::elf::{find_tls_info, Elf32Ehdr, Elf32Phdr, Elf64Ehdr, Elf64Phdr};
+use crate::elf::find_tls_info;
 #[cfg(feature = "aarch64")]
 use crate::process::task::KERNEL_STACK_SIZE;
 use crate::process::task::{CpuContext, Task};
 use crate::process::Scheduler;
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloy_kernel_hal::mem::{with_temp_frame, AddressSpace, PageFlags, PhysFrame};
-use core::ptr;
+use alloy_kernel_hal::elf::{parse_elf32_header, parse_elf32_phdr, parse_elf64_header, parse_elf64_phdr};
+use alloy_kernel_hal::mem::{AddressSpace, PageFlags, PhysFrame};
 
 const STACK_BASE: u64 = 0x00C00000;
 const STACK_SIZE: u64 = 0x4000;
@@ -181,17 +181,14 @@ fn load_elf32(
     page_flags: PageFlags,
     page_size: usize,
 ) -> bool {
-    let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
+    let Some(hdr) = parse_elf32_header(image) else { return false };
     let phoff = hdr.e_phoff as usize;
     let phentsize = hdr.e_phentsize as usize;
     let phnum = hdr.e_phnum as usize;
 
     for i in 0..phnum {
         let phdr_off = phoff + i * phentsize;
-        if phdr_off + core::mem::size_of::<Elf32Phdr>() > image.len() {
-            return false;
-        }
-        let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf32Phdr) };
+        let Some(ph) = parse_elf32_phdr(image, phdr_off) else { return false };
         if ph.p_type != PT_LOAD {
             continue;
         }
@@ -218,20 +215,14 @@ fn load_elf64(
     page_flags: PageFlags,
     page_size: usize,
 ) -> bool {
-    if image.len() < core::mem::size_of::<Elf64Ehdr>() {
-        return false;
-    }
-    let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
+    let Some(hdr) = parse_elf64_header(image) else { return false };
     let phoff = hdr.e_phoff as usize;
     let phentsize = hdr.e_phentsize as usize;
     let phnum = hdr.e_phnum as usize;
 
     for i in 0..phnum {
         let phdr_off = phoff + i * phentsize;
-        if phdr_off + core::mem::size_of::<Elf64Phdr>() > image.len() {
-            return false;
-        }
-        let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf64Phdr) };
+        let Some(ph) = parse_elf64_phdr(image, phdr_off) else { return false };
         if ph.p_type != PT_LOAD {
             continue;
         }
@@ -291,11 +282,8 @@ fn map_elf_segment(
         let page_off = page_addr.saturating_sub(vaddr);
         if page_off < filesz {
             let copy_len = core::cmp::min(page_size, filesz - page_off);
-            let copied = with_temp_frame(frame.addr(), |temp| unsafe {
-                let src = image.as_ptr().add(p_offset as usize + page_off);
-                ptr::copy_nonoverlapping(src, temp, copy_len);
-            });
-            if copied.is_none() {
+            let src_slice = &image[p_offset as usize + page_off..p_offset as usize + page_off + copy_len];
+            if !alloy_kernel_hal::mem::copy_to_temp_frame(frame.addr(), src_slice) {
                 crate::println!("[spawn] temp window failed at page_addr=0x{page_addr:016X}");
                 alloy_kernel_hal::sync::irq_enable();
                 return false;
@@ -377,13 +365,10 @@ fn load_elf_direct(image: &[u8]) -> bool {
     }
     match image[4] {
         1 => {
-            let hdr = unsafe { &*(image.as_ptr() as *const Elf32Ehdr) };
+            let Some(hdr) = parse_elf32_header(image) else { return false };
             for i in 0..hdr.e_phnum as usize {
                 let phdr_off = hdr.e_phoff as usize + i * hdr.e_phentsize as usize;
-                if phdr_off + core::mem::size_of::<Elf32Phdr>() > image.len() {
-                    return false;
-                }
-                let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf32Phdr) };
+                let Some(ph) = parse_elf32_phdr(image, phdr_off) else { return false };
                 if ph.p_type != PT_LOAD {
                     continue;
                 }
@@ -398,16 +383,10 @@ fn load_elf_direct(image: &[u8]) -> bool {
             true
         }
         2 => {
-            if image.len() < core::mem::size_of::<Elf64Ehdr>() {
-                return false;
-            }
-            let hdr = unsafe { &*(image.as_ptr() as *const Elf64Ehdr) };
+            let Some(hdr) = parse_elf64_header(image) else { return false };
             for i in 0..hdr.e_phnum as usize {
                 let phdr_off = hdr.e_phoff as usize + i * hdr.e_phentsize as usize;
-                if phdr_off + core::mem::size_of::<Elf64Phdr>() > image.len() {
-                    return false;
-                }
-                let ph = unsafe { &*(image.as_ptr().add(phdr_off) as *const Elf64Phdr) };
+                let Some(ph) = parse_elf64_phdr(image, phdr_off) else { return false };
                 if ph.p_type != PT_LOAD {
                     continue;
                 }
@@ -427,12 +406,11 @@ fn load_elf_direct(image: &[u8]) -> bool {
 
 #[cfg(feature = "aarch64")]
 fn copy_segment_direct(image: &[u8], offset: usize, filesz: usize, memsz: usize, vaddr: usize) {
-    unsafe {
-        if filesz > 0 {
-            ptr::copy_nonoverlapping(image.as_ptr().add(offset), vaddr as *mut u8, filesz);
-        }
-        if memsz > filesz {
-            ptr::write_bytes((vaddr + filesz) as *mut u8, 0, memsz - filesz);
-        }
+    if filesz > 0 {
+        let src = &image[offset..offset + filesz];
+        alloy_kernel_hal::mem::copy_to_mapped(vaddr, src);
+    }
+    if memsz > filesz {
+        alloy_kernel_hal::mem::zero_mapped(vaddr + filesz, memsz - filesz);
     }
 }

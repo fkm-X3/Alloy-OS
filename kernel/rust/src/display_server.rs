@@ -157,13 +157,9 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
 
         // 8. Yield CPU
         #[cfg(feature = "x86_64")]
-        unsafe {
-            core::arch::asm!("hlt");
-        }
+        alloy_kernel_hal::cpu_halt();
         #[cfg(feature = "aarch64")]
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        alloy_kernel_hal::cpu_halt();
     }
 
     serial_log(b"[DisplayServer] Stopped\n\0");

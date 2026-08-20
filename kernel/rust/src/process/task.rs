@@ -340,12 +340,8 @@ impl Drop for Task {
 extern "C" fn idle_task_entry() {
     loop {
         #[cfg(feature = "x86_64")]
-        unsafe {
-            core::arch::asm!("sti; hlt", options(nomem, nostack));
-        }
+        alloy_kernel_hal::cpu_sti_hlt();
         #[cfg(feature = "aarch64")]
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        alloy_kernel_hal::cpu_halt();
     }
 }

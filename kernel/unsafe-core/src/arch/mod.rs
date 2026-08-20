@@ -18,6 +18,19 @@ pub mod x86_64;
 #[cfg(feature = "aarch64")]
 pub mod aarch64;
 
+/// Boot entry points (`kernel_main`) called from asm. Relocated here from
+/// the deleted `ported` module so the asm stubs can still find them.
+pub mod boot {
+    #[cfg(target_arch = "x86_64")]
+    pub mod main {
+        include!("boot/x86_64/main.rs");
+    }
+    #[cfg(target_arch = "aarch64")]
+    pub mod main {
+        include!("boot/aarch64/main_aarch64.rs");
+    }
+}
+
 /// Core architecture operations trait
 pub trait Arch {
     /// Architecture name
@@ -78,6 +91,29 @@ pub fn context_switch(old: &mut CpuContext, new: &mut CpuContext) {
     }
 }
 
+/// Save the current CPU context into `ctx`. Returns normally — the
+/// caller continues from this point when the task is later restored.
+pub fn save_context(ctx: &mut CpuContext) {
+    unsafe {
+        crate::raw::ffi::save_context(ctx as *mut CpuContext);
+    }
+}
+
+/// Restore `ctx` and never return. Jumps to the saved RIP/LR (or
+/// erets to ELR for a fresh task). Declared `-> !` so the compiler
+/// emits any guard drops BEFORE the switch.
+///
+/// # Safety contract
+/// `ctx` must point to a valid `CpuContext` that was previously saved
+/// via [`save_context`] and resides in memory that will outlive this
+/// call (typically a static or leaked allocation). The scheduler's
+/// static `current_task` satisfies this.
+pub fn load_context(ctx: *mut CpuContext) -> ! {
+    unsafe {
+        crate::raw::ffi::load_context(ctx);
+    }
+}
+
 /// Halt the CPU until the next interrupt (safe wrapper).
 #[cfg(feature = "x86_64")]
 pub fn cpu_halt() {
@@ -92,8 +128,38 @@ pub fn cpu_halt() {
 
 /// Enable interrupts and halt (safe wrapper, x86 idle pattern).
 #[cfg(feature = "x86_64")]
-pub fn cpu_sti_halt() {
+pub fn cpu_sti_hlt() {
     unsafe { core::arch::asm!("sti; hlt", options(nomem, nostack)) };
+}
+
+/// Register snapshot for panic diagnostics.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PanicRegs {
+    pub rsp: u64,
+    pub rbp: u64,
+    pub rflags: u64,
+}
+
+/// Capture key registers for panic diagnostics (x86_64).
+#[cfg(feature = "x86_64")]
+pub fn capture_panic_regs() -> PanicRegs {
+    let rsp: u64;
+    let rbp: u64;
+    let rflags: u64;
+    unsafe {
+        core::arch::asm!(
+            "mov {0:r}, rsp",
+            "mov {1:r}, rbp",
+            out(reg) rsp,
+            out(reg) rbp,
+        );
+        core::arch::asm!(
+            "pushfq",
+            "pop {0:r}",
+            out(reg) rflags,
+        );
+    }
+    PanicRegs { rsp, rbp, rflags }
 }
 
 /// Syscall number constants — shared across architectures.
@@ -152,6 +218,31 @@ pub unsafe extern "C" fn syscall_dispatcher(
             u32::MAX
         }
     }
+}
+
+/// Safe x86_64 userspace syscall invocation (`int 0x80`).
+///
+/// The asm is encapsulated here so the kernel crate can trigger syscalls
+/// from safe code. The register layout matches the `syscall_entry` asm stub.
+#[cfg(feature = "x86_64")]
+pub fn syscall_invoke(num: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
+    let result: u32;
+    unsafe {
+        core::arch::asm!(
+            "push rbx",
+            "mov ebx, {0:e}",
+            "int 0x80",
+            "pop rbx",
+            in(reg) arg0,
+            inlateout("eax") num => result,
+            in("ecx") arg1,
+            in("edx") arg2,
+            lateout("ecx") _,
+            lateout("edx") _,
+            options(preserves_flags),
+        );
+    }
+    result
 }
 
 /// CPU context for task switching - architecture-specific

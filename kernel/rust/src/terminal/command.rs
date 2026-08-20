@@ -287,7 +287,7 @@ impl Command for SysinfoCommand {
         crate::VgaText::println(&alloc::format!("Architecture: {}", OS_ARCH));
 
         let mut vendor = [0u8; 13];
-        unsafe { crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr()) };
+        alloy_kernel_hal::cpu_get_vendor(&mut vendor);
         crate::VgaText::print_bytes(b"CPU Vendor: ");
         crate::terminal::println_cstr(&vendor[..]);
 
@@ -578,15 +578,12 @@ impl Command for CpuInfoCommand {
 
         // Get CPU vendor
         let mut vendor = [0u8; 13];
-        unsafe { crate::ffi::cpu_get_vendor_ffi(vendor.as_mut_ptr()) };
+        alloy_kernel_hal::cpu_get_vendor(&mut vendor);
         crate::VgaText::print_bytes(b"Vendor:   ");
         crate::terminal::println_cstr(&vendor[..]);
 
         // Get model info
-        let mut family: u32 = 0;
-        let mut model: u32 = 0;
-        let mut stepping: u32 = 0;
-        unsafe { crate::ffi::cpu_get_model_info_ffi(&mut family, &mut model, &mut stepping) };
+        let (family, model, stepping) = alloy_kernel_hal::cpu_get_model_info();
 
         let family_str = format::u32_to_decimal(family);
         let model_str = format::u32_to_decimal(model);
@@ -604,7 +601,7 @@ impl Command for CpuInfoCommand {
         );
 
         // Get features
-        let features = unsafe { crate::ffi::cpu_get_features_ffi() };
+        let features = alloy_kernel_hal::cpu_get_features();
 
             crate::VgaText::println_bytes(b"\nFeatures:");
 

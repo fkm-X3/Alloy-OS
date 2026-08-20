@@ -43,28 +43,10 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
     // Dump some CPU registers (simplified to avoid register pressure)
     #[cfg(feature = "x86_64")]
     {
+        let regs = alloy_kernel_hal::capture_panic_regs();
         let _ = writeln!(writer, "Register dump:");
-        unsafe {
-            let rsp: u64;
-            let rbp: u64;
-            let rflags: u64;
-
-            core::arch::asm!(
-                "mov {0:r}, rsp",
-                "mov {1:r}, rbp",
-                out(reg) rsp,
-                out(reg) rbp,
-            );
-
-            core::arch::asm!(
-                "pushfq",
-                "pop {0:r}",
-                out(reg) rflags,
-            );
-
-            let _ = writeln!(writer, "  RBP: 0x{:016X}  RSP: 0x{:016X}", rbp, rsp);
-            let _ = writeln!(writer, "  RFLAGS: 0x{:016X}", rflags);
-        }
+        let _ = writeln!(writer, "  RBP: 0x{:016X}  RSP: 0x{:016X}", regs.rbp, regs.rsp);
+        let _ = writeln!(writer, "  RFLAGS: 0x{:016X}", regs.rflags);
     }
     let _ = write!(writer, "\nSystem halted. Please reboot.\n");
 
@@ -81,13 +63,6 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
 
     // Halt the system
     loop {
-        #[cfg(feature = "x86_64")]
-        unsafe {
-            core::arch::asm!("hlt");
-        }
-        #[cfg(feature = "aarch64")]
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        alloy_kernel_hal::cpu_halt();
     }
 }

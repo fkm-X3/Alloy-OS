@@ -85,20 +85,16 @@ pub fn shm_user_vaddr(fd: i32) -> u32 {
 
     for (i, frame) in region.pages.iter().enumerate() {
         let page_vaddr = vaddr + (i as u32 * 4096);
-        let ok = unsafe {
-            crate::ffi::vmm_map(
-                page_vaddr as *mut core::ffi::c_void,
-                frame.addr() as *mut core::ffi::c_void,
-                crate::ffi::PAGE_PRESENT | crate::ffi::PAGE_WRITE | crate::ffi::PAGE_USER,
-            )
-        };
+        let ok = alloy_kernel_hal::mem::map_page(
+            page_vaddr as usize,
+            frame.addr(),
+            alloy_kernel_hal::PageFlags::user_write(),
+        );
         if !ok {
             return 0;
         }
     }
 
-    unsafe {
-        core::ptr::write_bytes(vaddr as *mut u8, 0, region.size as usize);
-    }
+    alloy_kernel_hal::mem::zero_phys_bytes(vaddr as usize, region.size as usize);
     vaddr
 }

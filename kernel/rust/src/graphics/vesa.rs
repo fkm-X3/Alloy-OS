@@ -194,57 +194,16 @@ impl VesaDisplay {
         let height = self.framebuffer.height() as usize;
         let pitch = self.framebuffer.pitch() as usize;
         let bpp = self.framebuffer.bits_per_pixel();
-        let base = self.framebuffer.as_raw_ptr();
+        let base = self.framebuffer.as_raw_ptr() as usize;
 
-        unsafe {
-            match bpp {
-                32 => {
-                    for row in 0..height {
-                        let dst = base.add(row.saturating_mul(pitch)) as *mut u32;
-                        let src_offset = row.saturating_mul(width);
-                        let src = &self.back_buffer[src_offset..src_offset.saturating_add(width)];
-                        core::ptr::copy_nonoverlapping(src.as_ptr(), dst, width);
-                    }
-                }
-                24 => {
-                    for row in 0..height {
-                        let row_dst = base.add(row.saturating_mul(pitch));
-                        let src_offset = row.saturating_mul(width);
-                        for col in 0..width {
-                            let color = self.back_buffer[src_offset + col];
-                            let native = self.framebuffer.convert_color(color);
-                            let pixel_dst = row_dst.add(col.saturating_mul(3));
-                            *pixel_dst = (native & 0xFF) as u8;
-                            *pixel_dst.add(1) = ((native >> 8) & 0xFF) as u8;
-                            *pixel_dst.add(2) = ((native >> 16) & 0xFF) as u8;
-                        }
-                    }
-                }
-                16 => {
-                    for row in 0..height {
-                        let dst = base.add(row.saturating_mul(pitch)) as *mut u16;
-                        let src_offset = row.saturating_mul(width);
-                        for col in 0..width {
-                            let color = self.back_buffer[src_offset + col];
-                            let native = self.framebuffer.convert_color(color);
-                            *dst.add(col) = (native & 0xFFFF) as u16;
-                        }
-                    }
-                }
-                8 => {
-                    for row in 0..height {
-                        let dst = base.add(row.saturating_mul(pitch));
-                        let src_offset = row.saturating_mul(width);
-                        for col in 0..width {
-                            let color = self.back_buffer[src_offset + col];
-                            let native = self.framebuffer.convert_color(color);
-                            *dst.add(col) = (native & 0xFF) as u8;
-                        }
-                    }
-                }
-                _ => return Err(VesaError::InvalidOperation),
-            }
-        }
+        alloy_kernel_hal::mem::present_back_buffer(
+            base,
+            &self.back_buffer,
+            width,
+            height,
+            pitch,
+            bpp,
+        );
 
         Ok(())
     }

@@ -6,11 +6,8 @@
 //! - `string.rs` — freestanding `memcpy`/`memset`/`size_t` shims.
 //! - `symbols.rs` — `#[no_mangle]` globals C/asm depend on + safe accessors
 //!   (scaffolding, empty).
-//! - `compat.rs` — drop-in C-ABI shims so unported C/asm still link
-//!   (scaffolding, `#[cfg]`-off until the swap).
 
 pub mod asm;
-pub mod compat;
 pub mod ffi;
 pub mod string;
 pub mod symbols;

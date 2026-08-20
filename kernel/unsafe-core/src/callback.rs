@@ -36,6 +36,12 @@ static mut MOUSE_WAKE_HANDLER: Option<fn()> = None;
 /// Registered page-fault handler (task termination policy), if any.
 static mut PAGE_FAULT_HANDLER: Option<fn(usize, u32) -> FaultAction> = None;
 
+/// Registered kernel entry point (replaces the `rust_main` extern "C" symbol).
+static mut KERNEL_ENTRY: Option<fn()> = None;
+
+/// Registered syscall dispatcher for C++/asm trampolines.
+static mut SYSCALL_DISPATCHER: Option<fn(u32, u32, u32, u32) -> u32> = None;
+
 /// What the kernel chose to do about a page fault.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaultAction {
@@ -144,5 +150,32 @@ pub(crate) fn invoke_page_fault(addr: usize, err_code: u32) -> FaultAction {
     match unsafe { PAGE_FAULT_HANDLER } {
         Some(handler) => handler(addr, err_code),
         None => FaultAction::Terminate,
+    }
+}
+
+/// Register the kernel entry point. Called by the kernel crate at the very
+/// start of its init (before anything else).  The boot main invokes this
+/// after all arch/memory init is complete.
+pub fn set_kernel_entry(handler: fn()) {
+    unsafe { KERNEL_ENTRY = Some(handler); }
+}
+
+/// Invoke the registered kernel entry point, if any.
+pub(crate) fn invoke_kernel_entry() {
+    if let Some(handler) = unsafe { KERNEL_ENTRY } {
+        handler();
+    }
+}
+
+/// Register the syscall dispatcher trampoline.
+pub fn set_syscall_dispatcher(handler: fn(u32, u32, u32, u32) -> u32) {
+    unsafe { SYSCALL_DISPATCHER = Some(handler); }
+}
+
+/// Invoke the registered syscall dispatcher.
+pub(crate) fn invoke_syscall_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
+    match unsafe { SYSCALL_DISPATCHER } {
+        Some(handler) => handler(eax, ebx, ecx, edx),
+        None => 0,
     }
 }

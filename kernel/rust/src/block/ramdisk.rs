@@ -34,10 +34,7 @@ impl BlockDevice for Ramdisk {
         }
         let src_phys = self.phys_start as usize + byte_off;
 
-        unsafe {
-            let src = core::slice::from_raw_parts(src_phys as *const u8, total);
-            buf[..total].copy_from_slice(src);
-        }
+        alloy_kernel_hal::mem::read_phys_bytes(src_phys, &mut buf[..total]);
         Ok(())
     }
 
@@ -55,10 +52,7 @@ impl BlockDevice for Ramdisk {
         }
         let dst_phys = self.phys_start as usize + byte_off;
 
-        unsafe {
-            let dst = core::slice::from_raw_parts_mut(dst_phys as *mut u8, total);
-            dst.copy_from_slice(&buf[..total]);
-        }
+        alloy_kernel_hal::mem::write_phys_bytes(dst_phys, &buf[..total]);
         Ok(())
     }
 }

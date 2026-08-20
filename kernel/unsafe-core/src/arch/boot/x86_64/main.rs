@@ -20,8 +20,6 @@ pub unsafe extern "C" fn kernel_main(magic: u32, multiboot_addr: u32) {
     if magic != MULTIBOOT2_BOOTLOADER_MAGIC as u32 {
         loop { arch_halt(); }
     }
-    // Safe arch init — these were moved from the ported C2Rust modules
-    // to the safe arch layer in Session 3.6.
     crate::arch::x86_64::gdt_init();
     crate::arch::x86_64::idt_init();
     crate::arch::x86_64::syscall_init();
@@ -34,4 +32,9 @@ pub unsafe extern "C" fn kernel_main(magic: u32, multiboot_addr: u32) {
     initrd_init(multiboot_addr);
     rust_main();
     loop { arch_halt(); }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
+    crate::api::callback::invoke_syscall_dispatcher(eax, ebx, ecx, edx)
 }

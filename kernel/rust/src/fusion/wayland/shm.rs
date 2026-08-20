@@ -115,11 +115,8 @@ impl ShmBuffer {
             Some(va) => va as usize,
             None => return alloc::vec![0u8; len],
         };
-        let src = vaddr as *const u8;
         let mut buf = alloc::vec![0u8; len];
-        unsafe {
-            core::ptr::copy_nonoverlapping(src.add(byte_offset), buf.as_mut_ptr(), len);
-        }
+        alloy_kernel_hal::mem::read_phys_bytes(vaddr + byte_offset, &mut buf);
         buf
     }
 }

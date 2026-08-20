@@ -645,27 +645,10 @@ pub extern "C" fn rust_sys_brk(addr: u32) -> u32 {
     new_brk
 }
 
-/// Invoke a syscall (for testing/internal use) — x86 only
+/// Safe delegate to the unsafe-core `syscall_invoke` (x86 `int 0x80`).
 #[cfg(feature = "x86_64")]
-#[allow(dead_code)]
-pub fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
-    let result: u32;
-    unsafe {
-        core::arch::asm!(
-            "push rbx",
-            "mov ebx, {0:e}",
-            "int 0x80",
-            "pop rbx",
-            in(reg) arg0,
-            inlateout("eax") num as u32 => result,
-            in("ecx") arg1,
-            in("edx") arg2,
-            lateout("ecx") _,
-            lateout("edx") _,
-            options(preserves_flags),
-        );
-    }
-    result
+fn syscall(num: SyscallNumber, arg0: u32, arg1: u32, arg2: u32) -> u32 {
+    alloy_kernel_hal::syscall_invoke(num as u32, arg0, arg1, arg2)
 }
 
 /// Convenience wrappers for syscalls (x86 only)
@@ -825,12 +808,6 @@ pub extern "C" fn rust_sys_gettimeofday(timeval_ptr: u32) -> u32 {
     0
 }
 
-/// Dispatcher wrapper callable from C/C++: routes raw registers to Rust dispatcher
-#[no_mangle]
-pub extern "C" fn rust_dispatcher(eax: u32, ebx: u32, ecx: u32, edx: u32) -> u32 {
-    dispatcher::dispatch_syscall(eax, ebx, ecx, edx)
-}
-
 /// Register every syscall handler with the HAL callback table.
 ///
 /// Called once from `rust_main` before any userland exists. The ported
@@ -891,4 +868,8 @@ pub fn register_all() {
     });
     reg(29, |a0, a1, _, _, _| rust_sys_dup2(a0, a1));
     reg(30, |a0, a1, _, _, _| rust_sys_kill(a0, a1));
+
+    // Register the syscall dispatcher trampoline so unsafe-core's boot main
+    // can route C/asm `rust_dispatcher(eax,ebx,ecx,edx)` calls here.
+    alloy_kernel_hal::set_syscall_dispatcher(dispatcher::dispatch_syscall);
 }

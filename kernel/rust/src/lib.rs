@@ -1,5 +1,13 @@
 #![no_std]
 #![feature(alloc_error_handler)]
+// All `unsafe {}` blocks have been eliminated from the kernel crate.  The two
+// `#[no_mangle]` symbols (`rust_main`, `rust_dispatcher`) are required by the
+// asm boot stubs / C trampolines; they use `unsafe(no_mangle)` syntax which
+// is treated as "unsafe code" by `forbid`.  `deny` + crate-level `allow` for
+// the attribute keeps real `unsafe {}` blocks as hard errors while permitting
+// the linker-visible entry points.
+#![deny(unsafe_code)]
+#![allow(unsafe_attr_outside_unsafe)]
 
 extern crate alloc;
 extern crate core;
@@ -105,8 +113,7 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn rust_main() {
+fn rust_main() {
     // Initialize the HAL platform (marks FFI as ready)
     alloy_kernel_hal::platform::init();
 

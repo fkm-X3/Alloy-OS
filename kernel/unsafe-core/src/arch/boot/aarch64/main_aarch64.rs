@@ -21,8 +21,6 @@ pub unsafe extern "C" fn kernel_main(magic: u32, _multiboot_addr: u32) {
     init_serial();
     serial_print(b"[Boot] Alloy OS booting on aarch64\n\0" as *const u8 as *const ::core::ffi::c_char);
     serial_print(b"[Boot] Architecture: aarch64 (ARM64)\n\0" as *const u8 as *const ::core::ffi::c_char);
-    // Safe arch init — these were moved from the ported C2Rust modules
-    // to the safe arch layer in Session 3.6.
     crate::arch::aarch64::gdt_init();
     crate::arch::aarch64::idt_init();
     crate::arch::aarch64::syscall_init();

@@ -69,14 +69,12 @@ impl Fat32Fs {
         let mut sector0 = [0u8; SECTOR_SIZE];
         dev.read_sectors(0, 1, &mut sector0).map_err(|_| ())?;
 
-        let bpb: &Bpb = unsafe { &*(sector0.as_ptr() as *const Bpb) };
-
-        let byts_per_sec = u16::from_le(bpb.bpb_byts_per_sec);
-        let sec_per_clus = bpb.bpb_sec_per_clus;
-        let rsvd_sec_cnt = bpb.bpb_rsvd_sec_cnt as u32;
-        let num_fats = bpb.bpb_num_fats;
-        let fat_sz32 = u32::from_le(bpb.bpb_fat_sz32);
-        let root_clus = u32::from_le(bpb.bpb_root_clus);
+        let byts_per_sec = u16::from_le_bytes([sector0[11], sector0[12]]);
+        let sec_per_clus = sector0[13];
+        let rsvd_sec_cnt = u16::from_le_bytes([sector0[14], sector0[15]]) as u32;
+        let num_fats = sector0[16];
+        let fat_sz32 = u32::from_le_bytes([sector0[36], sector0[37], sector0[38], sector0[39]]);
+        let root_clus = u32::from_le_bytes([sector0[44], sector0[45], sector0[46], sector0[47]]);
 
         let first_data_sector = rsvd_sec_cnt + (num_fats as u32) * fat_sz32;
 

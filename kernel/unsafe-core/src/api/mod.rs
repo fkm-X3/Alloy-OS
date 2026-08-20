@@ -17,10 +17,45 @@
 pub use crate::alloc::{self, get_stats, KernelAllocator, Slab};
 pub use crate::arch::{self, Arch, CpuContext, CpuInfo, cpu_halt};
 #[cfg(feature = "x86_64")]
-pub use crate::arch::cpu_sti_halt;
+pub use crate::arch::{cpu_sti_hlt, capture_panic_regs, PanicRegs, syscall_invoke};
+pub use crate::arch::{save_context, load_context};
+
+// --- Standalone CPU info helpers (wrap the Arch trait methods) ---
+
+/// Fill `buffer` with the CPU vendor string.
+#[cfg(feature = "x86_64")]
+pub fn cpu_get_vendor(buffer: &mut [u8]) {
+    <crate::arch::x86_64::X86_64Arch as Arch>::get_vendor(buffer);
+}
+/// Return the CPU features bitmask.
+#[cfg(feature = "x86_64")]
+pub fn cpu_get_features() -> u32 {
+    <crate::arch::x86_64::X86_64Arch as Arch>::get_features()
+}
+/// Return (family, model, stepping).
+#[cfg(feature = "x86_64")]
+pub fn cpu_get_model_info() -> (u32, u32, u32) {
+    <crate::arch::x86_64::X86_64Arch as Arch>::get_model_info()
+}
+/// Fill `buffer` with the CPU vendor string.
+#[cfg(feature = "aarch64")]
+pub fn cpu_get_vendor(buffer: &mut [u8]) {
+    <crate::arch::aarch64::Aarch64Arch as Arch>::get_vendor(buffer);
+}
+/// Return the CPU features bitmask.
+#[cfg(feature = "aarch64")]
+pub fn cpu_get_features() -> u32 {
+    <crate::arch::aarch64::Aarch64Arch as Arch>::get_features()
+}
+/// Return (family, model, stepping).
+#[cfg(feature = "aarch64")]
+pub fn cpu_get_model_info() -> (u32, u32, u32) {
+    <crate::arch::aarch64::Aarch64Arch as Arch>::get_model_info()
+}
 pub use crate::callback::{self, FaultAction, SyscallHandler, SyscallTable};
 pub use crate::callback::{set_keyboard_wake_handler, set_mouse_wake_handler};
 pub use crate::callback::{set_page_fault_handler, set_timer_tick_handler};
+pub use crate::callback::{set_kernel_entry, set_syscall_dispatcher};
 pub use crate::interrupt::{self, InterruptController, InterruptGuard, IrqHandler, IrqLine};
 pub use crate::io::{self, DefaultMmio, Mmio, MmioReg};
 #[cfg(feature = "x86_64")]
@@ -29,6 +64,8 @@ pub use crate::io::X86IoPort;
 pub use crate::io::IoPort;
 pub use crate::mem::{self, AddressSpace, PageFlags, PhysFrame, VmRegion};
 pub use crate::mem::{heap_start, heap_size, allocated_pages};
+pub use crate::mem::{read_phys_bytes, write_phys_bytes, zero_phys_bytes, copy_to_temp_frame, copy_to_mapped, zero_mapped};
+pub use crate::mem::{present_back_buffer, write_framebuffer_pixel, convert_color};
 pub use crate::mem::user::{copy_from_user, copy_to_user};
 pub use crate::arch::syscall_no;
 #[cfg(feature = "x86_64")]
@@ -39,6 +76,9 @@ pub use crate::sync::{
     self, irq_disable, irq_enable, irq_restore, irq_save, SpinLock, SpinLockIrq,
 };
 pub use crate::time::{self, Timer};
+
+/// Safe ELF header and program-header parsing from `&[u8]`.
+pub mod elf;
 
 // --- Safe driver facades ---
 pub use crate::drivers::serial::Serial;
@@ -73,3 +113,21 @@ pub use crate::drivers::ahci::{Ahci, AhciDriveInfo};
 pub use crate::drivers::initrd::{Initrd, InitrdModule};
 #[cfg(feature = "x86_64")]
 pub use crate::drivers::vesa::{Vesa, VesaError, VesaInfo};
+
+// --- Safe byte-slice reinterpret helpers ---
+// Centralises the `unsafe` for `T → &[u8]` reinterpretation so individual
+// call sites in the safe kernel don't need raw pointer casts.
+
+/// Reinterpret a single `&T` as `&[u8]`.
+///
+/// # Panics
+/// Panics if `T` is a zero-sized type.
+pub fn as_byte_slice<T: Copy>(val: &T) -> &[u8] {
+    assert!(core::mem::size_of::<T>() > 0, "cannot convert ZST to byte slice");
+    unsafe { core::slice::from_raw_parts(val as *const T as *const u8, core::mem::size_of::<T>()) }
+}
+
+/// Reinterpret a `&[T]` as `&[u8]`.
+pub fn as_byte_slice_of<T: Copy>(slice: &[T]) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(slice.as_ptr() as *const u8, core::mem::size_of_val(slice)) }
+}

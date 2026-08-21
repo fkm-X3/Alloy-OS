@@ -28,11 +28,9 @@ impl Arch {
 struct Config {
     arch: Arch,
     target: &'static str,
-    cc: &'static str,
     ld: &'static str,
     as_bin: &'static str,
     as_flags: &'static [&'static str],
-    c_flags_arch: &'static [&'static str],
     ld_flags_arch: &'static [&'static str],
     qemu: &'static str,
     qemu_flags: &'static [&'static str],
@@ -49,59 +47,39 @@ impl Config {
             Arch::X86_64 => Config {
                 arch,
                 target: "x86_64-alloy",
-                cc: "gcc",
                 ld: "ld",
                 as_bin: "nasm",
                 as_flags: &["-f", "elf64", "-dARCH_X86_64"],
-                c_flags_arch: &[
-                    "-m64",
-                    "-DARCH_X86_64",
-                    "-mno-sse",
-                    "-mno-sse2",
-                    "-mno-mmx",
-                    "-mno-avx",
-                    "-mno-80387",
-                    "-mno-fp-ret-in-387",
-                ],
                 ld_flags_arch: &["-m", "elf_x86_64"],
                 qemu: "qemu-system-x86_64",
                 qemu_flags: &["-serial", "stdio"],
                 rust_target: "x86_64-alloy.json",
-                rust_features: &["--no-default-features", "--features", "x86_64,ported"],
+                rust_features: &["--no-default-features", "--features", "x86_64"],
                 linker: "kernel/linker_x86_64.ld",
                 boot_asm: &["boot/multiboot2.asm", "boot/boot_x86_64.asm"],
                 arch_asm: &[
-                    "kernel/c/arch/x86_64/gdt_flush.asm",
-                    "kernel/c/arch/x86_64/idt_stubs.asm",
-                    "kernel/c/arch/x86_64/context_switch.asm",
-                    "kernel/c/arch/x86_64/syscall_entry.asm",
+                    "kernel/asm/x86_64/gdt_flush.asm",
+                    "kernel/asm/x86_64/idt_stubs.asm",
+                    "kernel/asm/x86_64/context_switch.asm",
+                    "kernel/asm/x86_64/syscall_entry.asm",
                 ],
             },
             Arch::Aarch64 => Config {
                 arch,
                 target: "aarch64-alloy",
-                cc: "aarch64-linux-gnu-gcc",
                 ld: "aarch64-linux-gnu-ld",
                 as_bin: "aarch64-linux-gnu-gcc",
                 as_flags: &["-c", "-march=armv8-a"],
-                c_flags_arch: &["-march=armv8-a", "-DARCH_AARCH64"],
                 ld_flags_arch: &["-m", "aarch64elf"],
                 qemu: "qemu-system-aarch64",
-                qemu_flags: &[
-                    "-machine",
-                    "virt",
-                    "-cpu",
-                    "cortex-a53",
-                    "-serial",
-                    "stdio",
-                ],
+                qemu_flags: &["-machine", "virt", "-cpu", "cortex-a53", "-serial", "stdio"],
                 rust_target: "aarch64-alloy.json",
-                rust_features: &["--no-default-features", "--features", "aarch64,ported"],
+                rust_features: &["--no-default-features", "--features", "aarch64"],
                 linker: "kernel/linker_aarch64.ld",
                 boot_asm: &["boot/boot_aarch64.S"],
                 arch_asm: &[
-                    "kernel/c/arch/aarch64/context_switch.S",
-                    "kernel/c/arch/aarch64/exception_vectors.S",
+                    "kernel/asm/aarch64/context_switch.S",
+                    "kernel/asm/aarch64/exception_vectors.S",
                 ],
             },
         }
@@ -208,7 +186,7 @@ fn build_de(sh: &Shell, config: &Config) -> Result<(), xshell::Error> {
 
     println!("Building DE (cross-compile for Alloy OS x86_64)...");
     sh.create_dir("de/build")?;
-    
+
     let qt_tools = env::var("QT_HOST_TOOLS").ok();
     let qt_path = env::var("QT_HOST_PATH").ok();
 
@@ -229,7 +207,10 @@ fn build_de(sh: &Shell, config: &Config) -> Result<(), xshell::Error> {
     let _ = cmd!(sh, "cmake --build build --target alloy_de_qml").run();
     let _ = sh.change_dir("..");
 
-    if sh.copy_file("de/build/alloy_de_qml", "alloy_de_qml").is_err() {
+    if sh
+        .copy_file("de/build/alloy_de_qml", "alloy_de_qml")
+        .is_err()
+    {
         sh.write_file("alloy_de_qml", "")?;
     }
     Ok(())
@@ -329,8 +310,13 @@ fn create_disk_img(sh: &Shell, path: &str, size_mb: u32) -> Result<(), xshell::E
     if !sh.path_exists(path) {
         println!("Creating {size_mb}MB disk image...");
         sh.create_dir("build")?;
-        if cmd!(sh, "qemu-img create -f raw {path} {size_mb}M").run().is_err() {
-            cmd!(sh, "dd if=/dev/zero of={path} bs=1M count={size_mb}").run()?;
+        let size = format!("{size_mb}M");
+        let count = size_mb.to_string();
+        if cmd!(sh, "qemu-img create -f raw {path} {size}")
+            .run()
+            .is_err()
+        {
+            cmd!(sh, "dd if=/dev/zero of={path} bs=1M count={count}").run()?;
         }
     }
     Ok(())
@@ -360,7 +346,11 @@ fn run_qemu(
 ) -> Result<(), xshell::Error> {
     let qemu = config.qemu;
     let qemu_flags = config.qemu_flags;
-    let display = if display_none { vec!["-display", "none"] } else { vec![] };
+    let display = if display_none {
+        vec!["-display", "none"]
+    } else {
+        vec![]
+    };
 
     if config.arch == Arch::Aarch64 {
         let elf = build_kernel_elf(sh, config)?;
@@ -394,7 +384,11 @@ fn run_qemu_elf(sh: &Shell, config: &Config, display_none: bool) -> Result<(), x
     let elf = build_kernel_elf(sh, config)?;
     let qemu = config.qemu;
     let qemu_flags = config.qemu_flags;
-    let display = if display_none { vec!["-display", "none"] } else { vec![] };
+    let display = if display_none {
+        vec!["-display", "none"]
+    } else {
+        vec![]
+    };
 
     if config.arch == Arch::Aarch64 {
         cmd!(
@@ -512,11 +506,9 @@ fn clean(sh: &Shell) -> Result<(), xshell::Error> {
 fn print_arch(config: &Config) {
     println!("ARCH = {}", config.arch.as_str());
     println!("TARGET = {}", config.target);
-    println!("CC = {}", config.cc);
     println!("LD = {}", config.ld);
     println!("AS = {}", config.as_bin);
     println!("ASFLAGS = {:?}", config.as_flags);
-    println!("CFLAGS_ARCH = {:?}", config.c_flags_arch);
     println!("LDFLAGS_ARCH = {:?}", config.ld_flags_arch);
     println!("QEMU = {}", config.qemu);
     println!("RUST_TARGET = {}", config.rust_target);

@@ -7,11 +7,9 @@ ARCH ?= x86_64
 # Architecture-specific configuration
 ifeq ($(ARCH),x86_64)
     TARGET = x86_64-alloy
-    CC = gcc
     LD = ld
     AS = nasm
     ASFLAGS = -f elf64 -dARCH_X86_64
-    CFLAGS_ARCH = -m64 -DARCH_X86_64 -mno-sse -mno-sse2 -mno-mmx -mno-avx -mno-80387 -mno-fp-ret-in-387
     LDFLAGS_ARCH = -m elf_x86_64
     QEMU = qemu-system-x86_64
     QEMU_FLAGS = -serial stdio
@@ -19,14 +17,12 @@ ifeq ($(ARCH),x86_64)
     RUST_FEATURES = --no-default-features --features x86_64
     LINKER = kernel/linker_x86_64.ld
     BOOT_ASM = $(BOOT_DIR)/multiboot2.asm $(BOOT_DIR)/boot_x86_64.asm
-    ARCH_ASM = $(ARCH_DIR)/gdt_flush.asm $(ARCH_DIR)/idt_stubs.asm $(ARCH_DIR)/context_switch.asm $(ARCH_DIR)/syscall_entry.asm
+    ARCH_ASM = $(ARCH_ASM_DIR)/gdt_flush.asm $(ARCH_ASM_DIR)/idt_stubs.asm $(ARCH_ASM_DIR)/context_switch.asm $(ARCH_ASM_DIR)/syscall_entry.asm
 else ifeq ($(ARCH),aarch64)
     TARGET = aarch64-alloy
-    CC = aarch64-linux-gnu-gcc
     LD = aarch64-linux-gnu-ld
     AS = aarch64-linux-gnu-gcc
     ASFLAGS = -c -march=armv8-a
-    CFLAGS_ARCH = -march=armv8-a -DARCH_AARCH64
     LDFLAGS_ARCH = -m aarch64elf
     QEMU = qemu-system-aarch64
     QEMU_FLAGS = -machine virt -cpu cortex-a53 -serial stdio
@@ -43,7 +39,7 @@ else ifeq ($(ARCH),aarch64)
     RUST_FEATURES = --no-default-features --features aarch64
     LINKER = kernel/linker_aarch64.ld
     BOOT_ASM = $(BOOT_DIR)/boot_aarch64.S
-    ARCH_ASM = $(ARCH_DIR)/context_switch.S $(ARCH_DIR)/exception_vectors.S
+    ARCH_ASM = $(ARCH_ASM_DIR)/context_switch.S $(ARCH_ASM_DIR)/exception_vectors.S
 else
     $(error Unsupported architecture: $(ARCH). Use x86_64 or aarch64)
 endif
@@ -51,18 +47,14 @@ RUSTC = rustc
 CARGO = $(HOME)/.cargo/bin/cargo
 
 # Flags
-CFLAGS = $(CFLAGS_ARCH) -std=gnu11 -ffreestanding -nostdlib -fno-builtin -Wall -Wextra -O2 -Ikernel/c
 LDFLAGS = $(LDFLAGS_ARCH) -T $(LINKER)
 
 # Directories
 BUILD_DIR = build
 BOOT_DIR = boot
-KERNEL_C_DIR = kernel/c
 USERLAND_DIR = os/userland
 KERNEL_RUST_DIR = kernel/rust
-ARCH_DIR = $(KERNEL_C_DIR)/arch/$(ARCH)
-DRIVERS_DIR = $(KERNEL_C_DIR)/drivers
-MM_DIR = $(KERNEL_C_DIR)/mm
+ARCH_ASM_DIR = kernel/asm/$(ARCH)
 
 # Source files (common)
 ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
@@ -70,9 +62,8 @@ ASM_SOURCES = $(BOOT_ASM) $(ARCH_ASM)
 # Object files
 ASM_OBJECTS = $(patsubst %.asm,$(BUILD_DIR)/%.o,$(filter %.asm,$(ASM_SOURCES)))
 ASM_OBJECTS += $(patsubst %.S,$(BUILD_DIR)/%.o,$(filter %.S,$(ASM_SOURCES)))
-C_OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 RUST_LIB = $(BUILD_DIR)/kernel/rust/liballoy_kernel_rust.a
-OBJECTS = $(ASM_OBJECTS) $(C_OBJECTS)
+OBJECTS = $(ASM_OBJECTS)
 
 # Output
 KERNEL_ELF = $(BUILD_DIR)/alloy.elf
@@ -151,12 +142,6 @@ $(BUILD_DIR)/%.o: %.S
 	@echo "Assembling $<..."
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
-
-# Compile .c files
-$(BUILD_DIR)/%.o: %.c
-	@echo "Compiling $<..."
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
 
 # Create bootable ISO (x86 only)
 $(KERNEL_ISO): $(KERNEL_ELF)
@@ -295,16 +280,14 @@ lazy:
 print-arch:
 	@echo "ARCH = $(ARCH)"
 	@echo "TARGET = $(TARGET)"
-	@echo "CC = $(CC)"
 	@echo "LD = $(LD)"
 	@echo "AS = $(AS)"
 	@echo "ASFLAGS = $(ASFLAGS)"
-	@echo "CFLAGS_ARCH = $(CFLAGS_ARCH)"
 	@echo "LDFLAGS_ARCH = $(LDFLAGS_ARCH)"
 	@echo "QEMU = $(QEMU)"
 	@echo "RUST_TARGET = $(RUST_TARGET)"
 	@echo "RUST_FEATURES = $(RUST_FEATURES)"
-	@echo "ARCH_DIR = $(ARCH_DIR)"
+	@echo "ARCH_ASM_DIR = $(ARCH_ASM_DIR)"
 
 # Print variables for debugging
 print-%:

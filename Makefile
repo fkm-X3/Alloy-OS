@@ -232,7 +232,7 @@ mouse-smoke-elf: $(KERNEL_ELF)
 
 # Run scripted mouse interactions and capture a screenshot artifact
 mouse-screenshot: $(KERNEL_ISO)
-	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png .
+	python3 os/userland/tools/mouse_smoke.py --iso $(KERNEL_ISO) --bios '$(QEMU_FW)' --serial-log $(BUILD_DIR)/mouse-screenshot-boot.log --qemu-log $(BUILD_DIR)/mouse-screenshot.log --screenshot $(BUILD_DIR)/mouse-smoke.png
 
 # Run in QEMU with debugging
 ifeq ($(ARCH),aarch64)

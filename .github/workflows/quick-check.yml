@@ -30,33 +30,11 @@ jobs:
         arch: x86_64
         command: |
           echo "=== Checking NASM (.asm) files ==="
-          for asm_file in $(find . -name "*.asm"); do
+          for asm_file in $(find boot kernel/asm -name "*.asm"); do
             echo "Checking $asm_file"
             nasm -f elf64 -o /dev/null "$asm_file"
           done
           echo "All NASM files are valid!"
-
-  gas-check-x86_64:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v7
-      with:
-        submodules: recursive
-        fetch-depth: 1
-
-    - name: Check x86_64 GAS assembly files
-      uses: ./.github/actions/docker-ci
-      with:
-        arch: x86_64
-        command: |
-          echo "=== Checking x86_64 GAS (.S) files ==="
-          for s_file in $(find . -name "*x86_64*.S"); do
-            echo "Checking $s_file"
-            gcc -c -m64 -o /dev/null "$s_file"
-          done
-          echo "All x86_64 GAS files are valid!"
 
   gas-check-aarch64:
     runs-on: ubuntu-latest
@@ -74,7 +52,7 @@ jobs:
         arch: aarch64
         command: |
           echo "=== Checking aarch64 GAS (.S) files ==="
-          for s_file in $(find . -name "*.S" ! -name "*x86_64*"); do
+          for s_file in $(find boot kernel/asm -name "*.S"); do
             echo "Checking $s_file"
             aarch64-linux-gnu-gcc -c -march=armv8-a -o /dev/null "$s_file"
           done
@@ -102,6 +80,8 @@ jobs:
           ~/.cargo/registry/index/
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
+          kernel/unsafe-core/target/
+          kernel/hal/target/
           kernel/rust/target/
         key: rust-${{ runner.os }}-quick-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
         restore-keys: |
@@ -117,6 +97,18 @@ jobs:
           cp os/userland/build/${{ matrix.arch }}/hello hello 2>/dev/null || true
           cp os/userland/build/${{ matrix.arch }}/compositor compositor 2>/dev/null || true
 
-          cd kernel/rust
-          cargo +nightly fmt --check || echo "Formatting issues found (non-blocking)"
-          cargo +nightly clippy --target ${{ matrix.arch }}-alloy.json -Zbuild-std=core,alloc || echo "Clippy warnings found (non-blocking)"
+          # All three crates, each with the matching arch feature (defaults are
+          # x86_64-only, so --no-default-features is what makes this a real
+          # aarch64 check).
+          for crate_dir in kernel/unsafe-core kernel/hal kernel/rust; do
+            echo "=== $crate_dir fmt (${{ matrix.arch }}) ==="
+            cargo +nightly fmt --check --manifest-path "$crate_dir/Cargo.toml" \
+              || echo "Formatting issues found in $crate_dir (non-blocking)"
+            echo "=== $crate_dir clippy (${{ matrix.arch }}) ==="
+            cargo +nightly clippy \
+                --manifest-path "$crate_dir/Cargo.toml" \
+                --target kernel/rust/${{ matrix.arch }}-alloy.json \
+                -Zbuild-std=core,alloc -Zjson-target-spec \
+                --no-default-features --features ${{ matrix.arch }} \
+              || echo "Clippy warnings found in $crate_dir (non-blocking)"
+          done

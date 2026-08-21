@@ -124,7 +124,7 @@ jobs:
       run: |
         sudo apt-get update
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sudo apt-get install -y --no-install-recommends qemu-system-aarch64 qemu-efi-aarch64 ipxe-qemu
+          sudo apt-get install -y --no-install-recommends qemu-system-aarch64
         else
           sudo apt-get install -y --no-install-recommends qemu-system-x86
         fi
@@ -138,54 +138,40 @@ jobs:
 
         rm -f serial.log qemu.log qemu_stderr.log
 
+        # Symmetric boot matrix: both arches run headless with serial to file.
+        # Only the loader differs — x86_64 exercises the canonical
+        # GRUB/Multiboot2 ISO path, aarch64 boots the ELF directly (-kernel;
+        # QEMU virt has no BIOS/IDE and the boot asm drops EL2->EL1 itself,
+        # so no firmware is needed). -nic none removes the default NIC so no
+        # option-ROM package is required on either arch.
         if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          # aarch64: boot ELF directly to avoid CI firmware ROM dependency issues
-          ELF_FILE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
-          if [ -z "$ELF_FILE" ]; then
-            echo "ERROR: alloy.elf not found!"
-            find ${{ github.workspace }} -type f -name "*.elf" | head -20
-            exit 1
-          fi
-          echo "Found ELF: $ELF_FILE"
-          file "$ELF_FILE"
-          ls -lh "$ELF_FILE"
-
-          set +e
-          timeout 60s qemu-system-aarch64 \
-            -machine virt -cpu cortex-a53 \
-            -kernel "$ELF_FILE" \
-            -serial file:serial.log \
-            -display none \
-            -no-reboot \
-            -D qemu.log 2>qemu_stderr.log
-          QEMU_EXIT=$?
-          set -e
-          echo "QEMU exit code: $QEMU_EXIT"
+          QEMU_BIN="qemu-system-aarch64"
+          MACHINE="-machine virt -cpu cortex-a53 -m 128M"
+          LOADER="-kernel"
+          IMAGE=$(find ${{ github.workspace }} -name "alloy.elf" -type f | head -1)
+          [ -n "$IMAGE" ] || { echo "ERROR: alloy.elf not found!"; exit 1; }
         else
-          # x86 arches boot via ISO
-          ISO_FILE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
-          if [ -z "$ISO_FILE" ]; then
-            echo "ERROR: alloy.iso not found!"
-            find ${{ github.workspace }} -type f -name "*.iso" | head -20
-            exit 1
-          fi
-          echo "Found ISO: $ISO_FILE"
-          file "$ISO_FILE"
-          ls -lh "$ISO_FILE"
-
           QEMU_BIN="qemu-system-x86_64"
-
-          set +e
-          timeout 60s "$QEMU_BIN" \
-            -cdrom "$ISO_FILE" \
-            -serial file:serial.log \
-            -display none \
-            -no-reboot \
-            -D qemu.log 2>qemu_stderr.log
-          QEMU_EXIT=$?
-          set -e
-          echo "QEMU exit code: $QEMU_EXIT"
+          MACHINE=""
+          LOADER="-cdrom"
+          IMAGE=$(find ${{ github.workspace }} -name "alloy.iso" -type f | head -1)
+          [ -n "$IMAGE" ] || { echo "ERROR: alloy.iso not found!"; exit 1; }
         fi
+        echo "Found image: $IMAGE"
+        file "$IMAGE"
+        ls -lh "$IMAGE"
+
+        set +e
+        timeout 60s "$QEMU_BIN" $MACHINE \
+          $LOADER "$IMAGE" \
+          -serial file:serial.log \
+          -display none \
+          -nic none \
+          -no-reboot \
+          -D qemu.log 2>qemu_stderr.log
+        QEMU_EXIT=$?
+        set -e
+        echo "QEMU exit code: $QEMU_EXIT"
 
         echo "=== qemu_stderr.log ==="
         cat qemu_stderr.log 2>/dev/null || echo "(file not found)"
@@ -219,7 +205,6 @@ jobs:
             echo "Possible fixes:"
             echo "  - Ensure qemu-system-aarch64 supports -machine virt -cpu cortex-a53"
             echo "  - Verify the ELF is a valid aarch64 binary (file build/alloy.elf)"
-            echo "  - Install ipxe-qemu (provides efi-virtio.rom for virtio PCI option ROM)"
           fi
           exit 1
         fi

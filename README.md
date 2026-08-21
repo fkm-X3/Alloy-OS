@@ -12,7 +12,7 @@
 
 
 > [!IMPORTANT]
-> Alloy-OS is being rewritten entirely in RUST, Alloy-DE is also being rewritten in in rust (Iced + Smithay). This is all happening on the branch Main branch.
+> The kernel has been fully rewritten in Rust — no C remains in the tree or the build (assembly only where the hardware demands it). Alloy-DE is also being rewritten in Rust (Iced + Smithay). This is all happening on the Main branch.
 
 ## Quick start
 
@@ -27,12 +27,13 @@ See [docs/build.md](docs/build.md) for all make targets, native builds, and vali
 
 | Directory | Responsibility |
 |---|---|
-| `kernel/c/` | Early boot, drivers, paging, VMM |
-| `kernel/rust/` | Rust kernel entry, VFS, display server, Fusion Wayland |
-| `boot/` | Bootloader ASM + GRUB config |
+| `kernel/unsafe-core/` | The only crate with `unsafe`: arch layer, drivers, memory, alloc/sync, interrupts, boot init; safe `api` boundary |
+| `kernel/hal/` | Safe API contract: re-exports `unsafe-core::api`, `println!`/`log!` macros |
+| `kernel/rust/` | Safe kernel: VFS, display server, Fusion Wayland, net, terminal, syscalls (`#![deny(unsafe_code)]`) |
+| `boot/` + `kernel/asm/` | Boot and context-switch assembly (the only non-Rust code) |
 | `tools/` | Screenshot/smoke-test helpers |
 
-Boot flow: ASM → C init → `rust_main()` → display server.  
+Boot flow: ASM → Rust init (`kernel_main`) → `rust_main()` → display server.  
 See [docs/architecture.md](docs/architecture.md) for boot flow, conventions, CI, and gotchas.
 
 ## What you see at boot

@@ -113,7 +113,12 @@ fn log_display_server_error(err: display_server::DisplayServerBootError) {
     }
 }
 
-fn rust_main() {
+// Linker-visible entry point required by the asm boot stubs / boot mains
+// (`extern "C" { fn rust_main(); }`).  `no_mangle` counts as unsafe code, so
+// the lint is allowed here only — real `unsafe {}` blocks stay hard errors.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_main() {
     // Initialize the HAL platform (marks FFI as ready)
     alloy_kernel_hal::platform::init();
 

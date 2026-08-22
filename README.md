@@ -10,10 +10,6 @@
   <a href="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml"><img src="https://github.com/fkm-X3/Alloy-OS/actions/workflows/quick-check.yml/badge.svg" alt="Quick Check"></a>
 </p>
 
-
-> [!IMPORTANT]
-> The kernel has been fully rewritten in Rust — no C remains in the tree or the build (assembly only where the hardware demands it). Alloy-DE is also being rewritten in Rust (Iced + Smithay). This is all happening on the Main branch.
-
 ## Quick start
 
 ```sh

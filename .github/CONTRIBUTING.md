@@ -44,7 +44,7 @@ You’ll typically need:
 - **Python 3** (for scripts/utilities)
 - **Docker** (optional, for containerized build environment with all cross-toolchains)
 
-> If you have Docker, prefer the containerized build (`docker compose run --rm alloy make ...`) — no manual toolchain setup needed.
+> If you have Docker, prefer the containerized build (`docker compose run --rm alloy cargo xtask ...`) — no manual toolchain setup needed.
 
 ### Clone the repository
 
@@ -60,31 +60,31 @@ Select the target architecture with `ARCH=`, then build:
 ```bash
 # Build for x86_64 (64-bit x86, default)
 
-make ARCH=x86_64
+cargo xtask
 
 ...
 
-make ARCH=x86_64 run
+cargo xtask run
 
 ...
 
-make ARCH=x86_64 run-elf
+cargo xtask run-elf
 
 ...
 
-make ARCH=x86_64 output
+cargo xtask output
 
 ...
 
-make ARCH=x86_64 screenshot
+cargo xtask screenshot
 
 ...
 
-  Replace `<arch>` with `x86_64` or `aarch64`.
+  Set `ARCH=aarch64` to target ARM64.
 
 ...
 
-make ARCH=x86_64 all
+cargo xtask all
 
 ```
 

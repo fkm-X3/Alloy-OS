@@ -18,4 +18,4 @@
 | **Left click** | Focus top-most window under pointer |
 | **Left-drag** (title bar) | Drag focused window |
 
-Mouse input is relative PS/2 — click inside QEMU to grab pointer. `make output` is headless and cannot capture live host mouse; use `make run` or `make mouse-smoke` for pointer testing.
+Mouse input is relative PS/2 — click inside QEMU to grab pointer. `cargo xtask output` is headless and cannot capture live host mouse; use `cargo xtask run` or `cargo xtask mouse-smoke` for pointer testing.

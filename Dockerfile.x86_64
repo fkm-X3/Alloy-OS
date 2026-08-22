@@ -57,7 +57,7 @@ WORKDIR /workspace
 
 COPY . /workspace
 
-# hello and compositor are built by make userland during CI
+# hello and compositor are built by `cargo xtask userland` during CI
 
 CMD ["bash"]
 

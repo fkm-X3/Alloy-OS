@@ -15,11 +15,11 @@ The kernel is **Rust + assembly only** — there is no C in the tree or the buil
 
 ```bash
 # Default: x86_64
-make
-make run
+cargo xtask
+cargo xtask run
 
 # ARM64 (QEMU virt, direct -kernel boot)
-make ARCH=aarch64 output
+ARCH=aarch64 cargo xtask output
 ```
 
 The build is assembly (`nasm` / GAS) plus Rust nightly with a custom target spec — no C toolchain.
@@ -125,4 +125,4 @@ Safe surface: `PhysFrame` (RAII), `VmRegion`, `AddressSpace`, validated `copy_fr
 3. Create `kernel/asm/<arch>/` context-switch and exception-vector assembly
 4. Create `kernel/rust/<arch>-alloy.json` target spec
 5. Create `kernel/linker_<arch>.ld` linker script
-6. Add the architecture conditional to the Makefile (asm list, cargo target/features, QEMU flags)
+6. Add the architecture variant to `Config::new` in `xtask/src/main.rs` (asm list, cargo target/features, QEMU flags)

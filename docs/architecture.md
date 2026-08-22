@@ -39,7 +39,7 @@ All CI runs inside Docker via `.github/actions/docker-ci`.
 
 ## Gotchas
 
-- Mouse input is relative PS/2. Click inside QEMU to grab pointer. `make output` is headless and cannot capture live mouse.
+- Mouse input is relative PS/2. Click inside QEMU to grab pointer. `cargo xtask output` is headless and cannot capture live mouse.
 - Rust nightly is required with `-Zbuild-std=core,alloc` and the custom target spec.
 - Not a Cargo workspace — three sibling crates with path deps (`kernel/unsafe-core` → `kernel/hal` → `kernel/rust`).
 

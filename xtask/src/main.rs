@@ -125,23 +125,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "clean" => clean(&sh)?,
         "fat32-img" => {
             create_disk_img(&sh, "build/fat32.img", 64)?;
-            let _ = cmd!(sh, "mkfs.fat -F 32 build/fat32.img").run();
+            if cmd!(sh, "mkfs.fat -F 32 build/fat32.img").run().is_err() {
+                eprintln!("WARNING: mkfs.fat not found. Install dosfstools. Created empty image.");
+            }
+            println!("FAT32 image: build/fat32.img");
         }
         "lazy" => {
+            println!("Doing all dat for you.");
             clean(&sh)?;
             println!("Cleaned your shitass code, compiling the iso.");
             build_iso(&sh, &config)?;
             println!("Run 'cargo xtask run' to test.");
         }
         "print-arch" => print_arch(&config),
-        "docker-build" => {
-            let tag = format!("alloy-os-dev-{}:latest", config.arch.as_str());
+        "docker-build" | "docker-build-prod" => {
+            let prod = command == "docker-build-prod";
+            let name = if prod { "alloy-os" } else { "alloy-os-dev" };
+            let tag = format!("{name}-{}:latest", config.arch.as_str());
             let dockerfile = format!("Dockerfile.{}", config.arch.as_str());
             cmd!(sh, "docker build -t {tag} -f {dockerfile} .").run()?;
+            println!("Docker image built: {tag}");
         }
         "docker-run" => {
             let arch = config.arch.as_str();
             cmd!(sh, "docker compose run -e ALLOY_ARCH={arch} --rm -it alloy").run()?;
+        }
+        "docker-run-prod" => {
+            let arch = config.arch.as_str();
+            let tag = format!("alloy-os-{arch}:latest");
+            let name = format!("alloy-os-{arch}");
+            let home = env::var("HOME").unwrap_or_default();
+            cmd!(
+                sh,
+                "docker run --rm -it -p 22:22 -v .:/workspace -v {home}/.local/x86_64-elf:/root/.local/x86_64-elf -v {home}/.cargo/registry:/root/.cargo/registry -v {home}/.cargo/git:/root/.cargo/git -w /workspace --name {name} {tag} bash"
+            )
+            .run()?;
         }
         other => eprintln!("Unknown command: {other}"),
     }
@@ -230,10 +248,18 @@ fn build_rust_lib(sh: &Shell, config: &Config) -> Result<(), xshell::Error> {
     println!("Building Rust kernel library ({})", config.arch.as_str());
     sh.create_dir("build/kernel/rust")?;
 
-    let cargo = env::var("CARGO").unwrap_or_else(|_| {
-        let home = env::var("HOME").unwrap_or_default();
-        format!("{home}/.cargo/bin/cargo")
-    });
+    // Prefer the rustup proxy so `+nightly` resolves. When xtask itself is
+    // launched via `cargo xtask`, the parent exports CARGO pointing at a
+    // concrete toolchain binary, which rejects `+toolchain` directives.
+    let home = env::var("HOME").unwrap_or_default();
+    let cargo = {
+        let proxy = format!("{home}/.cargo/bin/cargo");
+        if Path::new(&proxy).exists() {
+            proxy
+        } else {
+            env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
+        }
+    };
 
     let _p = sh.push_dir("kernel/rust");
     let target = config.rust_target;

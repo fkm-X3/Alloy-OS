@@ -61,9 +61,10 @@ jobs:
         pull: false
         image-tag: ${{ steps.set-image.outputs.image-tag }}
         command: |
-          make ARCH=${{ matrix.arch }}
+          export ARCH=${{ matrix.arch }}
+          cargo xtask
           if [ "${{ matrix.arch }}" != "aarch64" ]; then
-            make ARCH=${{ matrix.arch }} iso
+            cargo xtask iso
           fi
 
     - name: Verify build artifacts

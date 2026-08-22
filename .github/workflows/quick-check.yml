@@ -93,9 +93,8 @@ jobs:
         arch: ${{ matrix.arch }}
         command: |
           echo "Building userland binaries (needed by Rust include_bytes!)..."
-          make -C os/userland
-          cp os/userland/build/${{ matrix.arch }}/hello hello 2>/dev/null || true
-          cp os/userland/build/${{ matrix.arch }}/compositor compositor 2>/dev/null || true
+          export ARCH=${{ matrix.arch }}
+          cargo xtask userland
 
           # All three crates, each with the matching arch feature (defaults are
           # x86_64-only, so --no-default-features is what makes this a real

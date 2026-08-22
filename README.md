@@ -18,10 +18,10 @@
 
 ```sh
 docker compose build
-docker compose run --rm alloy make output
+docker compose run --rm alloy cargo xtask output
 ```
 
-See [docs/build.md](docs/build.md) for all make targets, native builds, and validation commands.
+See [docs/build.md](docs/build.md) for all xtask commands, native builds, and validation commands.
 
 ## Architecture
 

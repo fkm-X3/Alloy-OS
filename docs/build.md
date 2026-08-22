@@ -1,10 +1,13 @@
 # Build & Run
 
+All build/run commands go through `xtask` (`cargo xtask <command>`). Select the
+architecture with the `ARCH` env var (`x86_64` default, or `aarch64`).
+
 ## Docker (recommended)
 
 ```sh
 docker compose build
-docker compose run --rm alloy make output
+docker compose run --rm alloy cargo xtask output
 ```
 
 The repo is bind-mounted into `/workspace`, so host edits are visible immediately.
@@ -12,18 +15,18 @@ The repo is bind-mounted into `/workspace`, so host edits are visible immediatel
 ## Native workflow
 
 ```sh
-make iso       # build kernel + bootable ISO
-make lazy      # clean rebuild + ISO
-make run       # QEMU with GUI window
-make output    # QEMU headless, serial output only (works in Docker)
-make screenshot # headless boot + auto-capture desktop PNG
-make mouse-smoke        # scripted mouse interaction test
-make mouse-screenshot   # mouse test + screenshot
-make debug     # QEMU with GDB stub (-s -S)
-make clean     # remove all build outputs
+cargo xtask iso       # build kernel + bootable ISO
+cargo xtask lazy      # clean rebuild + ISO
+cargo xtask run       # QEMU with GUI window
+cargo xtask output    # QEMU headless, serial output only (works in Docker)
+cargo xtask screenshot # headless boot + auto-capture desktop PNG
+cargo xtask mouse-smoke        # scripted mouse interaction test
+cargo xtask mouse-screenshot   # mouse test + screenshot
+cargo xtask debug     # QEMU with GDB stub (-s -S)
+cargo xtask clean     # remove all build outputs
 ```
 
-`make run` opens a GUI QEMU window and may need display forwarding in Docker. Headless targets work well in containers.
+`cargo xtask run` opens a GUI QEMU window and may need display forwarding in Docker. Headless targets work well in containers.
 
 ## Validation
 

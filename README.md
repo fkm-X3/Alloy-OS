@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> Alloy-OS is over. It was a good (short) run but I've started to dread working on Alloy-OS so I'm starting a new project [Ferric-K](https://github.com/fkm-X3/ferric-k), it will be a lot more restrictive then this project but it should create a better result.
+
 <div align="center">
   <h1>Alloy OS</h1>
   <p><strong>An operating system built in Rust and Assembly.</strong></p>

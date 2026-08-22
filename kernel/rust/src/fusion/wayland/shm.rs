@@ -113,7 +113,20 @@ impl ShmBuffer {
     pub fn read_row_bytes(&self, byte_offset: usize, len: usize) -> alloc::vec::Vec<u8> {
         let vaddr = match self.kernel_vaddr {
             Some(va) => va as usize,
-            None => return alloc::vec![0u8; len],
+            None => {
+                use core::sync::atomic::{AtomicBool, Ordering};
+                static NONE_WARNED: AtomicBool = AtomicBool::new(false);
+                if !NONE_WARNED.swap(true, Ordering::Relaxed) {
+                    crate::render_trace!(
+                        "[T6] ShmBuffer(id={}, {}x{}): kernel_vaddr is None -> returning ZEROS \
+                         (kernel never mapped this SHM region; composite will show black)",
+                        self.id,
+                        self.width,
+                        self.height
+                    );
+                }
+                return alloc::vec![0u8; len];
+            }
         };
         let mut buf = alloc::vec![0u8; len];
         alloy_kernel_hal::mem::read_phys_bytes(vaddr + byte_offset, &mut buf);

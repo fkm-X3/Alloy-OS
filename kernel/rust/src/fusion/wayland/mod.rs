@@ -24,6 +24,7 @@ pub mod seat;
 pub mod shm;
 pub mod socket;
 pub mod surface;
+pub mod trace;
 pub mod xdg_output;
 pub mod xdg_shell;
 
@@ -341,6 +342,15 @@ impl WaylandServer {
             .ok_or(WaylandError::ObjectNotFound)?
             .fd as i32;
 
+        // Defect evidence (Session 0.1): everything below blocks the entire
+        // display-server task inside `socket_read`
+        // (`Scheduler::block_current_on`) until this client sends a complete
+        // message — other clients and compositing are stalled meanwhile.
+        crate::render_trace!(
+            "[T8] read_message_from_client({}): about to BLOCK on socket_read (header)",
+            client_id
+        );
+
         // Read header (8 bytes) — blocks until at least 8 bytes arrive
         let mut header = [0u8; 8];
         let mut off = 0;
@@ -375,7 +385,16 @@ impl WaylandServer {
         }
 
         match WaylandMessage::decode(&full) {
-            Ok(Some(msg)) => Ok(Some(msg)),
+            Ok(Some(msg)) => {
+                crate::render_trace!(
+                    "[T8] read_message_from_client({}): decoded obj={} op={} len={}",
+                    client_id,
+                    msg.object_id.0,
+                    msg.opcode,
+                    total
+                );
+                Ok(Some(msg))
+            }
             _ => {
                 let _ = self.disconnect_client(client_id);
                 Err(WaylandError::ProtocolViolation)
@@ -607,13 +626,26 @@ impl WaylandServer {
 
     /// Process all pending frame callbacks and emit done events
     pub fn process_frame_callbacks(&mut self) {
+        use core::sync::atomic::AtomicU32;
+        static CB_EMISSIONS: AtomicU32 = AtomicU32::new(0);
+        let mut emitted = 0usize;
         while let Some(callback) = self.display_handler.get_pending_callback() {
+            emitted += 1;
             if let Ok(msg) = super::wayland::display_handler::DisplayHandler::emit_callback_done(
                 callback.callback_id,
                 callback.callback_data,
             ) {
                 let _ = self.write_message_to_client(callback.client_id, msg);
             }
+        }
+        // Defect evidence (Session 0.1): sync callbacks are answered
+        // unconditionally on the next loop iteration — never gated on an
+        // actual present of that client's frame.
+        if emitted > 0 && crate::fusion::wayland::trace::every_nth(&CB_EMISSIONS, 10) {
+            crate::render_trace!(
+                "[T7] frame callbacks answered WITHOUT present gate: {} done event(s)",
+                emitted
+            );
         }
     }
 

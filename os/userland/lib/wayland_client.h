@@ -37,6 +37,14 @@ struct wl_wire_header {
 #define WL_SEAT_CAPABILITIES 0
 #define WL_SEAT_NAME         1
 
+#define WL_SHM_CREATE_POOL        0
+#define WL_SHM_POOL_CREATE_BUFFER 0
+#define WL_SHM_POOL_DESTROY       1
+
+#define WL_SHM_FORMAT_ARGB8888 0
+#define WL_SHM_FORMAT_XRGB8888 1
+#define WL_SHM_FORMAT_RGB565   4
+
 #define WL_KEYBOARD_KEYMAP      0
 #define WL_KEYBOARD_ENTER       1
 #define WL_KEYBOARD_LEAVE       2
@@ -179,6 +187,18 @@ int wl_message_send(int fd, unsigned int object_id, unsigned short opcode,
 int wl_message_receive(int fd, void *buf);
 
 void wl_dispatch_raw(struct wl_display *d, const unsigned char *buf, int len);
+
+/* Session 0.1 diagnostic helpers: the real fd -> pool -> buffer flow.
+ * NOTE: the kernel server currently ignores the client-chosen new_id
+ * values and assigns its own sequential ids (see buffer_handler.rs),
+ * and never sends constructor events back — the client cannot learn the
+ * server-side pool/buffer ids. test_shm_client documents the fallout. */
+int wl_shm_create_pool(int fd, unsigned int shm_id, unsigned int new_pool_id,
+                       int shm_fd, unsigned int size);
+int wl_shm_pool_create_buffer(int fd, unsigned int pool_id,
+                              unsigned int new_buffer_id, unsigned int offset,
+                              unsigned int width, unsigned int height,
+                              unsigned int stride, unsigned int format);
 
 int alloy_shm_alloc(unsigned int width, unsigned int height,
                     unsigned int bpp);

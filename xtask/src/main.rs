@@ -177,6 +177,7 @@ fn build_userland(sh: &Shell, config: &Config) -> Result<(), xshell::Error> {
         ("hello", "hello"),
         ("compositor", "compositor"),
         ("test_wl_client", "test_wl_client"),
+        ("test_shm_client", "test_shm_client"),
         ("forktest", "forktest"),
     ];
 

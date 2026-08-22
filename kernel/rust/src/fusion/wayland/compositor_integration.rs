@@ -66,12 +66,20 @@ impl CompositorIntegration {
         shm_manager: &mut ShmManager,
         surfaces: &[(u32, &SurfaceState)],
     ) {
+        use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+        use super::trace::every_nth;
+        static FRAME_NO: AtomicU64 = AtomicU64::new(0);
+        static IDLE_FRAMES: AtomicU32 = AtomicU32::new(0);
+
+        let frame_no = FRAME_NO.fetch_add(1, Ordering::Relaxed);
+
         backend.clear_framebuffer();
 
         // Sort surfaces by z_order so higher z surfaces render on top
         let mut sorted: Vec<&(u32, &SurfaceState)> = surfaces.iter().collect();
         sorted.sort_by_key(|(_, s)| s.z_order);
 
+        let mut buffered_surfaces = 0usize;
         for (_z_order, surface) in sorted {
             let surface = *surface;
 
@@ -79,24 +87,57 @@ impl CompositorIntegration {
             if surface.current.buffer_id == 0 {
                 continue;
             }
-
-            // Skip surfaces with no pending damage
-            if surface.current.damage.is_empty() && !surface.current.damage_tracker.is_full_damage()
-            {
-                continue;
-            }
+            buffered_surfaces += 1;
 
             // Look up the SHM buffer for this surface
             let buffer_id = surface.current.buffer_id;
             let buffer = match shm_manager.get_buffer(buffer_id) {
                 Some(buf) => buf,
-                None => continue,
+                None => {
+                    crate::render_trace!(
+                        "[T6] frame {}: {} SKIP — buffer_id={} NOT FOUND in ShmManager \
+                         (client invented the id / pool flow never ran)",
+                        frame_no,
+                        surface.id,
+                        buffer_id
+                    );
+                    continue;
+                }
             };
+
+            // Skip surfaces with no pending damage
+            if surface.current.damage.is_empty() && !surface.current.damage_tracker.is_full_damage()
+            {
+                crate::render_trace!(
+                    "[T6] frame {}: {} SKIP — no damage (buffer_id={})",
+                    frame_no,
+                    surface.id,
+                    buffer_id
+                );
+                continue;
+            }
 
             // Use screen position from the surface (set via alloy_set_position)
             // Fall back to buffer_offset if position is (0,0) and buffer_offset differs
             let pos_x = surface.screen_x;
             let pos_y = surface.screen_y;
+
+            crate::render_trace!(
+                "[T6] frame {}: {} COMPOSITE buffer_id={} kernel_vaddr={} damage={} rect(s) at ({},{}) dims={}x{} stride={}",
+                frame_no,
+                surface.id,
+                buffer_id,
+                match buffer.kernel_vaddr {
+                    Some(va) => va,
+                    None => 0,
+                },
+                surface.current.damage.len(),
+                pos_x,
+                pos_y,
+                surface.current.width,
+                surface.current.height,
+                buffer.stride
+            );
 
             // Composite this surface
             let _ = CompositorIntegration::composite_surface(
@@ -107,6 +148,14 @@ impl CompositorIntegration {
                 pos_y,
                 surface.current.width,
                 surface.current.height,
+            );
+        }
+
+        if buffered_surfaces == 0 && every_nth(&IDLE_FRAMES, 100) {
+            crate::render_trace!(
+                "[T6] frame {}: nothing to composite ({} surface(s), none has a buffer)",
+                frame_no,
+                surfaces.len()
             );
         }
 

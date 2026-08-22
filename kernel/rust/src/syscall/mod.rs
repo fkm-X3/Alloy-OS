@@ -117,7 +117,10 @@ pub extern "C" fn rust_sys_read(fd: u32, buf_ptr: u32, len: u32) -> u32 {
 
 /// Minimal write syscall
 pub extern "C" fn rust_sys_write(fd: u32, buf_ptr: u32, len: u32) -> u32 {
-    crate::println!("[Syscall] sys_write fd={fd:08X} buf=0x{buf_ptr:016X} len={len:08X}");
+    // Session 0.1: the per-call println here amplified every userland
+    // character write into ~55 bytes of serial output, which alone was
+    // enough to starve the display-server task. 
+    // Payload bytes still reach serial below.
     if fd == 1 {
         let max = core::cmp::min(len as usize, 240usize);
         let mut buffer = [0u8; 241];
@@ -735,6 +738,14 @@ pub fn sbrk(incr: i32) -> u32 {
 /// Allocate shared memory buffer for Wayland SHM
 pub extern "C" fn rust_sys_alloc_shm(width: u32, height: u32, bpp: u32) -> u32 {
     let fd = crate::shm_alloc::shm_alloc(width, height, bpp);
+    crate::render_trace!(
+        "[T1] SYS_alloc_shm(w={}, h={}, bpp={}) -> fd={} ({:#x})",
+        width,
+        height,
+        bpp,
+        fd,
+        fd as u32
+    );
     if fd < 0 {
         u32::MAX
     } else {
@@ -744,7 +755,13 @@ pub extern "C" fn rust_sys_alloc_shm(width: u32, height: u32, bpp: u32) -> u32 {
 
 /// Get user virtual address of an SHM buffer
 pub extern "C" fn rust_sys_shm_user_vaddr(fd: u32) -> u32 {
-    crate::shm_alloc::shm_user_vaddr(fd as i32)
+    let vaddr = crate::shm_alloc::shm_user_vaddr(fd as i32);
+    crate::render_trace!(
+        "[T2] SYS_shm_user_vaddr(fd={}) -> {:#010x} (mapped into CURRENT address space)",
+        fd,
+        vaddr
+    );
+    vaddr
 }
 
 /// sys_mmap - Map memory pages for the current task.

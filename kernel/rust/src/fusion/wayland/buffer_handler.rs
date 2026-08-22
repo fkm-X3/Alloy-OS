@@ -126,6 +126,12 @@ impl ShmBufferHandler {
 
         // Don't care about new_id in payload; we assign our own pool_id
         let pool_id = self.shm_manager.create_pool(fd, size)?;
+        crate::render_trace!(
+            "[T3] wl_shm.create_pool(fd={}, size={}) -> server pool_id={} (client new_id IGNORED)",
+            fd,
+            size,
+            pool_id
+        );
 
         Ok(ShmHandlerResponse::PoolCreated { pool_id })
     }
@@ -163,11 +169,23 @@ impl ShmBufferHandler {
             .shm_manager
             .create_buffer(pool_id, offset, width, height, stride, format)?;
 
+        crate::render_trace!(
+            "[T3] wl_shm_pool({}).create_buffer(off={}, {}x{} stride={} fmt={:#x}) -> server buffer_id={} (kernel_vaddr NOT mapped)",
+            pool_id,
+            offset,
+            width,
+            height,
+            stride,
+            format_raw,
+            buffer_id
+        );
+
         Ok(ShmPoolHandlerResponse::BufferCreated { buffer_id })
     }
 
     /// Handle wl_shm_pool.destroy request
     fn handle_destroy_pool(&mut self, pool_id: u32) -> WaylandResult<ShmPoolHandlerResponse> {
+        crate::render_trace!("[T3] wl_shm_pool({}).destroy", pool_id);
         self.shm_manager.destroy_pool(pool_id)?;
         Ok(ShmPoolHandlerResponse::Destroyed)
     }

@@ -55,9 +55,14 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
     // Move the display into the Wayland server's framebuffer for compositing
     wayland.set_framebuffer(FusionDisplayBackend::new(display));
     wayland.composite_frame();
+    crate::render_trace!(
+        "[T7] First frame presented (uptime {}ms)",
+        crate::SystemTimer::uptime_ms()
+    );
     serial_log(b"[DisplayServer] First frame presented\n\0");
 
     let mut frame_counter: u64 = 0;
+    static LOOP_TICKS: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 
     // Cursor position starts at screen center; mouse deltas accumulate here.
     #[cfg(feature = "x86_64")]
@@ -155,7 +160,19 @@ pub fn run(display: PlatformDisplay) -> Result<(), DisplayServerBootError> {
             }
         }
 
-        // 8. Yield CPU
+        // 8. Liveness heartbeat — long uptime gaps between consecutive ticks
+        //    are compositor-starvation evidence (Session 0.3 fix target).
+        let ticks = LOOP_TICKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if ticks % 2000 == 0 {
+            crate::render_trace!(
+                "[T8] loop tick {} (uptime {}ms, frame_counter={})",
+                ticks,
+                crate::SystemTimer::uptime_ms(),
+                frame_counter
+            );
+        }
+
+        // 9. Yield CPU
         #[cfg(feature = "x86_64")]
         alloy_kernel_hal::cpu_halt();
         #[cfg(feature = "aarch64")]

@@ -10,7 +10,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 const OS_NAME: &str = "Alloy Operating System";
-const OS_VERSION: &str = "0.7.0-dev (Phase 7)";
+const OS_VERSION: &str = "dev";
 const OS_ARCH: &str = "x86 (32-bit)";
 const OS_LANGUAGE: &str = "C++ + Rust";
 const OS_UNAME: &str = "AlloyOS";

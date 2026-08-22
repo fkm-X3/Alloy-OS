@@ -188,6 +188,19 @@ pub fn vfs_init() {
         }
     }
 
+    // Deterministic gradient render probe
+    let test_shm_client_bytes =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../test_shm_client"));
+    if !test_shm_client_bytes.is_empty() {
+        if let Ok(id) = vfs_open("/bin/test_shm_client", 0, 0) {
+            let mut g = VFS_STATE.lock();
+            if let Some(state) = g.as_mut() {
+                state.data.insert(id, test_shm_client_bytes.to_vec());
+                crate::println!("[VFS] /bin/test_shm_client embedded into VFS");
+            }
+        }
+    }
+
     let hello_cpp_bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../hello_cpp"));
     if !hello_cpp_bytes.is_empty() {
         if let Ok(id) = vfs_open("/hello_cpp", 0, 0) {

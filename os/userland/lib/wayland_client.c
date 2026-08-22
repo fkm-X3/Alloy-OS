@@ -279,6 +279,29 @@ int wl_surface_set_zorder(int fd, unsigned int surface_id, unsigned int z_order)
     return wl_message_send(fd, surface_id, WL_SURFACE_SET_ZORDER, &z_order, 4);
 }
 
+int wl_shm_create_pool(int fd, unsigned int shm_id, unsigned int new_pool_id,
+                       int shm_fd, unsigned int size) {
+    unsigned char payload[12];
+    mymemcpy(payload, &shm_fd, 4);
+    mymemcpy(payload + 4, &size, 4);
+    mymemcpy(payload + 8, &new_pool_id, 4);
+    return wl_message_send(fd, shm_id, WL_SHM_CREATE_POOL, payload, 12);
+}
+
+int wl_shm_pool_create_buffer(int fd, unsigned int pool_id,
+                              unsigned int new_buffer_id, unsigned int offset,
+                              unsigned int width, unsigned int height,
+                              unsigned int stride, unsigned int format) {
+    unsigned char payload[24];
+    mymemcpy(payload, &offset, 4);
+    mymemcpy(payload + 4, &width, 4);
+    mymemcpy(payload + 8, &height, 4);
+    mymemcpy(payload + 12, &stride, 4);
+    mymemcpy(payload + 16, &format, 4);
+    mymemcpy(payload + 20, &new_buffer_id, 4);
+    return wl_message_send(fd, pool_id, WL_SHM_POOL_CREATE_BUFFER, payload, 24);
+}
+
 unsigned int wl_seat_bind(struct wl_registry *reg, unsigned int seat_name,
                            unsigned int version) {
     unsigned int seat_id = reg->display->next_id++;

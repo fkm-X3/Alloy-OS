@@ -99,6 +99,7 @@ impl UnixSocket {
 
     /// Start listening for incoming connections
     pub fn listen(&mut self) -> Result<(), WaylandError> {
+        crate::render_trace!("[T9] UnixSocket::listen() entered, fd={:?}", self.fd);
         if !self.bound {
             return Err(WaylandError::SocketBindFailed);
         }

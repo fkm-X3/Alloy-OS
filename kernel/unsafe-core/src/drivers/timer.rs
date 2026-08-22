@@ -212,6 +212,16 @@ pub extern "C" fn timer_handler() {
     unsafe {
         g_timer_ticks = g_timer_ticks.wrapping_add(1);
     }
+    // [T9] Session 0.1 diagnostic: ground-truth proof that PIT IRQs are
+    // (still) arriving. Rate-limited to every 256th tick.
+    #[cfg(feature = "x86_64")]
+    unsafe {
+        if g_timer_ticks % 50 == 0 {
+            Serial::write_str("[T9-TICK ");
+            Serial::write_hex64(g_timer_ticks);
+            Serial::write_str("]\n");
+        }
+    }
     // The kernel registered its timer-tick handler via
     // `api::callback::set_timer_tick_handler` at boot; unsafe-core never
     // calls `rust_timer_tick` by symbol.

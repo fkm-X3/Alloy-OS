@@ -155,6 +155,11 @@ impl CompositorHandler {
             .insert(surface_id, ());
         self.surface_to_client.insert(surface_id, client_id);
 
+        crate::render_trace!(
+            "[T4] create_surface: client object_id {} -> {}",
+            object_id,
+            surface_id
+        );
         crate::println!("[Wayland Compositor] Created surface");
 
         Ok(CompositorResponse::SurfaceCreated {
@@ -190,6 +195,15 @@ impl CompositorHandler {
             surface.damage(rect);
         }
 
+        crate::render_trace!(
+            "[T4] {} damage(x={} y={} w={} h={})",
+            surface_id,
+            x,
+            y,
+            width,
+            height
+        );
+
         Ok(SurfaceResponse::DamageRecorded)
     }
 
@@ -217,6 +231,14 @@ impl CompositorHandler {
             surface.attach(buffer_id, x, y);
         }
 
+        crate::render_trace!(
+            "[T4] {} attach(buffer_id={} x={} y={}) — pending (not yet committed)",
+            surface_id,
+            buffer_id,
+            x,
+            y
+        );
+
         Ok(SurfaceResponse::BufferAttached)
     }
 
@@ -228,6 +250,14 @@ impl CompositorHandler {
     ) -> WaylandResult<SurfaceResponse> {
         if let Some(surface) = self.surfaces.get_mut(&surface_id) {
             surface.commit();
+            crate::render_trace!(
+                "[T5] {} commit -> current.buffer_id={} damage={} rect(s) dims={}x{}",
+                surface_id,
+                surface.current.buffer_id,
+                surface.current.damage.len(),
+                surface.current.width,
+                surface.current.height
+            );
         }
 
         Ok(SurfaceResponse::Committed)

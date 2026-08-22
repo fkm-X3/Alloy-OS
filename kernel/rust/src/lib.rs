@@ -42,6 +42,15 @@ use alloc::boxed::Box;
 use core::alloc::Layout;
 use core::panic::PanicInfo;
 
+/// Render-pipeline trace macro.
+/// See `fusion::wayland::trace` for the trace point map.
+#[macro_export]
+macro_rules! render_trace {
+    ($($arg:tt)*) => {
+        $crate::fusion::wayland::trace::emit(format_args!($($arg)*))
+    };
+}
+
 /// The kernel's global allocator (slab + heap tiers live in
 /// `alloy-kernel-unsafe-core`; the `unsafe impl GlobalAlloc` never appears in
 /// this crate).
@@ -85,6 +94,7 @@ extern "C" fn display_server_entry() {
             #[cfg(feature = "aarch64")]
             crate::println!("[Spawn] PL110 ready, booting display server task");
             irq_guard.release();
+            crate::render_trace!("[T9] DS entering run(), IRQs enabled");
             let _ = display_server::run(display);
             crate::println!("[DisplayServer] run() returned, halting");
             loop {
@@ -201,14 +211,20 @@ pub extern "C" fn rust_main() {
 
     // Spawn forktest (x86_64 COW fork smoke: parent forks, child writes a
     // shared page triggering a COW split; both print their views of the var)
+    // SESSION 0.1 DIAGNOSTIC: temporarily disabled — forktest's COW/exit path
+    // kills timer interrupts system-wide (~23ms into boot), freezing every
+    // task that needs UART TX-drain or scheduling services. See
+    // docs/session-0.1-findings.md, defect 3b.
     #[cfg(feature = "x86_64")]
     {
-        if let Ok(vnode) = fs::vfs_open("/bin/forktest", 0, 0) {
-            if let Some(image) = fs::vfs_read_all(vnode) {
-                if !image.is_empty() {
-                    crate::println!("[Spawn] Loading forktest (COW fork smoke)");
-                    if process::spawn_user_elf(&image) {
-                        crate::println!("[Spawn] forktest task created");
+        if false {
+            if let Ok(vnode) = fs::vfs_open("/bin/forktest", 0, 0) {
+                if let Some(image) = fs::vfs_read_all(vnode) {
+                    if !image.is_empty() {
+                        crate::println!("[Spawn] Loading forktest (COW fork smoke)");
+                        if process::spawn_user_elf(&image) {
+                            crate::println!("[Spawn] forktest task created");
+                        }
                     }
                 }
             }
@@ -222,6 +238,19 @@ pub extern "C" fn rust_main() {
             if let Some(image) = fs::vfs_read_all(vnode) {
                 if !image.is_empty() {
                     crate::println!("[Spawn] Loading test_wl_client (Wayland client test)");
+                    process::spawn_user_elf(&image);
+                }
+            }
+        }
+    }
+
+    // Spawn test_shm_client
+    #[cfg(feature = "x86_64")]
+    {
+        if let Ok(vnode) = fs::vfs_open("/bin/test_shm_client", 0, 0) {
+            if let Some(image) = fs::vfs_read_all(vnode) {
+                if !image.is_empty() {
+                    crate::println!("[Spawn] Loading test_shm_client (gradient render probe)");
                     process::spawn_user_elf(&image);
                 }
             }

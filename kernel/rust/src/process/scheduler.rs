@@ -79,6 +79,14 @@ impl Scheduler {
     fn pick_next(&mut self) -> Option<Box<Task>> {
         for level in 0..NUM_PRIORITIES {
             if let Some(mut task) = self.ready_queues[level].pop_front() {
+                #[cfg(feature = "x86_64")]
+                if task.name() == "display-server" {
+                    crate::render_trace!(
+                        "[T9] display-server PICKED at prio {} (was q{})",
+                        task.priority(),
+                        level
+                    );
+                }
                 task.set_state(TaskState::Running);
                 return Some(task);
             }
@@ -150,8 +158,23 @@ impl Scheduler {
                                 // kernel stack, and the heap lock may be held
                                 // by a preempted task — both make a free()
                                 // here unsafe.
+                                #[cfg(feature = "x86_64")]
+                                crate::render_trace!(
+                                    "[T9] task exit+leak: {} id={}",
+                                    old_box.name(),
+                                    old_box.id().as_u32()
+                                );
+                                #[cfg(feature = "x86_64")]
+                                if old_box.name() == "display-server" {
+                                    crate::render_trace!(
+                                        "[T9] !!! display-server TERMINATED+LEAKED id={}",
+                                        old_box.id().as_u32()
+                                    );
+                                }
                                 core::mem::forget(old_box);
                             } else {
+                                let t_name = String::from(old_box.name());
+                                let t_id = old_box.id().as_u32();
                                 let had_full_quantum =
                                     old_box.ticks_used() >= QUANTA[old_box.priority() as usize];
                                 if had_full_quantum {
@@ -162,10 +185,32 @@ impl Scheduler {
                                     let new_p = old_box.priority().saturating_sub(1);
                                     old_box.set_priority(new_p);
                                 }
+                                let t_prio = old_box.priority();
                                 old_box.reset_ticks_used();
                                 old_box.set_state(TaskState::Ready);
-                                re_sched.ready_queues[old_box.priority() as usize]
-                                    .push_back(old_box);
+                                re_sched.ready_queues[t_prio as usize].push_back(old_box);
+                                #[cfg(feature = "x86_64")]
+                                if t_name == "display-server" {
+                                    crate::render_trace!(
+                                        "[T9] display-server REQUEUED prio={} full_q={}",
+                                        t_prio,
+                                        had_full_quantum
+                                    );
+                                }
+                                #[cfg(feature = "x86_64")]
+                                {
+                                    static REQUEUE_N: core::sync::atomic::AtomicU32 =
+                                        core::sync::atomic::AtomicU32::new(0);
+                                    if crate::fusion::wayland::trace::every_nth(&REQUEUE_N, 200) {
+                                        crate::render_trace!(
+                                            "[T9] requeue: {} id={} prio={} full_q={}",
+                                            t_name,
+                                            t_id,
+                                            t_prio,
+                                            had_full_quantum
+                                        );
+                                    }
+                                }
                             }
                         }
                         // Release re_lock explicitly BEFORE load_context.
@@ -517,6 +562,16 @@ impl Scheduler {
                     boosted.push(task);
                 }
             }
+            #[cfg(feature = "x86_64")]
+            if !boosted.is_empty() {
+                let names: Vec<String> =
+                    boosted.iter().map(|t| String::from(t.name())).collect();
+                crate::render_trace!(
+                    "[T9] boost: {} task(s) -> q0: {}",
+                    names.len(),
+                    names.join(",")
+                );
+            }
             for task in boosted {
                 sched.ready_queues[0].push_back(task);
             }
@@ -528,6 +583,33 @@ impl Scheduler {
     /// every timer interrupt.
     pub fn rust_timer_tick() {
         let ticks = crate::SystemTimer::ticks();
+
+        // [T9] Periodic scheduler sample: current task + per-level queue
+        // depths.  Proves (or refutes) that a given task — e.g. the display
+        // server — is still schedulable, vs. vanished from all queues.
+        #[cfg(feature = "x86_64")]
+        if ticks > 0 && ticks % 200 == 0 {
+            let sched_lock = SCHEDULER.lock();
+            if let Some(ref sched) = *sched_lock {
+                let cur = match sched.current_task {
+                    Some(ref t) => alloc::format!("{}#{}", t.name(), t.id().as_u32()),
+                    None => String::from("none"),
+                };
+                let q0 = queue_names(&sched.ready_queues[0]);
+                let q1 = queue_names(&sched.ready_queues[1]);
+                let q2 = queue_names(&sched.ready_queues[2]);
+                let q3 = queue_names(&sched.ready_queues[3]);
+                crate::render_trace!(
+                    "[T9] tick {}: cur={} q0=[{}] q1=[{}] q2=[{}] q3=[{}]",
+                    ticks,
+                    cur,
+                    q0,
+                    q1,
+                    q2,
+                    q3
+                );
+            }
+        }
 
         if ticks > 0 && ticks % BOOST_INTERVAL == 0 {
             Self::boost_priorities();
@@ -578,4 +660,20 @@ impl Scheduler {
             alloy_kernel_hal::cpu_halt();
         }
     }
+}
+
+/// [T9] diagnostic: comma-joined task names in one ready queue.
+#[cfg(feature = "x86_64")]
+fn queue_names(queue: &VecDeque<Box<Task>>) -> String {
+    let mut out = String::new();
+    for t in queue.iter() {
+        if !out.is_empty() {
+            out.push(',');
+        }
+        out.push_str(t.name());
+        out.push('#');
+        core::fmt::write(&mut out, format_args!("{}", t.id().as_u32()))
+            .ok();
+    }
+    out
 }

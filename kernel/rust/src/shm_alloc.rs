@@ -91,10 +91,27 @@ pub fn shm_user_vaddr(fd: i32) -> u32 {
             alloy_kernel_hal::PageFlags::user_write(),
         );
         if !ok {
+            crate::render_trace!(
+                "[T2] shm_user_vaddr(fd={}): map_page FAILED at {:#010x} (page {}/{})",
+                fd,
+                page_vaddr,
+                i,
+                num_pages
+            );
             return 0;
         }
     }
 
+    // NOTE (Session 0.1 finding): this zeroes at `vaddr` through the
+    // identity-mapped physical window, NOT through the user mapping created
+    // above — on x86_64 that is a different address space view.
     alloy_kernel_hal::mem::zero_phys_bytes(vaddr as usize, region.size as usize);
+    crate::render_trace!(
+        "[T2] shm_user_vaddr(fd={}): {} pages mapped at {:#010x}-{:#010x} for whichever AS was current",
+        fd,
+        num_pages,
+        vaddr,
+        vaddr as usize + region.size as usize
+    );
     vaddr
 }

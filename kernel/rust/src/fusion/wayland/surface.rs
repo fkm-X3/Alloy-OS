@@ -166,6 +166,16 @@ impl SurfaceState {
         if self.pending.buffer_id != 0 {
             // Real implementation would query buffer dimensions from buffer manager
             self.current.set_dimensions(512, 512);
+            use core::sync::atomic::{AtomicBool, Ordering};
+            static DIMS_WARNED: AtomicBool = AtomicBool::new(false);
+            if !DIMS_WARNED.swap(true, Ordering::Relaxed) {
+                crate::render_trace!(
+                    "[T5] {}: commit promoted buffer {} but dims are the PLACEHOLDER 512x512 \
+                     (real buffer geometry is never queried — Session 0.2 fix)",
+                    self.id,
+                    self.current.buffer_id
+                );
+            }
         }
 
         self.pending.clear();
